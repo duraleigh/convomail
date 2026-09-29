@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../mail/mail_transport.dart';
@@ -75,14 +76,22 @@ class SyncController {
     _runs[account.id] = syncer.run();
   }
 
-  Future<void> _stopAccount(int id) async {
+  Future<void> _stopAccount(int id, {bool updateStatus = true}) async {
     final s = _syncers.remove(id);
     if (s == null) return;
+    // Read the notifier before the async gap; during container disposal the
+    // ref must not be used at all.
+    final status = updateStatus ? _ref.read(syncStatusProvider.notifier) : null;
     await s.stop();
-    _ref.read(syncStatusProvider.notifier).remove(id);
+    status?.remove(id);
   }
 
   AccountSyncer? syncerFor(int accountId) => _syncers[accountId];
+
+  /// Registers an externally created syncer without running its loop.
+  /// Tests use this to route row actions through a fake server.
+  @visibleForTesting
+  void adoptForTest(int accountId, AccountSyncer syncer) => _syncers[accountId] = syncer;
 
   /// Stops and restarts one account's syncer, e.g. after an error or a
   /// password change.
@@ -95,7 +104,7 @@ class SyncController {
   Future<void> dispose() async {
     await _sub?.cancel();
     for (final id in _syncers.keys.toList()) {
-      await _stopAccount(id);
+      await _stopAccount(id, updateStatus: false);
     }
   }
 }

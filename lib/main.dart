@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:window_manager/window_manager.dart';
 
+import 'app/bench.dart';
 import 'app/destinations.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
@@ -52,6 +53,10 @@ class StartupArgs {
 
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (args.contains('--bench-people')) {
+    await runPeopleBench();
+    exit(0);
+  }
   final startup = StartupArgs.parse(args);
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();

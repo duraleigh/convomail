@@ -210,6 +210,36 @@ class RowPrefs extends Table {
   Set<Column> get primaryKey => {rowKey};
 }
 
+/// Pre-aggregated People-list data, one row per row_key, maintained
+/// incrementally: triggers record touched row keys in [DirtyRows] and
+/// `refreshDirtyRows()` recomputes only those. The list query reads this
+/// table instead of scanning messages (plan M2 performance target).
+class RowSummaries extends Table {
+  TextColumn get rowKey => text()();
+  IntColumn get total => integer()();
+  IntColumn get unread => integer()();
+  /// Newest message not from me (ordering for contact rows, decision 4).
+  DateTimeColumn get lastReceived => dateTime().nullable()();
+  /// Newest message of any sender (ordering for group rows, preview).
+  DateTimeColumn get lastAny => dateTime().nullable()();
+  BoolColumn get hasStarred => boolean()();
+  BoolColumn get hasAttachments => boolean()();
+  BoolColumn get hasSent => boolean()();
+  IntColumn get newestMessageId => integer().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {rowKey};
+}
+
+/// Row keys whose summary is stale. Filled by triggers, drained by refresh.
+class DirtyRows extends Table {
+  TextColumn get rowKey => text()();
+
+  @override
+  Set<Column> get primaryKey => {rowKey};
+}
+
 /// Which People-list row(s) a message lives in (spec 4.3, 4.19).
 /// rowKey is `c:<contactKey>` or `g:<groupId>`. Stored separately from
 /// threading (plan 1.2).
@@ -237,6 +267,8 @@ class MessageRowAssignments extends Table {
   GroupMembers,
   MessageRowAssignments,
   RowPrefs,
+  RowSummaries,
+  DirtyRows,
 ])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
@@ -245,13 +277,14 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
         onCreate: (m) async {
           await m.createAll();
           await _createIndexes();
+          await _createTriggers();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -276,6 +309,13 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await m.createTable(rowPrefs);
             await m.addColumn(identities, identities.discovered);
           }
+          if (from < 4) {
+            await m.createTable(rowSummaries);
+            await m.createTable(dirtyRows);
+            await _createTriggers();
+            // Everything is stale until the first refresh.
+            await customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) SELECT DISTINCT row_key FROM message_row_assignments');
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -290,6 +330,28 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_participants_key ON message_participants(contact_key)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_row_assign_row ON message_row_assignments(row_key)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id)');
+  }
+
+  /// Triggers that mark People rows stale whenever anything that feeds a
+  /// summary changes. Drift does not manage triggers, so they live here.
+  Future<void> _createTriggers() async {
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_assign_ins AFTER INSERT ON message_row_assignments
+      BEGIN INSERT OR IGNORE INTO dirty_rows(row_key) VALUES (NEW.row_key); END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_assign_del AFTER DELETE ON message_row_assignments
+      BEGIN INSERT OR IGNORE INTO dirty_rows(row_key) VALUES (OLD.row_key); END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_msg_upd AFTER UPDATE OF is_seen, is_flagged, is_deleted, has_attachments,
+        snippet, subject, date, internal_date, is_from_me, folder_id ON messages
+      BEGIN INSERT OR IGNORE INTO dirty_rows(row_key) SELECT row_key FROM message_row_assignments WHERE message_id = NEW.id; END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_msg_del BEFORE DELETE ON messages
+      BEGIN INSERT OR IGNORE INTO dirty_rows(row_key) SELECT row_key FROM message_row_assignments WHERE message_id = OLD.id; END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_folder_role AFTER UPDATE OF role ON folders
+      BEGIN INSERT OR IGNORE INTO dirty_rows(row_key)
+        SELECT r.row_key FROM message_row_assignments r JOIN messages m ON m.id = r.message_id WHERE m.folder_id = NEW.id; END''');
   }
 
   static QueryExecutor _open() => driftDatabase(

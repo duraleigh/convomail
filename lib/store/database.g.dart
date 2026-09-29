@@ -6775,6 +6775,806 @@ class RowPrefsCompanion extends UpdateCompanion<RowPref> {
   }
 }
 
+class $RowSummariesTable extends RowSummaries
+    with TableInfo<$RowSummariesTable, RowSummary> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RowSummariesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _rowKeyMeta = const VerificationMeta('rowKey');
+  @override
+  late final GeneratedColumn<String> rowKey = GeneratedColumn<String>(
+    'row_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _totalMeta = const VerificationMeta('total');
+  @override
+  late final GeneratedColumn<int> total = GeneratedColumn<int>(
+    'total',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _unreadMeta = const VerificationMeta('unread');
+  @override
+  late final GeneratedColumn<int> unread = GeneratedColumn<int>(
+    'unread',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastReceivedMeta = const VerificationMeta(
+    'lastReceived',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastReceived = GeneratedColumn<DateTime>(
+    'last_received',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastAnyMeta = const VerificationMeta(
+    'lastAny',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastAny = GeneratedColumn<DateTime>(
+    'last_any',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _hasStarredMeta = const VerificationMeta(
+    'hasStarred',
+  );
+  @override
+  late final GeneratedColumn<bool> hasStarred = GeneratedColumn<bool>(
+    'has_starred',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_starred" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _hasAttachmentsMeta = const VerificationMeta(
+    'hasAttachments',
+  );
+  @override
+  late final GeneratedColumn<bool> hasAttachments = GeneratedColumn<bool>(
+    'has_attachments',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_attachments" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _hasSentMeta = const VerificationMeta(
+    'hasSent',
+  );
+  @override
+  late final GeneratedColumn<bool> hasSent = GeneratedColumn<bool>(
+    'has_sent',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_sent" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _newestMessageIdMeta = const VerificationMeta(
+    'newestMessageId',
+  );
+  @override
+  late final GeneratedColumn<int> newestMessageId = GeneratedColumn<int>(
+    'newest_message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    rowKey,
+    total,
+    unread,
+    lastReceived,
+    lastAny,
+    hasStarred,
+    hasAttachments,
+    hasSent,
+    newestMessageId,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'row_summaries';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RowSummary> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('row_key')) {
+      context.handle(
+        _rowKeyMeta,
+        rowKey.isAcceptableOrUnknown(data['row_key']!, _rowKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowKeyMeta);
+    }
+    if (data.containsKey('total')) {
+      context.handle(
+        _totalMeta,
+        total.isAcceptableOrUnknown(data['total']!, _totalMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_totalMeta);
+    }
+    if (data.containsKey('unread')) {
+      context.handle(
+        _unreadMeta,
+        unread.isAcceptableOrUnknown(data['unread']!, _unreadMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_unreadMeta);
+    }
+    if (data.containsKey('last_received')) {
+      context.handle(
+        _lastReceivedMeta,
+        lastReceived.isAcceptableOrUnknown(
+          data['last_received']!,
+          _lastReceivedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_any')) {
+      context.handle(
+        _lastAnyMeta,
+        lastAny.isAcceptableOrUnknown(data['last_any']!, _lastAnyMeta),
+      );
+    }
+    if (data.containsKey('has_starred')) {
+      context.handle(
+        _hasStarredMeta,
+        hasStarred.isAcceptableOrUnknown(data['has_starred']!, _hasStarredMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hasStarredMeta);
+    }
+    if (data.containsKey('has_attachments')) {
+      context.handle(
+        _hasAttachmentsMeta,
+        hasAttachments.isAcceptableOrUnknown(
+          data['has_attachments']!,
+          _hasAttachmentsMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_hasAttachmentsMeta);
+    }
+    if (data.containsKey('has_sent')) {
+      context.handle(
+        _hasSentMeta,
+        hasSent.isAcceptableOrUnknown(data['has_sent']!, _hasSentMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hasSentMeta);
+    }
+    if (data.containsKey('newest_message_id')) {
+      context.handle(
+        _newestMessageIdMeta,
+        newestMessageId.isAcceptableOrUnknown(
+          data['newest_message_id']!,
+          _newestMessageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {rowKey};
+  @override
+  RowSummary map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RowSummary(
+      rowKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}row_key'],
+      )!,
+      total: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}total'],
+      )!,
+      unread: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}unread'],
+      )!,
+      lastReceived: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_received'],
+      ),
+      lastAny: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_any'],
+      ),
+      hasStarred: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_starred'],
+      )!,
+      hasAttachments: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_attachments'],
+      )!,
+      hasSent: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_sent'],
+      )!,
+      newestMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}newest_message_id'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RowSummariesTable createAlias(String alias) {
+    return $RowSummariesTable(attachedDatabase, alias);
+  }
+}
+
+class RowSummary extends DataClass implements Insertable<RowSummary> {
+  final String rowKey;
+  final int total;
+  final int unread;
+
+  /// Newest message not from me (ordering for contact rows, decision 4).
+  final DateTime? lastReceived;
+
+  /// Newest message of any sender (ordering for group rows, preview).
+  final DateTime? lastAny;
+  final bool hasStarred;
+  final bool hasAttachments;
+  final bool hasSent;
+  final int? newestMessageId;
+  final DateTime updatedAt;
+  const RowSummary({
+    required this.rowKey,
+    required this.total,
+    required this.unread,
+    this.lastReceived,
+    this.lastAny,
+    required this.hasStarred,
+    required this.hasAttachments,
+    required this.hasSent,
+    this.newestMessageId,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['row_key'] = Variable<String>(rowKey);
+    map['total'] = Variable<int>(total);
+    map['unread'] = Variable<int>(unread);
+    if (!nullToAbsent || lastReceived != null) {
+      map['last_received'] = Variable<DateTime>(lastReceived);
+    }
+    if (!nullToAbsent || lastAny != null) {
+      map['last_any'] = Variable<DateTime>(lastAny);
+    }
+    map['has_starred'] = Variable<bool>(hasStarred);
+    map['has_attachments'] = Variable<bool>(hasAttachments);
+    map['has_sent'] = Variable<bool>(hasSent);
+    if (!nullToAbsent || newestMessageId != null) {
+      map['newest_message_id'] = Variable<int>(newestMessageId);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  RowSummariesCompanion toCompanion(bool nullToAbsent) {
+    return RowSummariesCompanion(
+      rowKey: Value(rowKey),
+      total: Value(total),
+      unread: Value(unread),
+      lastReceived: lastReceived == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastReceived),
+      lastAny: lastAny == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastAny),
+      hasStarred: Value(hasStarred),
+      hasAttachments: Value(hasAttachments),
+      hasSent: Value(hasSent),
+      newestMessageId: newestMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(newestMessageId),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory RowSummary.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RowSummary(
+      rowKey: serializer.fromJson<String>(json['rowKey']),
+      total: serializer.fromJson<int>(json['total']),
+      unread: serializer.fromJson<int>(json['unread']),
+      lastReceived: serializer.fromJson<DateTime?>(json['lastReceived']),
+      lastAny: serializer.fromJson<DateTime?>(json['lastAny']),
+      hasStarred: serializer.fromJson<bool>(json['hasStarred']),
+      hasAttachments: serializer.fromJson<bool>(json['hasAttachments']),
+      hasSent: serializer.fromJson<bool>(json['hasSent']),
+      newestMessageId: serializer.fromJson<int?>(json['newestMessageId']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'rowKey': serializer.toJson<String>(rowKey),
+      'total': serializer.toJson<int>(total),
+      'unread': serializer.toJson<int>(unread),
+      'lastReceived': serializer.toJson<DateTime?>(lastReceived),
+      'lastAny': serializer.toJson<DateTime?>(lastAny),
+      'hasStarred': serializer.toJson<bool>(hasStarred),
+      'hasAttachments': serializer.toJson<bool>(hasAttachments),
+      'hasSent': serializer.toJson<bool>(hasSent),
+      'newestMessageId': serializer.toJson<int?>(newestMessageId),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  RowSummary copyWith({
+    String? rowKey,
+    int? total,
+    int? unread,
+    Value<DateTime?> lastReceived = const Value.absent(),
+    Value<DateTime?> lastAny = const Value.absent(),
+    bool? hasStarred,
+    bool? hasAttachments,
+    bool? hasSent,
+    Value<int?> newestMessageId = const Value.absent(),
+    DateTime? updatedAt,
+  }) => RowSummary(
+    rowKey: rowKey ?? this.rowKey,
+    total: total ?? this.total,
+    unread: unread ?? this.unread,
+    lastReceived: lastReceived.present ? lastReceived.value : this.lastReceived,
+    lastAny: lastAny.present ? lastAny.value : this.lastAny,
+    hasStarred: hasStarred ?? this.hasStarred,
+    hasAttachments: hasAttachments ?? this.hasAttachments,
+    hasSent: hasSent ?? this.hasSent,
+    newestMessageId: newestMessageId.present
+        ? newestMessageId.value
+        : this.newestMessageId,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  RowSummary copyWithCompanion(RowSummariesCompanion data) {
+    return RowSummary(
+      rowKey: data.rowKey.present ? data.rowKey.value : this.rowKey,
+      total: data.total.present ? data.total.value : this.total,
+      unread: data.unread.present ? data.unread.value : this.unread,
+      lastReceived: data.lastReceived.present
+          ? data.lastReceived.value
+          : this.lastReceived,
+      lastAny: data.lastAny.present ? data.lastAny.value : this.lastAny,
+      hasStarred: data.hasStarred.present
+          ? data.hasStarred.value
+          : this.hasStarred,
+      hasAttachments: data.hasAttachments.present
+          ? data.hasAttachments.value
+          : this.hasAttachments,
+      hasSent: data.hasSent.present ? data.hasSent.value : this.hasSent,
+      newestMessageId: data.newestMessageId.present
+          ? data.newestMessageId.value
+          : this.newestMessageId,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RowSummary(')
+          ..write('rowKey: $rowKey, ')
+          ..write('total: $total, ')
+          ..write('unread: $unread, ')
+          ..write('lastReceived: $lastReceived, ')
+          ..write('lastAny: $lastAny, ')
+          ..write('hasStarred: $hasStarred, ')
+          ..write('hasAttachments: $hasAttachments, ')
+          ..write('hasSent: $hasSent, ')
+          ..write('newestMessageId: $newestMessageId, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    rowKey,
+    total,
+    unread,
+    lastReceived,
+    lastAny,
+    hasStarred,
+    hasAttachments,
+    hasSent,
+    newestMessageId,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RowSummary &&
+          other.rowKey == this.rowKey &&
+          other.total == this.total &&
+          other.unread == this.unread &&
+          other.lastReceived == this.lastReceived &&
+          other.lastAny == this.lastAny &&
+          other.hasStarred == this.hasStarred &&
+          other.hasAttachments == this.hasAttachments &&
+          other.hasSent == this.hasSent &&
+          other.newestMessageId == this.newestMessageId &&
+          other.updatedAt == this.updatedAt);
+}
+
+class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
+  final Value<String> rowKey;
+  final Value<int> total;
+  final Value<int> unread;
+  final Value<DateTime?> lastReceived;
+  final Value<DateTime?> lastAny;
+  final Value<bool> hasStarred;
+  final Value<bool> hasAttachments;
+  final Value<bool> hasSent;
+  final Value<int?> newestMessageId;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const RowSummariesCompanion({
+    this.rowKey = const Value.absent(),
+    this.total = const Value.absent(),
+    this.unread = const Value.absent(),
+    this.lastReceived = const Value.absent(),
+    this.lastAny = const Value.absent(),
+    this.hasStarred = const Value.absent(),
+    this.hasAttachments = const Value.absent(),
+    this.hasSent = const Value.absent(),
+    this.newestMessageId = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RowSummariesCompanion.insert({
+    required String rowKey,
+    required int total,
+    required int unread,
+    this.lastReceived = const Value.absent(),
+    this.lastAny = const Value.absent(),
+    required bool hasStarred,
+    required bool hasAttachments,
+    required bool hasSent,
+    this.newestMessageId = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : rowKey = Value(rowKey),
+       total = Value(total),
+       unread = Value(unread),
+       hasStarred = Value(hasStarred),
+       hasAttachments = Value(hasAttachments),
+       hasSent = Value(hasSent);
+  static Insertable<RowSummary> custom({
+    Expression<String>? rowKey,
+    Expression<int>? total,
+    Expression<int>? unread,
+    Expression<DateTime>? lastReceived,
+    Expression<DateTime>? lastAny,
+    Expression<bool>? hasStarred,
+    Expression<bool>? hasAttachments,
+    Expression<bool>? hasSent,
+    Expression<int>? newestMessageId,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (rowKey != null) 'row_key': rowKey,
+      if (total != null) 'total': total,
+      if (unread != null) 'unread': unread,
+      if (lastReceived != null) 'last_received': lastReceived,
+      if (lastAny != null) 'last_any': lastAny,
+      if (hasStarred != null) 'has_starred': hasStarred,
+      if (hasAttachments != null) 'has_attachments': hasAttachments,
+      if (hasSent != null) 'has_sent': hasSent,
+      if (newestMessageId != null) 'newest_message_id': newestMessageId,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RowSummariesCompanion copyWith({
+    Value<String>? rowKey,
+    Value<int>? total,
+    Value<int>? unread,
+    Value<DateTime?>? lastReceived,
+    Value<DateTime?>? lastAny,
+    Value<bool>? hasStarred,
+    Value<bool>? hasAttachments,
+    Value<bool>? hasSent,
+    Value<int?>? newestMessageId,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return RowSummariesCompanion(
+      rowKey: rowKey ?? this.rowKey,
+      total: total ?? this.total,
+      unread: unread ?? this.unread,
+      lastReceived: lastReceived ?? this.lastReceived,
+      lastAny: lastAny ?? this.lastAny,
+      hasStarred: hasStarred ?? this.hasStarred,
+      hasAttachments: hasAttachments ?? this.hasAttachments,
+      hasSent: hasSent ?? this.hasSent,
+      newestMessageId: newestMessageId ?? this.newestMessageId,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (rowKey.present) {
+      map['row_key'] = Variable<String>(rowKey.value);
+    }
+    if (total.present) {
+      map['total'] = Variable<int>(total.value);
+    }
+    if (unread.present) {
+      map['unread'] = Variable<int>(unread.value);
+    }
+    if (lastReceived.present) {
+      map['last_received'] = Variable<DateTime>(lastReceived.value);
+    }
+    if (lastAny.present) {
+      map['last_any'] = Variable<DateTime>(lastAny.value);
+    }
+    if (hasStarred.present) {
+      map['has_starred'] = Variable<bool>(hasStarred.value);
+    }
+    if (hasAttachments.present) {
+      map['has_attachments'] = Variable<bool>(hasAttachments.value);
+    }
+    if (hasSent.present) {
+      map['has_sent'] = Variable<bool>(hasSent.value);
+    }
+    if (newestMessageId.present) {
+      map['newest_message_id'] = Variable<int>(newestMessageId.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RowSummariesCompanion(')
+          ..write('rowKey: $rowKey, ')
+          ..write('total: $total, ')
+          ..write('unread: $unread, ')
+          ..write('lastReceived: $lastReceived, ')
+          ..write('lastAny: $lastAny, ')
+          ..write('hasStarred: $hasStarred, ')
+          ..write('hasAttachments: $hasAttachments, ')
+          ..write('hasSent: $hasSent, ')
+          ..write('newestMessageId: $newestMessageId, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $DirtyRowsTable extends DirtyRows
+    with TableInfo<$DirtyRowsTable, DirtyRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $DirtyRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _rowKeyMeta = const VerificationMeta('rowKey');
+  @override
+  late final GeneratedColumn<String> rowKey = GeneratedColumn<String>(
+    'row_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [rowKey];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'dirty_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<DirtyRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('row_key')) {
+      context.handle(
+        _rowKeyMeta,
+        rowKey.isAcceptableOrUnknown(data['row_key']!, _rowKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowKeyMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {rowKey};
+  @override
+  DirtyRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return DirtyRow(
+      rowKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}row_key'],
+      )!,
+    );
+  }
+
+  @override
+  $DirtyRowsTable createAlias(String alias) {
+    return $DirtyRowsTable(attachedDatabase, alias);
+  }
+}
+
+class DirtyRow extends DataClass implements Insertable<DirtyRow> {
+  final String rowKey;
+  const DirtyRow({required this.rowKey});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['row_key'] = Variable<String>(rowKey);
+    return map;
+  }
+
+  DirtyRowsCompanion toCompanion(bool nullToAbsent) {
+    return DirtyRowsCompanion(rowKey: Value(rowKey));
+  }
+
+  factory DirtyRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return DirtyRow(rowKey: serializer.fromJson<String>(json['rowKey']));
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{'rowKey': serializer.toJson<String>(rowKey)};
+  }
+
+  DirtyRow copyWith({String? rowKey}) =>
+      DirtyRow(rowKey: rowKey ?? this.rowKey);
+  DirtyRow copyWithCompanion(DirtyRowsCompanion data) {
+    return DirtyRow(
+      rowKey: data.rowKey.present ? data.rowKey.value : this.rowKey,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DirtyRow(')
+          ..write('rowKey: $rowKey')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => rowKey.hashCode;
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is DirtyRow && other.rowKey == this.rowKey);
+}
+
+class DirtyRowsCompanion extends UpdateCompanion<DirtyRow> {
+  final Value<String> rowKey;
+  final Value<int> rowid;
+  const DirtyRowsCompanion({
+    this.rowKey = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  DirtyRowsCompanion.insert({
+    required String rowKey,
+    this.rowid = const Value.absent(),
+  }) : rowKey = Value(rowKey);
+  static Insertable<DirtyRow> custom({
+    Expression<String>? rowKey,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (rowKey != null) 'row_key': rowKey,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  DirtyRowsCompanion copyWith({Value<String>? rowKey, Value<int>? rowid}) {
+    return DirtyRowsCompanion(
+      rowKey: rowKey ?? this.rowKey,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (rowKey.present) {
+      map['row_key'] = Variable<String>(rowKey.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('DirtyRowsCompanion(')
+          ..write('rowKey: $rowKey, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6795,6 +7595,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $MessageRowAssignmentsTable messageRowAssignments =
       $MessageRowAssignmentsTable(this);
   late final $RowPrefsTable rowPrefs = $RowPrefsTable(this);
+  late final $RowSummariesTable rowSummaries = $RowSummariesTable(this);
+  late final $DirtyRowsTable dirtyRows = $DirtyRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6813,6 +7615,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     groupMembers,
     messageRowAssignments,
     rowPrefs,
+    rowSummaries,
+    dirtyRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -12218,6 +13022,435 @@ typedef $$RowPrefsTableProcessedTableManager =
       RowPref,
       PrefetchHooks Function()
     >;
+typedef $$RowSummariesTableCreateCompanionBuilder =
+    RowSummariesCompanion Function({
+      required String rowKey,
+      required int total,
+      required int unread,
+      Value<DateTime?> lastReceived,
+      Value<DateTime?> lastAny,
+      required bool hasStarred,
+      required bool hasAttachments,
+      required bool hasSent,
+      Value<int?> newestMessageId,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$RowSummariesTableUpdateCompanionBuilder =
+    RowSummariesCompanion Function({
+      Value<String> rowKey,
+      Value<int> total,
+      Value<int> unread,
+      Value<DateTime?> lastReceived,
+      Value<DateTime?> lastAny,
+      Value<bool> hasStarred,
+      Value<bool> hasAttachments,
+      Value<bool> hasSent,
+      Value<int?> newestMessageId,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$RowSummariesTableFilterComposer
+    extends Composer<_$AppDatabase, $RowSummariesTable> {
+  $$RowSummariesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get rowKey => $composableBuilder(
+    column: $table.rowKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get total => $composableBuilder(
+    column: $table.total,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get unread => $composableBuilder(
+    column: $table.unread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastReceived => $composableBuilder(
+    column: $table.lastReceived,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastAny => $composableBuilder(
+    column: $table.lastAny,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasStarred => $composableBuilder(
+    column: $table.hasStarred,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasAttachments => $composableBuilder(
+    column: $table.hasAttachments,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasSent => $composableBuilder(
+    column: $table.hasSent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get newestMessageId => $composableBuilder(
+    column: $table.newestMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RowSummariesTableOrderingComposer
+    extends Composer<_$AppDatabase, $RowSummariesTable> {
+  $$RowSummariesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get rowKey => $composableBuilder(
+    column: $table.rowKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get total => $composableBuilder(
+    column: $table.total,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get unread => $composableBuilder(
+    column: $table.unread,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastReceived => $composableBuilder(
+    column: $table.lastReceived,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastAny => $composableBuilder(
+    column: $table.lastAny,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasStarred => $composableBuilder(
+    column: $table.hasStarred,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasAttachments => $composableBuilder(
+    column: $table.hasAttachments,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasSent => $composableBuilder(
+    column: $table.hasSent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newestMessageId => $composableBuilder(
+    column: $table.newestMessageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RowSummariesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RowSummariesTable> {
+  $$RowSummariesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get rowKey =>
+      $composableBuilder(column: $table.rowKey, builder: (column) => column);
+
+  GeneratedColumn<int> get total =>
+      $composableBuilder(column: $table.total, builder: (column) => column);
+
+  GeneratedColumn<int> get unread =>
+      $composableBuilder(column: $table.unread, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastReceived => $composableBuilder(
+    column: $table.lastReceived,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastAny =>
+      $composableBuilder(column: $table.lastAny, builder: (column) => column);
+
+  GeneratedColumn<bool> get hasStarred => $composableBuilder(
+    column: $table.hasStarred,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get hasAttachments => $composableBuilder(
+    column: $table.hasAttachments,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get hasSent =>
+      $composableBuilder(column: $table.hasSent, builder: (column) => column);
+
+  GeneratedColumn<int> get newestMessageId => $composableBuilder(
+    column: $table.newestMessageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$RowSummariesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RowSummariesTable,
+          RowSummary,
+          $$RowSummariesTableFilterComposer,
+          $$RowSummariesTableOrderingComposer,
+          $$RowSummariesTableAnnotationComposer,
+          $$RowSummariesTableCreateCompanionBuilder,
+          $$RowSummariesTableUpdateCompanionBuilder,
+          (
+            RowSummary,
+            BaseReferences<_$AppDatabase, $RowSummariesTable, RowSummary>,
+          ),
+          RowSummary,
+          PrefetchHooks Function()
+        > {
+  $$RowSummariesTableTableManager(_$AppDatabase db, $RowSummariesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RowSummariesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RowSummariesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RowSummariesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> rowKey = const Value.absent(),
+                Value<int> total = const Value.absent(),
+                Value<int> unread = const Value.absent(),
+                Value<DateTime?> lastReceived = const Value.absent(),
+                Value<DateTime?> lastAny = const Value.absent(),
+                Value<bool> hasStarred = const Value.absent(),
+                Value<bool> hasAttachments = const Value.absent(),
+                Value<bool> hasSent = const Value.absent(),
+                Value<int?> newestMessageId = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RowSummariesCompanion(
+                rowKey: rowKey,
+                total: total,
+                unread: unread,
+                lastReceived: lastReceived,
+                lastAny: lastAny,
+                hasStarred: hasStarred,
+                hasAttachments: hasAttachments,
+                hasSent: hasSent,
+                newestMessageId: newestMessageId,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String rowKey,
+                required int total,
+                required int unread,
+                Value<DateTime?> lastReceived = const Value.absent(),
+                Value<DateTime?> lastAny = const Value.absent(),
+                required bool hasStarred,
+                required bool hasAttachments,
+                required bool hasSent,
+                Value<int?> newestMessageId = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RowSummariesCompanion.insert(
+                rowKey: rowKey,
+                total: total,
+                unread: unread,
+                lastReceived: lastReceived,
+                lastAny: lastAny,
+                hasStarred: hasStarred,
+                hasAttachments: hasAttachments,
+                hasSent: hasSent,
+                newestMessageId: newestMessageId,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RowSummariesTable, RowSummary>(table),
+                  BaseReferences<_$AppDatabase, $RowSummariesTable, RowSummary>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RowSummariesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RowSummariesTable,
+      RowSummary,
+      $$RowSummariesTableFilterComposer,
+      $$RowSummariesTableOrderingComposer,
+      $$RowSummariesTableAnnotationComposer,
+      $$RowSummariesTableCreateCompanionBuilder,
+      $$RowSummariesTableUpdateCompanionBuilder,
+      (
+        RowSummary,
+        BaseReferences<_$AppDatabase, $RowSummariesTable, RowSummary>,
+      ),
+      RowSummary,
+      PrefetchHooks Function()
+    >;
+typedef $$DirtyRowsTableCreateCompanionBuilder = DirtyRowsCompanion Function({
+  required String rowKey,
+  Value<int> rowid,
+});
+typedef $$DirtyRowsTableUpdateCompanionBuilder = DirtyRowsCompanion Function({
+  Value<String> rowKey,
+  Value<int> rowid,
+});
+
+class $$DirtyRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $DirtyRowsTable> {
+  $$DirtyRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get rowKey => $composableBuilder(
+    column: $table.rowKey,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$DirtyRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $DirtyRowsTable> {
+  $$DirtyRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get rowKey => $composableBuilder(
+    column: $table.rowKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$DirtyRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $DirtyRowsTable> {
+  $$DirtyRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get rowKey =>
+      $composableBuilder(column: $table.rowKey, builder: (column) => column);
+}
+
+class $$DirtyRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $DirtyRowsTable,
+          DirtyRow,
+          $$DirtyRowsTableFilterComposer,
+          $$DirtyRowsTableOrderingComposer,
+          $$DirtyRowsTableAnnotationComposer,
+          $$DirtyRowsTableCreateCompanionBuilder,
+          $$DirtyRowsTableUpdateCompanionBuilder,
+          (DirtyRow, BaseReferences<_$AppDatabase, $DirtyRowsTable, DirtyRow>),
+          DirtyRow,
+          PrefetchHooks Function()
+        > {
+  $$DirtyRowsTableTableManager(_$AppDatabase db, $DirtyRowsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$DirtyRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$DirtyRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$DirtyRowsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<String> rowKey = const Value.absent(),
+            Value<int> rowid = const Value.absent(),
+          }) => DirtyRowsCompanion(rowKey: rowKey, rowid: rowid),
+          createCompanionCallback: ({
+            required String rowKey,
+            Value<int> rowid = const Value.absent(),
+          }) => DirtyRowsCompanion.insert(rowKey: rowKey, rowid: rowid),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$DirtyRowsTable, DirtyRow>(table),
+                  BaseReferences<_$AppDatabase, $DirtyRowsTable, DirtyRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$DirtyRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $DirtyRowsTable,
+      DirtyRow,
+      $$DirtyRowsTableFilterComposer,
+      $$DirtyRowsTableOrderingComposer,
+      $$DirtyRowsTableAnnotationComposer,
+      $$DirtyRowsTableCreateCompanionBuilder,
+      $$DirtyRowsTableUpdateCompanionBuilder,
+      (DirtyRow, BaseReferences<_$AppDatabase, $DirtyRowsTable, DirtyRow>),
+      DirtyRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -12248,4 +13481,8 @@ class $AppDatabaseManager {
       $$MessageRowAssignmentsTableTableManager(_db, _db.messageRowAssignments);
   $$RowPrefsTableTableManager get rowPrefs =>
       $$RowPrefsTableTableManager(_db, _db.rowPrefs);
+  $$RowSummariesTableTableManager get rowSummaries =>
+      $$RowSummariesTableTableManager(_db, _db.rowSummaries);
+  $$DirtyRowsTableTableManager get dirtyRows =>
+      $$DirtyRowsTableTableManager(_db, _db.dirtyRows);
 }

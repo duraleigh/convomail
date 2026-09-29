@@ -228,6 +228,47 @@ class AccountSyncer {
     await db.applyFlagUpdates(folderId, current.where((u) => uids.contains(u.uid)).toList());
   }
 
+  /// Removes messages from their folder on the server the way "archive"
+  /// means for this provider: Gmail keeps everything in All Mail, so
+  /// expunging from the folder archives it; other servers move to the
+  /// Archive folder, created if missing.
+  Future<void> archiveOnServer(int folderId, List<int> uids) async {
+    if (uids.isEmpty) return;
+    final folder = await db.folderById(folderId);
+    if (folder == null) return;
+    await _ensureConnected();
+    if (account.providerId == 'gmail') {
+      await transport.selectFolder(folder.path);
+      await transport.deleteMessages(uids);
+      return;
+    }
+    var archive = (await db.foldersForAccount(account.id)).where((f) => f.role == FolderRole.archive.name).firstOrNull;
+    if (archive == null) {
+      final path = await transport.createFolder('Archive');
+      await db.upsertFolders(account.id, await transport.listFolders());
+      archive = (await db.foldersForAccount(account.id)).where((f) => f.path == path).firstOrNull;
+      if (archive == null) throw const MailTransportException('Could not create an Archive folder.');
+    }
+    if (archive.id == folderId) return;
+    await transport.selectFolder(folder.path);
+    await transport.moveMessages(uids, archive.path);
+  }
+
+  /// Moves messages to the Trash folder on the server.
+  Future<void> trashOnServer(int folderId, List<int> uids) async {
+    if (uids.isEmpty) return;
+    final folder = await db.folderById(folderId);
+    if (folder == null) return;
+    await _ensureConnected();
+    final trash = (await db.foldersForAccount(account.id)).where((f) => f.role == FolderRole.trash.name).firstOrNull;
+    await transport.selectFolder(folder.path);
+    if (trash == null || trash.id == folderId) {
+      await transport.deleteMessages(uids);
+    } else {
+      await transport.moveMessages(uids, trash.path);
+    }
+  }
+
   /// Full sync, then idle on the inbox and re-sync it on every push. Runs
   /// until [stop] is called. Reconnects with exponential backoff.
   Future<void> run() async {

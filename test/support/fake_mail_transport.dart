@@ -196,6 +196,23 @@ class FakeMailTransport implements MailTransport {
   }
 
   @override
+  Future<void> deleteMessages(List<int> uids) async {
+    _requireConnected();
+    for (final uid in uids) {
+      _sel.remove(uid);
+    }
+    log.add('delete ${uids.join(',')}');
+  }
+
+  @override
+  Future<String> createFolder(String name) async {
+    _requireConnected();
+    folder(name);
+    log.add('create $name');
+    return name;
+  }
+
+  @override
   Future<MailboxEvent?> idle({required Duration timeout}) async {
     _requireConnected();
     log.add('idle');

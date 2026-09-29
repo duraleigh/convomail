@@ -4,6 +4,7 @@ import '../domain/filing.dart';
 import '../domain/identity.dart';
 import '../mail/models.dart';
 import 'database.dart';
+import 'people_queries.dart';
 
 /// Database operations used by the sync engine and account setup.
 extension SyncQueries on AppDatabase {
@@ -101,6 +102,7 @@ extension SyncQueries on AppDatabase {
         await (delete(contactAddresses)..where((c) => c.address.equals(address))).go();
       }
     });
+    await refreshDirtyRows();
   }
 
   // ---- folders ---------------------------------------------------------------
@@ -163,6 +165,7 @@ extension SyncQueries on AppDatabase {
   Future<void> clearFolderMessages(int folderId) async {
     await (delete(messages)..where((m) => m.folderId.equals(folderId))).go();
     await updateFolderState(folderId, lastSyncedUid: 0, highestModSeq: 0, touchSyncTime: false);
+    await refreshDirtyRows();
   }
 
   // ---- messages --------------------------------------------------------------
@@ -224,6 +227,7 @@ extension SyncQueries on AppDatabase {
         }
       }
     });
+    await refreshDirtyRows();
     return inserted;
   }
 
@@ -280,6 +284,7 @@ extension SyncQueries on AppDatabase {
     final gone = [for (final m in local) if (!serverUids.contains(m.uid)) m.id];
     if (gone.isEmpty) return 0;
     await (delete(messages)..where((m) => m.id.isIn(gone))).go();
+    await refreshDirtyRows();
     return gone.length;
   }
 
@@ -297,6 +302,7 @@ extension SyncQueries on AppDatabase {
         changed += n;
       }
     });
+    await refreshDirtyRows();
     return changed;
   }
 
@@ -323,6 +329,7 @@ extension SyncQueries on AppDatabase {
         ));
       }
     });
+    await refreshDirtyRows();
   }
 
   static String _snippetFrom(String text) {

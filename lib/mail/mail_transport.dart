@@ -45,6 +45,14 @@ abstract interface class MailTransport {
   /// the server supports it, otherwise COPY + \Deleted + EXPUNGE.
   Future<void> moveMessages(List<int> uids, String targetPath);
 
+  /// Marks messages \Deleted and expunges them from the selected folder.
+  /// On Gmail this is how a message leaves the Inbox without leaving All
+  /// Mail, i.e. "archive".
+  Future<void> deleteMessages(List<int> uids);
+
+  /// Creates a folder and returns its path.
+  Future<String> createFolder(String name);
+
   /// Waits in IDLE on the selected folder until the server pushes something
   /// or [timeout] elapses (returns null on timeout).
   Future<MailboxEvent?> idle({required Duration timeout});
