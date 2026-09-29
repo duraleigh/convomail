@@ -38,7 +38,8 @@ dependencies:
   drift: ^2.35.0
   drift_flutter: ^0.3.1
   window_manager: ^0.5.2
-
+  enough_mail: ^2.1.7
+  flutter_secure_storage: ^11.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter

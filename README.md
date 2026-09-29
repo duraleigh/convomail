@@ -11,7 +11,7 @@ Visual reference: `docs/email-client-visual-mockups.html`.
 | Milestone | State | Notes |
 |---|---|---|
 | M0 Foundations & design system | **Done** (2026-09-29) | Shell, theme, custom M3 Expressive widgets, settings store, 16 tests, release build runs |
-| M1 Accounts, credentials, sync | Next | Gmail via app password first |
+| M1 Accounts, credentials, sync | In progress | Data model, identity resolution, filing, IMAP transport, sync engine with IDLE, Credential Manager storage, account setup screen; 44 unit tests + 3 integration tests against a local pymap server. Remaining: real-Gmail soak test at 20k messages, sleep/resume. |
 | M2–M12 | Planned | See `docs/email-client-windows-dev-plan.md` section 2 |
 
 Run with `--destination=<chats|boards|planner|settings>` or `--inbox=<people|feeds>` to open on a given screen.
@@ -33,6 +33,15 @@ lib/
   ui/screens/          one file per destination
 test/                  unit and widget tests
 ```
+
+## Tests
+
+```
+flutter test --exclude-tags integration      # unit and widget tests
+flutter test --tags integration              # real IMAP against a local pymap server
+```
+
+The integration tests need `pip install pymap`; on Windows they start it through `tool/pymap_win.py`.
 
 ## Build
 

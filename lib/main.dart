@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/destinations.dart';
 import 'app/settings.dart';
+import 'sync/sync_controller.dart';
 import 'ui/shell/app_shell.dart';
 import 'ui/theme/app_theme.dart';
 import 'ui/theme/tokens.dart';
@@ -60,11 +61,26 @@ Future<void> main(List<String> args) async {
   runApp(ProviderScope(overrides: startup.overrides, child: const ConvoMailApp()));
 }
 
-class ConvoMailApp extends ConsumerWidget {
-  const ConvoMailApp({super.key});
+class ConvoMailApp extends ConsumerStatefulWidget {
+  const ConvoMailApp({super.key, this.startSync = true});
+
+  /// Whether to start the background sync controller. Widget tests pass
+  /// false so no mail server is contacted.
+  final bool startSync;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ConvoMailApp> createState() => _ConvoMailAppState();
+}
+
+class _ConvoMailAppState extends ConsumerState<ConvoMailApp> {
+  @override
+  void initState() {
+    super.initState();
+    if (widget.startSync) ref.read(syncControllerProvider).start();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     return MaterialApp(
       title: 'ConvoMail',

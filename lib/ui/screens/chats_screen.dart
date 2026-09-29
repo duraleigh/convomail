@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/destinations.dart';
+import '../../app/settings_navigation.dart';
 import '../../app/shortcuts.dart';
 import '../shell/split_pane.dart';
 import '../theme/tokens.dart';
@@ -95,7 +96,11 @@ class _MiddlePane extends ConsumerWidget {
               title: mode == InboxMode.people ? 'No conversations yet' : 'Nothing filed to Feeds',
               message: 'Add an account in Settings to start syncing.',
               action: FilledButton.tonalIcon(
-                onPressed: () => ref.read(destinationProvider.notifier).select(Destination.settings),
+                onPressed: () {
+                  ref.read(settingsSectionProvider.notifier).select(SettingsSection.accounts);
+                  ref.read(settingsAddAccountRequestProvider.notifier).set(true);
+                  ref.read(destinationProvider.notifier).select(Destination.settings);
+                },
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Add account'),
               ),
