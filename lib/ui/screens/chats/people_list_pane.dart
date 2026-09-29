@@ -29,6 +29,7 @@ class PeopleListPane extends ConsumerStatefulWidget {
 class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   final _listFocus = FocusNode(debugLabel: 'people-list');
   final _searchController = TextEditingController();
+  bool _autoOpened = false;
 
   static const _filterLabels = {
     PeopleFilter.all: 'All',
@@ -164,6 +165,10 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                 return const EmptyState(icon: Icons.inbox_outlined, title: 'Nothing filed to Feeds', message: 'Feeds classification arrives in milestone 8.');
               }
               if (list.isEmpty) return _empty(filter);
+              if (ref.read(autoOpenFirstProvider) && selected == null && !_autoOpened) {
+                _autoOpened = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(selectedRowProvider.notifier).select(list.first.rowKey));
+              }
               return Focus(
                 focusNode: _listFocus,
                 onKeyEvent: (node, event) {

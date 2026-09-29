@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/bench.dart';
 import 'app/destinations.dart';
+import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
 import 'sync/sync_controller.dart';
@@ -25,6 +26,11 @@ class StartupArgs {
   /// `--add-account` opens Settings → Accounts with the add panel expanded.
   final bool addAccount;
 
+  /// `--open-first` selects the first People row and expands its newest
+  /// thread. Used to verify rendering from a script.
+  bool get openFirst => _openFirst;
+  static bool _openFirst = false;
+
   static StartupArgs parse(List<String> args) {
     Destination? destination;
     InboxMode? inbox;
@@ -39,6 +45,8 @@ class StartupArgs {
       } else if (a == '--add-account') {
         addAccount = true;
         destination = Destination.settings;
+      } else if (a == '--open-first') {
+        _openFirst = true;
       }
     }
     return StartupArgs(destination: destination, inbox: inbox, addAccount: addAccount);
@@ -48,6 +56,7 @@ class StartupArgs {
         if (destination != null) destinationProvider.overrideWith(() => DestinationNotifier(initial: destination)),
         if (inbox != null) inboxModeProvider.overrideWith(() => InboxModeNotifier(initial: inbox)),
         if (addAccount) settingsAddAccountRequestProvider.overrideWith(() => AddAccountRequestNotifier(initial: true)),
+        if (_openFirst) autoOpenFirstProvider.overrideWith((ref) => true),
       ];
 }
 

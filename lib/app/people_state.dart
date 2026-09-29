@@ -38,6 +38,10 @@ final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   return db.watchPeopleRows(filter: filter, search: search);
 });
 
+/// Dev/verification aid: when true, the list selects its first row and the
+/// conversation expands its newest thread once, on first load.
+final autoOpenFirstProvider = Provider<bool>((ref) => false);
+
 /// Messages of the selected row, newest first.
 final selectedRowMessagesProvider = StreamProvider<List<Message>>((ref) {
   final key = ref.watch(selectedRowProvider);

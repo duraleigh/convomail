@@ -89,6 +89,8 @@ class ConversationPane extends ConsumerWidget {
   }
 }
 
+bool _autoExpanded = false;
+
 /// Groups the row's messages by day, then by thread key within a day.
 class _ThreadedList extends ConsumerWidget {
   const _ThreadedList({required this.messages});
@@ -101,6 +103,10 @@ class _ThreadedList extends ConsumerWidget {
     final keyArg = (messages.map((m) => m.threadKey ?? 'm:${m.id}').toSet().toList()..sort()).join('\n');
     final counts = ref.watch(_threadCountsProvider(keyArg)).value ?? const <String, int>{};
     final expanded = ref.watch(expandedMessagesProvider);
+    if (ref.read(autoOpenFirstProvider) && expanded.isEmpty && messages.isNotEmpty && !_autoExpanded) {
+      _autoExpanded = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(expandedMessagesProvider.notifier).expand(messages.first.id));
+    }
 
     // Build day sections, newest day first; within a day newest thread first.
     final sections = <_DaySection>[];
