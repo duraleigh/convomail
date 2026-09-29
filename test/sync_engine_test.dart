@@ -2,6 +2,7 @@ import 'package:convomail/mail/mail_transport.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/store/database.dart';
 import 'package:convomail/store/sync_queries.dart';
+import 'package:convomail/store/thread_queries.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
@@ -284,6 +285,26 @@ void main() {
 
     // A second sync discovers nothing new and does not re-file.
     expect(await db.discoverIdentitiesFromSent(account.id, (await db.foldersForAccount(account.id)).firstWhere((f) => f.role == 'sent').id), 0);
+  });
+
+  test('synced replies join their parent thread; unrelated mail does not (spec 4.20)', () async {
+    final inbox = server.folder('INBOX', role: FolderRole.inbox);
+    inbox.add(hdr(from: 'sarah@x.com', subject: 'Plan', messageId: '<a@x>'));
+    inbox.add(hdr(from: 'tom@x.com', subject: 'Other', messageId: '<z@x>'));
+    await syncer.syncOnce();
+    // Later: a reply from Joann to Sarah's message, and a header-less "Re:" from Sarah.
+    inbox.add(hdr(from: 'joann@x.com', to: ['me@example.com', 'sarah@x.com'], subject: 'Re: Plan', messageId: '<b@x>', inReplyTo: '<a@x>'));
+    inbox.add(hdr(from: 'sarah@x.com', subject: 'Re: Plan', messageId: '<c@x>'));
+    await syncer.syncOnce();
+
+    final msgs = await allMessages();
+    String keyOf(String mid) => msgs.firstWhere((m) => m.messageId == mid).threadKey!;
+    expect(keyOf('<a@x>'), '<a@x>');
+    expect(keyOf('<b@x>'), '<a@x>', reason: 'In-Reply-To links it');
+    expect(keyOf('<c@x>'), '<a@x>', reason: 'subject fallback: Re: prefix, shared participant, inside 30 days');
+    expect(keyOf('<z@x>'), '<z@x>');
+    expect(await db.threadCounts(['<a@x>', '<z@x>']), {'<a@x>': 3, '<z@x>': 1});
+    expect((await db.threadMessages('<a@x>')).map((m) => m.messageId).toList(), ['<a@x>', '<b@x>', '<c@x>']);
   });
 
   test('accounts can be soft-checked for message counts', () async {

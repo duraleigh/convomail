@@ -5,6 +5,7 @@ import '../domain/identity.dart';
 import '../mail/models.dart';
 import 'database.dart';
 import 'people_queries.dart';
+import 'thread_queries.dart';
 
 /// Database operations used by the sync engine and account setup.
 extension SyncQueries on AppDatabase {
@@ -228,6 +229,13 @@ extension SyncQueries on AppDatabase {
       }
     });
     await refreshDirtyRows();
+    // Thread the batch (new and refreshed headers alike).
+    final dbIds = await (selectOnly(messages)
+          ..addColumns([messages.id])
+          ..where(messages.folderId.equals(folderId) & messages.uid.isIn(headers.map((h) => h.uid).toList())))
+        .map((r) => r.read(messages.id)!)
+        .get();
+    await assignThreads(dbIds);
     return inserted;
   }
 

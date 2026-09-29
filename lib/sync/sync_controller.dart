@@ -9,6 +9,7 @@ import '../mail/transport_factory.dart';
 import '../platform/credential_store.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
+import '../store/thread_queries.dart';
 import 'sync_engine.dart';
 
 /// Live sync status per account id.
@@ -38,9 +39,14 @@ class SyncController {
 
   AppDatabase get _db => _ref.read(databaseProvider);
 
-  /// Begins watching accounts; call once at app start.
+  /// Begins watching accounts; call once at app start. Also threads any
+  /// messages that predate the threading model (schema v5 migration).
   void start() {
     _sub ??= _db.watchAccounts().listen(_reconcile);
+    unawaited(_db.rebuildMissingThreads(batch: 500).catchError((Object e) {
+      // Threading backfill is best effort; new mail is threaded as it syncs.
+      return 0;
+    }));
   }
 
   Future<void> _reconcile(List<Account> accounts) async {

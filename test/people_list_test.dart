@@ -5,6 +5,7 @@ import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/database.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
+import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:convomail/ui/widgets/tonal_avatar.dart';
 import 'package:drift/drift.dart' show InsertMode, Value;
@@ -28,6 +29,8 @@ void main() {
           databaseProvider.overrideWith((ref) => db),
           credentialStoreProvider.overrideWith((ref) => InMemoryCredentialStore()),
           transportFactoryProvider.overrideWith((ref) => () => FakeMailTransport()),
+          // No WebView2 in the test harness.
+          htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
         ],
         child: const ConvoMailApp(startSync: false),
       );

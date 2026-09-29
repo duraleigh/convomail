@@ -124,6 +124,13 @@ class Messages extends Table {
   /// Provider thread id (Gmail X-GM-THRID) when available (spec 4.20).
   TextColumn get providerThreadId => text().nullable()();
 
+  /// Thread key from the hybrid threading model (spec 4.20): the root
+  /// message's Message-ID, or `m:<id>`. Null until assigned.
+  TextColumn get threadKey => text().nullable()();
+
+  /// The user chose "Load images" for this message (spec 4.13).
+  BoolColumn get imagesAllowed => boolean().withDefault(const Constant(false))();
+
   @override
   List<Set<Column>> get uniqueKeys => [
         {folderId, uid},
@@ -210,6 +217,18 @@ class RowPrefs extends Table {
   Set<Column> get primaryKey => {rowKey};
 }
 
+/// Remote hosts seen while rendering a message: blocked by default, or
+/// loaded when the user chose "Load images" (spec 4.13 tracker log and
+/// aggregate stats).
+class TrackerEvents extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get messageId => integer().references(Messages, #id, onDelete: KeyAction.cascade)();
+  TextColumn get host => text()();
+  BoolColumn get isTracker => boolean().withDefault(const Constant(false))();
+  BoolColumn get blocked => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get at => dateTime().withDefault(currentDateAndTime)();
+}
+
 /// Pre-aggregated People-list data, one row per row_key, maintained
 /// incrementally: triggers record touched row keys in [DirtyRows] and
 /// `refreshDirtyRows()` recomputes only those. The list query reads this
@@ -269,6 +288,7 @@ class MessageRowAssignments extends Table {
   RowPrefs,
   RowSummaries,
   DirtyRows,
+  TrackerEvents,
 ])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
@@ -277,7 +297,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -316,6 +336,15 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             // Everything is stale until the first refresh.
             await customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) SELECT DISTINCT row_key FROM message_row_assignments');
           }
+          if (from < 5) {
+            await m.addColumn(messages, messages.threadKey);
+            await m.addColumn(messages, messages.imagesAllowed);
+            await m.createTable(trackerEvents);
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_key)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_tracker_message ON tracker_events(message_id)');
+            // thread_key stays null; ThreadQueries.rebuildAllThreads runs on
+            // the first conversation open / sync after this migration.
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -330,6 +359,8 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_participants_key ON message_participants(contact_key)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_row_assign_row ON message_row_assignments(row_key)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_key)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_tracker_message ON tracker_events(message_id)');
   }
 
   /// Triggers that mark People rows stale whenever anything that feeds a

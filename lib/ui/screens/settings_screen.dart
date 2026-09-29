@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/conversation_state.dart';
 import '../../app/settings.dart';
 import '../../app/settings_navigation.dart';
 import '../../app/shortcuts.dart';
+import '../../store/database.dart';
 import '../theme/tokens.dart';
 import '../widgets/connected_button_group.dart';
 import '../widgets/grouped_list.dart';
@@ -82,6 +84,8 @@ class _Detail extends ConsumerWidget {
         return AccountsDetail(startAdding: startAdding);
       case SettingsSection.appearance:
         return const _AppearanceDetail();
+      case SettingsSection.privacy:
+        return const _PrivacyDetail();
       case SettingsSection.keyboard:
         return const _KeyboardDetail();
       default:
@@ -131,6 +135,72 @@ class _AppearanceDetail extends ConsumerWidget {
   }
 }
 
+/// Spec 4.13: global remote-image toggle, aggregate stats, reset.
+class _PrivacyDetail extends ConsumerWidget {
+  const _PrivacyDetail();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(settingsProvider);
+    final stats = ref.watch(privacyStatsProvider).value;
+    final text = Theme.of(context).textTheme;
+    final scheme = Theme.of(context).colorScheme;
+
+    Widget stat(String value, String label, IconData icon) => Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(AppSpace.lg),
+            decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(AppShapes.lg)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, color: scheme.onTertiaryContainer),
+                const SizedBox(height: AppSpace.sm),
+                Text(value, style: text.headlineMedium!.copyWith(color: scheme.onTertiaryContainer)),
+                Text(label, style: text.bodySmall!.copyWith(color: scheme.onTertiaryContainer)),
+              ],
+            ),
+          ),
+        );
+
+    return ListView(
+      children: [
+        GroupedList(
+          children: [
+            SwitchListTile(
+              secondary: Icon(Icons.shield_outlined, color: scheme.primary),
+              title: const Text('Block remote images'),
+              subtitle: const Text('Images and tracking pixels in incoming mail are not loaded until you choose to. Off restores automatic loading.'),
+              value: settings.blockRemoteImages,
+              onChanged: (v) => ref.read(settingsProvider.notifier).setBlockRemoteImages(v),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.xl),
+        Text('This week', style: text.labelSmall!.copyWith(letterSpacing: 1)),
+        const SizedBox(height: AppSpace.sm),
+        Row(
+          children: [
+            stat('${stats?.trackersBlockedThisWeek ?? 0}', 'trackers blocked this week', Icons.gps_off_rounded),
+            const SizedBox(width: AppSpace.md),
+            stat('${stats?.sendersWhoKnowYouRead ?? 0}', 'senders that know you read their mail', Icons.visibility_outlined),
+            const SizedBox(width: AppSpace.md),
+            stat('${stats?.imagesBlockedTotal ?? 0}', 'remote references blocked in total', Icons.image_not_supported_outlined),
+          ],
+        ),
+        const SizedBox(height: AppSpace.xl),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => ref.read(databaseProvider).resetPrivacyStats(),
+            icon: const Icon(Icons.restart_alt_rounded),
+            label: const Text('Reset statistics'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _KeyboardDetail extends StatelessWidget {
   const _KeyboardDetail();
 
@@ -167,7 +237,6 @@ class _Placeholder extends StatelessWidget {
 
   static const _milestone = {
     SettingsSection.notifications: 'milestone 10',
-    SettingsSection.privacy: 'milestone 3',
     SettingsSection.peopleGroups: 'milestone 7',
     SettingsSection.feeds: 'milestone 8',
     SettingsSection.tags: 'milestone 9',

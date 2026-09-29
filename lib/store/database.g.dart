@@ -2875,6 +2875,32 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _threadKeyMeta = const VerificationMeta(
+    'threadKey',
+  );
+  @override
+  late final GeneratedColumn<String> threadKey = GeneratedColumn<String>(
+    'thread_key',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _imagesAllowedMeta = const VerificationMeta(
+    'imagesAllowed',
+  );
+  @override
+  late final GeneratedColumn<bool> imagesAllowed = GeneratedColumn<bool>(
+    'images_allowed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("images_allowed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2903,6 +2929,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     bodyHtml,
     bodyFetchedAt,
     providerThreadId,
+    threadKey,
+    imagesAllowed,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3096,6 +3124,21 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('thread_key')) {
+      context.handle(
+        _threadKeyMeta,
+        threadKey.isAcceptableOrUnknown(data['thread_key']!, _threadKeyMeta),
+      );
+    }
+    if (data.containsKey('images_allowed')) {
+      context.handle(
+        _imagesAllowedMeta,
+        imagesAllowed.isAcceptableOrUnknown(
+          data['images_allowed']!,
+          _imagesAllowedMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3213,6 +3256,14 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}provider_thread_id'],
       ),
+      threadKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thread_key'],
+      ),
+      imagesAllowed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}images_allowed'],
+      )!,
     );
   }
 
@@ -3257,6 +3308,13 @@ class Message extends DataClass implements Insertable<Message> {
 
   /// Provider thread id (Gmail X-GM-THRID) when available (spec 4.20).
   final String? providerThreadId;
+
+  /// Thread key from the hybrid threading model (spec 4.20): the root
+  /// message's Message-ID, or `m:<id>`. Null until assigned.
+  final String? threadKey;
+
+  /// The user chose "Load images" for this message (spec 4.13).
+  final bool imagesAllowed;
   const Message({
     required this.id,
     required this.accountId,
@@ -3284,6 +3342,8 @@ class Message extends DataClass implements Insertable<Message> {
     this.bodyHtml,
     this.bodyFetchedAt,
     this.providerThreadId,
+    this.threadKey,
+    required this.imagesAllowed,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3332,6 +3392,10 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || providerThreadId != null) {
       map['provider_thread_id'] = Variable<String>(providerThreadId);
     }
+    if (!nullToAbsent || threadKey != null) {
+      map['thread_key'] = Variable<String>(threadKey);
+    }
+    map['images_allowed'] = Variable<bool>(imagesAllowed);
     return map;
   }
 
@@ -3379,6 +3443,10 @@ class Message extends DataClass implements Insertable<Message> {
       providerThreadId: providerThreadId == null && nullToAbsent
           ? const Value.absent()
           : Value(providerThreadId),
+      threadKey: threadKey == null && nullToAbsent
+          ? const Value.absent()
+          : Value(threadKey),
+      imagesAllowed: Value(imagesAllowed),
     );
   }
 
@@ -3414,6 +3482,8 @@ class Message extends DataClass implements Insertable<Message> {
       bodyHtml: serializer.fromJson<String?>(json['bodyHtml']),
       bodyFetchedAt: serializer.fromJson<DateTime?>(json['bodyFetchedAt']),
       providerThreadId: serializer.fromJson<String?>(json['providerThreadId']),
+      threadKey: serializer.fromJson<String?>(json['threadKey']),
+      imagesAllowed: serializer.fromJson<bool>(json['imagesAllowed']),
     );
   }
   @override
@@ -3446,6 +3516,8 @@ class Message extends DataClass implements Insertable<Message> {
       'bodyHtml': serializer.toJson<String?>(bodyHtml),
       'bodyFetchedAt': serializer.toJson<DateTime?>(bodyFetchedAt),
       'providerThreadId': serializer.toJson<String?>(providerThreadId),
+      'threadKey': serializer.toJson<String?>(threadKey),
+      'imagesAllowed': serializer.toJson<bool>(imagesAllowed),
     };
   }
 
@@ -3476,6 +3548,8 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> bodyHtml = const Value.absent(),
     Value<DateTime?> bodyFetchedAt = const Value.absent(),
     Value<String?> providerThreadId = const Value.absent(),
+    Value<String?> threadKey = const Value.absent(),
+    bool? imagesAllowed,
   }) => Message(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -3509,6 +3583,8 @@ class Message extends DataClass implements Insertable<Message> {
     providerThreadId: providerThreadId.present
         ? providerThreadId.value
         : this.providerThreadId,
+    threadKey: threadKey.present ? threadKey.value : this.threadKey,
+    imagesAllowed: imagesAllowed ?? this.imagesAllowed,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -3554,6 +3630,10 @@ class Message extends DataClass implements Insertable<Message> {
       providerThreadId: data.providerThreadId.present
           ? data.providerThreadId.value
           : this.providerThreadId,
+      threadKey: data.threadKey.present ? data.threadKey.value : this.threadKey,
+      imagesAllowed: data.imagesAllowed.present
+          ? data.imagesAllowed.value
+          : this.imagesAllowed,
     );
   }
 
@@ -3585,7 +3665,9 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('bodyText: $bodyText, ')
           ..write('bodyHtml: $bodyHtml, ')
           ..write('bodyFetchedAt: $bodyFetchedAt, ')
-          ..write('providerThreadId: $providerThreadId')
+          ..write('providerThreadId: $providerThreadId, ')
+          ..write('threadKey: $threadKey, ')
+          ..write('imagesAllowed: $imagesAllowed')
           ..write(')'))
         .toString();
   }
@@ -3618,6 +3700,8 @@ class Message extends DataClass implements Insertable<Message> {
     bodyHtml,
     bodyFetchedAt,
     providerThreadId,
+    threadKey,
+    imagesAllowed,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -3648,7 +3732,9 @@ class Message extends DataClass implements Insertable<Message> {
           other.bodyText == this.bodyText &&
           other.bodyHtml == this.bodyHtml &&
           other.bodyFetchedAt == this.bodyFetchedAt &&
-          other.providerThreadId == this.providerThreadId);
+          other.providerThreadId == this.providerThreadId &&
+          other.threadKey == this.threadKey &&
+          other.imagesAllowed == this.imagesAllowed);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -3678,6 +3764,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> bodyHtml;
   final Value<DateTime?> bodyFetchedAt;
   final Value<String?> providerThreadId;
+  final Value<String?> threadKey;
+  final Value<bool> imagesAllowed;
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -3705,6 +3793,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.bodyHtml = const Value.absent(),
     this.bodyFetchedAt = const Value.absent(),
     this.providerThreadId = const Value.absent(),
+    this.threadKey = const Value.absent(),
+    this.imagesAllowed = const Value.absent(),
   });
   MessagesCompanion.insert({
     this.id = const Value.absent(),
@@ -3733,6 +3823,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.bodyHtml = const Value.absent(),
     this.bodyFetchedAt = const Value.absent(),
     this.providerThreadId = const Value.absent(),
+    this.threadKey = const Value.absent(),
+    this.imagesAllowed = const Value.absent(),
   }) : accountId = Value(accountId),
        folderId = Value(folderId),
        uid = Value(uid);
@@ -3763,6 +3855,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? bodyHtml,
     Expression<DateTime>? bodyFetchedAt,
     Expression<String>? providerThreadId,
+    Expression<String>? threadKey,
+    Expression<bool>? imagesAllowed,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3791,6 +3885,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (bodyHtml != null) 'body_html': bodyHtml,
       if (bodyFetchedAt != null) 'body_fetched_at': bodyFetchedAt,
       if (providerThreadId != null) 'provider_thread_id': providerThreadId,
+      if (threadKey != null) 'thread_key': threadKey,
+      if (imagesAllowed != null) 'images_allowed': imagesAllowed,
     });
   }
 
@@ -3821,6 +3917,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? bodyHtml,
     Value<DateTime?>? bodyFetchedAt,
     Value<String?>? providerThreadId,
+    Value<String?>? threadKey,
+    Value<bool>? imagesAllowed,
   }) {
     return MessagesCompanion(
       id: id ?? this.id,
@@ -3849,6 +3947,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       bodyHtml: bodyHtml ?? this.bodyHtml,
       bodyFetchedAt: bodyFetchedAt ?? this.bodyFetchedAt,
       providerThreadId: providerThreadId ?? this.providerThreadId,
+      threadKey: threadKey ?? this.threadKey,
+      imagesAllowed: imagesAllowed ?? this.imagesAllowed,
     );
   }
 
@@ -3933,6 +4033,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (providerThreadId.present) {
       map['provider_thread_id'] = Variable<String>(providerThreadId.value);
     }
+    if (threadKey.present) {
+      map['thread_key'] = Variable<String>(threadKey.value);
+    }
+    if (imagesAllowed.present) {
+      map['images_allowed'] = Variable<bool>(imagesAllowed.value);
+    }
     return map;
   }
 
@@ -3964,7 +4070,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('bodyText: $bodyText, ')
           ..write('bodyHtml: $bodyHtml, ')
           ..write('bodyFetchedAt: $bodyFetchedAt, ')
-          ..write('providerThreadId: $providerThreadId')
+          ..write('providerThreadId: $providerThreadId, ')
+          ..write('threadKey: $threadKey, ')
+          ..write('imagesAllowed: $imagesAllowed')
           ..write(')'))
         .toString();
   }
@@ -7575,6 +7683,401 @@ class DirtyRowsCompanion extends UpdateCompanion<DirtyRow> {
   }
 }
 
+class $TrackerEventsTable extends TrackerEvents
+    with TableInfo<$TrackerEventsTable, TrackerEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TrackerEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<int> messageId = GeneratedColumn<int>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _hostMeta = const VerificationMeta('host');
+  @override
+  late final GeneratedColumn<String> host = GeneratedColumn<String>(
+    'host',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _isTrackerMeta = const VerificationMeta(
+    'isTracker',
+  );
+  @override
+  late final GeneratedColumn<bool> isTracker = GeneratedColumn<bool>(
+    'is_tracker',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_tracker" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _blockedMeta = const VerificationMeta(
+    'blocked',
+  );
+  @override
+  late final GeneratedColumn<bool> blocked = GeneratedColumn<bool>(
+    'blocked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("blocked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<DateTime> at = GeneratedColumn<DateTime>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    messageId,
+    host,
+    isTracker,
+    blocked,
+    at,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'tracker_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TrackerEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('host')) {
+      context.handle(
+        _hostMeta,
+        host.isAcceptableOrUnknown(data['host']!, _hostMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hostMeta);
+    }
+    if (data.containsKey('is_tracker')) {
+      context.handle(
+        _isTrackerMeta,
+        isTracker.isAcceptableOrUnknown(data['is_tracker']!, _isTrackerMeta),
+      );
+    }
+    if (data.containsKey('blocked')) {
+      context.handle(
+        _blockedMeta,
+        blocked.isAcceptableOrUnknown(data['blocked']!, _blockedMeta),
+      );
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TrackerEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TrackerEvent(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}message_id'],
+      )!,
+      host: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}host'],
+      )!,
+      isTracker: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_tracker'],
+      )!,
+      blocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}blocked'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}at'],
+      )!,
+    );
+  }
+
+  @override
+  $TrackerEventsTable createAlias(String alias) {
+    return $TrackerEventsTable(attachedDatabase, alias);
+  }
+}
+
+class TrackerEvent extends DataClass implements Insertable<TrackerEvent> {
+  final int id;
+  final int messageId;
+  final String host;
+  final bool isTracker;
+  final bool blocked;
+  final DateTime at;
+  const TrackerEvent({
+    required this.id,
+    required this.messageId,
+    required this.host,
+    required this.isTracker,
+    required this.blocked,
+    required this.at,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['message_id'] = Variable<int>(messageId);
+    map['host'] = Variable<String>(host);
+    map['is_tracker'] = Variable<bool>(isTracker);
+    map['blocked'] = Variable<bool>(blocked);
+    map['at'] = Variable<DateTime>(at);
+    return map;
+  }
+
+  TrackerEventsCompanion toCompanion(bool nullToAbsent) {
+    return TrackerEventsCompanion(
+      id: Value(id),
+      messageId: Value(messageId),
+      host: Value(host),
+      isTracker: Value(isTracker),
+      blocked: Value(blocked),
+      at: Value(at),
+    );
+  }
+
+  factory TrackerEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TrackerEvent(
+      id: serializer.fromJson<int>(json['id']),
+      messageId: serializer.fromJson<int>(json['messageId']),
+      host: serializer.fromJson<String>(json['host']),
+      isTracker: serializer.fromJson<bool>(json['isTracker']),
+      blocked: serializer.fromJson<bool>(json['blocked']),
+      at: serializer.fromJson<DateTime>(json['at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'messageId': serializer.toJson<int>(messageId),
+      'host': serializer.toJson<String>(host),
+      'isTracker': serializer.toJson<bool>(isTracker),
+      'blocked': serializer.toJson<bool>(blocked),
+      'at': serializer.toJson<DateTime>(at),
+    };
+  }
+
+  TrackerEvent copyWith({
+    int? id,
+    int? messageId,
+    String? host,
+    bool? isTracker,
+    bool? blocked,
+    DateTime? at,
+  }) => TrackerEvent(
+    id: id ?? this.id,
+    messageId: messageId ?? this.messageId,
+    host: host ?? this.host,
+    isTracker: isTracker ?? this.isTracker,
+    blocked: blocked ?? this.blocked,
+    at: at ?? this.at,
+  );
+  TrackerEvent copyWithCompanion(TrackerEventsCompanion data) {
+    return TrackerEvent(
+      id: data.id.present ? data.id.value : this.id,
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      host: data.host.present ? data.host.value : this.host,
+      isTracker: data.isTracker.present ? data.isTracker.value : this.isTracker,
+      blocked: data.blocked.present ? data.blocked.value : this.blocked,
+      at: data.at.present ? data.at.value : this.at,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TrackerEvent(')
+          ..write('id: $id, ')
+          ..write('messageId: $messageId, ')
+          ..write('host: $host, ')
+          ..write('isTracker: $isTracker, ')
+          ..write('blocked: $blocked, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, messageId, host, isTracker, blocked, at);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TrackerEvent &&
+          other.id == this.id &&
+          other.messageId == this.messageId &&
+          other.host == this.host &&
+          other.isTracker == this.isTracker &&
+          other.blocked == this.blocked &&
+          other.at == this.at);
+}
+
+class TrackerEventsCompanion extends UpdateCompanion<TrackerEvent> {
+  final Value<int> id;
+  final Value<int> messageId;
+  final Value<String> host;
+  final Value<bool> isTracker;
+  final Value<bool> blocked;
+  final Value<DateTime> at;
+  const TrackerEventsCompanion({
+    this.id = const Value.absent(),
+    this.messageId = const Value.absent(),
+    this.host = const Value.absent(),
+    this.isTracker = const Value.absent(),
+    this.blocked = const Value.absent(),
+    this.at = const Value.absent(),
+  });
+  TrackerEventsCompanion.insert({
+    this.id = const Value.absent(),
+    required int messageId,
+    required String host,
+    this.isTracker = const Value.absent(),
+    this.blocked = const Value.absent(),
+    this.at = const Value.absent(),
+  }) : messageId = Value(messageId),
+       host = Value(host);
+  static Insertable<TrackerEvent> custom({
+    Expression<int>? id,
+    Expression<int>? messageId,
+    Expression<String>? host,
+    Expression<bool>? isTracker,
+    Expression<bool>? blocked,
+    Expression<DateTime>? at,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (messageId != null) 'message_id': messageId,
+      if (host != null) 'host': host,
+      if (isTracker != null) 'is_tracker': isTracker,
+      if (blocked != null) 'blocked': blocked,
+      if (at != null) 'at': at,
+    });
+  }
+
+  TrackerEventsCompanion copyWith({
+    Value<int>? id,
+    Value<int>? messageId,
+    Value<String>? host,
+    Value<bool>? isTracker,
+    Value<bool>? blocked,
+    Value<DateTime>? at,
+  }) {
+    return TrackerEventsCompanion(
+      id: id ?? this.id,
+      messageId: messageId ?? this.messageId,
+      host: host ?? this.host,
+      isTracker: isTracker ?? this.isTracker,
+      blocked: blocked ?? this.blocked,
+      at: at ?? this.at,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (messageId.present) {
+      map['message_id'] = Variable<int>(messageId.value);
+    }
+    if (host.present) {
+      map['host'] = Variable<String>(host.value);
+    }
+    if (isTracker.present) {
+      map['is_tracker'] = Variable<bool>(isTracker.value);
+    }
+    if (blocked.present) {
+      map['blocked'] = Variable<bool>(blocked.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<DateTime>(at.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TrackerEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('messageId: $messageId, ')
+          ..write('host: $host, ')
+          ..write('isTracker: $isTracker, ')
+          ..write('blocked: $blocked, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7597,6 +8100,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $RowPrefsTable rowPrefs = $RowPrefsTable(this);
   late final $RowSummariesTable rowSummaries = $RowSummariesTable(this);
   late final $DirtyRowsTable dirtyRows = $DirtyRowsTable(this);
+  late final $TrackerEventsTable trackerEvents = $TrackerEventsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7617,6 +8121,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     rowPrefs,
     rowSummaries,
     dirtyRows,
+    trackerEvents,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -7682,6 +8187,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('message_row_assignments', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('tracker_events', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -9547,6 +10059,8 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> bodyHtml,
   Value<DateTime?> bodyFetchedAt,
   Value<String?> providerThreadId,
+  Value<String?> threadKey,
+  Value<bool> imagesAllowed,
 });
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
@@ -9575,6 +10089,8 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> bodyHtml,
   Value<DateTime?> bodyFetchedAt,
   Value<String?> providerThreadId,
+  Value<String?> threadKey,
+  Value<bool> imagesAllowed,
 });
 
 final class $$MessagesTableReferences
@@ -9677,6 +10193,24 @@ final class $$MessagesTableReferences
     final cache = $_typedResult.readTableOrNull(
       _messageRowAssignmentsRefsTable($_db),
     );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$TrackerEventsTable, List<TrackerEvent>>
+  _trackerEventsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.trackerEvents,
+    aliasName: 'messages__id__tracker_events__message_id',
+  );
+
+  $$TrackerEventsTableProcessedTableManager get trackerEventsRefs {
+    final manager = $$TrackerEventsTableTableManager(
+      $_db,
+      $_db.trackerEvents,
+    ).filter((f) => f.messageId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_trackerEventsRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -9812,6 +10346,16 @@ class $$MessagesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get threadKey => $composableBuilder(
+    column: $table.threadKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get imagesAllowed => $composableBuilder(
+    column: $table.imagesAllowed,
+    builder: (column) => ColumnFilters(column),
+  );
+
   $$AccountsTableFilterComposer get accountId {
     final $$AccountsTableFilterComposer composer = $composerBuilder(
       composer: this,
@@ -9931,6 +10475,31 @@ class $$MessagesTableFilterComposer
                     $removeJoinBuilderFromRootComposer,
               ),
         );
+    return f(composer);
+  }
+
+  Expression<bool> trackerEventsRefs(
+    Expression<bool> Function($$TrackerEventsTableFilterComposer f) f,
+  ) {
+    final $$TrackerEventsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.trackerEvents,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TrackerEventsTableFilterComposer(
+            $db: $db,
+            $table: $db.trackerEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
     return f(composer);
   }
 }
@@ -10061,6 +10630,16 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<String> get providerThreadId => $composableBuilder(
     column: $table.providerThreadId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get threadKey => $composableBuilder(
+    column: $table.threadKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get imagesAllowed => $composableBuilder(
+    column: $table.imagesAllowed,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -10208,6 +10787,14 @@ class $$MessagesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get threadKey =>
+      $composableBuilder(column: $table.threadKey, builder: (column) => column);
+
+  GeneratedColumn<bool> get imagesAllowed => $composableBuilder(
+    column: $table.imagesAllowed,
+    builder: (column) => column,
+  );
+
   $$AccountsTableAnnotationComposer get accountId {
     final $$AccountsTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -10330,6 +10917,31 @@ class $$MessagesTableAnnotationComposer
         );
     return f(composer);
   }
+
+  Expression<T> trackerEventsRefs<T extends Object>(
+    Expression<T> Function($$TrackerEventsTableAnnotationComposer a) f,
+  ) {
+    final $$TrackerEventsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.trackerEvents,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TrackerEventsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.trackerEvents,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableTableManager
@@ -10351,6 +10963,7 @@ class $$MessagesTableTableManager
             bool messageParticipantsRefs,
             bool attachmentsRefs,
             bool messageRowAssignmentsRefs,
+            bool trackerEventsRefs,
           })
         > {
   $$MessagesTableTableManager(_$AppDatabase db, $MessagesTable table)
@@ -10392,6 +11005,8 @@ class $$MessagesTableTableManager
                 Value<String?> bodyHtml = const Value.absent(),
                 Value<DateTime?> bodyFetchedAt = const Value.absent(),
                 Value<String?> providerThreadId = const Value.absent(),
+                Value<String?> threadKey = const Value.absent(),
+                Value<bool> imagesAllowed = const Value.absent(),
               }) => MessagesCompanion(
                 id: id,
                 accountId: accountId,
@@ -10419,6 +11034,8 @@ class $$MessagesTableTableManager
                 bodyHtml: bodyHtml,
                 bodyFetchedAt: bodyFetchedAt,
                 providerThreadId: providerThreadId,
+                threadKey: threadKey,
+                imagesAllowed: imagesAllowed,
               ),
           createCompanionCallback:
               ({
@@ -10448,6 +11065,8 @@ class $$MessagesTableTableManager
                 Value<String?> bodyHtml = const Value.absent(),
                 Value<DateTime?> bodyFetchedAt = const Value.absent(),
                 Value<String?> providerThreadId = const Value.absent(),
+                Value<String?> threadKey = const Value.absent(),
+                Value<bool> imagesAllowed = const Value.absent(),
               }) => MessagesCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -10475,6 +11094,8 @@ class $$MessagesTableTableManager
                 bodyHtml: bodyHtml,
                 bodyFetchedAt: bodyFetchedAt,
                 providerThreadId: providerThreadId,
+                threadKey: threadKey,
+                imagesAllowed: imagesAllowed,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -10491,6 +11112,7 @@ class $$MessagesTableTableManager
                 messageParticipantsRefs = false,
                 attachmentsRefs = false,
                 messageRowAssignmentsRefs = false,
+                trackerEventsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -10498,6 +11120,7 @@ class $$MessagesTableTableManager
                     if (messageParticipantsRefs) db.messageParticipants,
                     if (attachmentsRefs) db.attachments,
                     if (messageRowAssignmentsRefs) db.messageRowAssignments,
+                    if (trackerEventsRefs) db.trackerEvents,
                   ],
                   addJoins:
                       <
@@ -10605,6 +11228,27 @@ class $$MessagesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (trackerEventsRefs)
+                        await $_getPrefetchedData<
+                          Message,
+                          $MessagesTable,
+                          TrackerEvent
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._trackerEventsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).trackerEventsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.messageId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -10631,6 +11275,7 @@ typedef $$MessagesTableProcessedTableManager =
         bool messageParticipantsRefs,
         bool attachmentsRefs,
         bool messageRowAssignmentsRefs,
+        bool trackerEventsRefs,
       })
     >;
 typedef $$MessageParticipantsTableCreateCompanionBuilder =
@@ -13451,6 +14096,338 @@ typedef $$DirtyRowsTableProcessedTableManager =
       DirtyRow,
       PrefetchHooks Function()
     >;
+typedef $$TrackerEventsTableCreateCompanionBuilder =
+    TrackerEventsCompanion Function({
+      Value<int> id,
+      required int messageId,
+      required String host,
+      Value<bool> isTracker,
+      Value<bool> blocked,
+      Value<DateTime> at,
+    });
+typedef $$TrackerEventsTableUpdateCompanionBuilder =
+    TrackerEventsCompanion Function({
+      Value<int> id,
+      Value<int> messageId,
+      Value<String> host,
+      Value<bool> isTracker,
+      Value<bool> blocked,
+      Value<DateTime> at,
+    });
+
+final class $$TrackerEventsTableReferences
+    extends BaseReferences<_$AppDatabase, $TrackerEventsTable, TrackerEvent> {
+  $$TrackerEventsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $MessagesTable _messageIdTable(_$AppDatabase db) =>
+      db.messages.createAlias('tracker_events__message_id__messages__id');
+
+  $$MessagesTableProcessedTableManager get messageId {
+    final $_column = $_itemColumn<int>('message_id')!;
+
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TrackerEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $TrackerEventsTable> {
+  $$TrackerEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get host => $composableBuilder(
+    column: $table.host,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isTracker => $composableBuilder(
+    column: $table.isTracker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get blocked => $composableBuilder(
+    column: $table.blocked,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TrackerEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TrackerEventsTable> {
+  $$TrackerEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get host => $composableBuilder(
+    column: $table.host,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isTracker => $composableBuilder(
+    column: $table.isTracker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get blocked => $composableBuilder(
+    column: $table.blocked,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TrackerEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TrackerEventsTable> {
+  $$TrackerEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get host =>
+      $composableBuilder(column: $table.host, builder: (column) => column);
+
+  GeneratedColumn<bool> get isTracker =>
+      $composableBuilder(column: $table.isTracker, builder: (column) => column);
+
+  GeneratedColumn<bool> get blocked =>
+      $composableBuilder(column: $table.blocked, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get at =>
+      $composableBuilder(column: $table.at, builder: (column) => column);
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TrackerEventsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TrackerEventsTable,
+          TrackerEvent,
+          $$TrackerEventsTableFilterComposer,
+          $$TrackerEventsTableOrderingComposer,
+          $$TrackerEventsTableAnnotationComposer,
+          $$TrackerEventsTableCreateCompanionBuilder,
+          $$TrackerEventsTableUpdateCompanionBuilder,
+          (TrackerEvent, $$TrackerEventsTableReferences),
+          TrackerEvent,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$TrackerEventsTableTableManager(_$AppDatabase db, $TrackerEventsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TrackerEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TrackerEventsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TrackerEventsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int> messageId = const Value.absent(),
+                Value<String> host = const Value.absent(),
+                Value<bool> isTracker = const Value.absent(),
+                Value<bool> blocked = const Value.absent(),
+                Value<DateTime> at = const Value.absent(),
+              }) => TrackerEventsCompanion(
+                id: id,
+                messageId: messageId,
+                host: host,
+                isTracker: isTracker,
+                blocked: blocked,
+                at: at,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required int messageId,
+                required String host,
+                Value<bool> isTracker = const Value.absent(),
+                Value<bool> blocked = const Value.absent(),
+                Value<DateTime> at = const Value.absent(),
+              }) => TrackerEventsCompanion.insert(
+                id: id,
+                messageId: messageId,
+                host: host,
+                isTracker: isTracker,
+                blocked: blocked,
+                at: at,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$TrackerEventsTable, TrackerEvent>(table),
+                  $$TrackerEventsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.messageId,
+                        referencedTable: $$TrackerEventsTableReferences
+                            ._messageIdTable(db),
+                        referencedColumn: $$TrackerEventsTableReferences
+                            ._messageIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TrackerEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TrackerEventsTable,
+      TrackerEvent,
+      $$TrackerEventsTableFilterComposer,
+      $$TrackerEventsTableOrderingComposer,
+      $$TrackerEventsTableAnnotationComposer,
+      $$TrackerEventsTableCreateCompanionBuilder,
+      $$TrackerEventsTableUpdateCompanionBuilder,
+      (TrackerEvent, $$TrackerEventsTableReferences),
+      TrackerEvent,
+      PrefetchHooks Function({bool messageId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13485,4 +14462,6 @@ class $AppDatabaseManager {
       $$RowSummariesTableTableManager(_db, _db.rowSummaries);
   $$DirtyRowsTableTableManager get dirtyRows =>
       $$DirtyRowsTableTableManager(_db, _db.dirtyRows);
+  $$TrackerEventsTableTableManager get trackerEvents =>
+      $$TrackerEventsTableTableManager(_db, _db.trackerEvents);
 }
