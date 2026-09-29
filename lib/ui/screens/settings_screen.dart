@@ -79,7 +79,7 @@ class _Detail extends ConsumerWidget {
         if (startAdding) {
           WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(settingsAddAccountRequestProvider.notifier).set(false));
         }
-        return AccountsDetail(key: ValueKey(startAdding), startAdding: startAdding);
+        return AccountsDetail(startAdding: startAdding);
       case SettingsSection.appearance:
         return const _AppearanceDetail();
       case SettingsSection.keyboard:

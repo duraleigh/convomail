@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 
 import 'app/destinations.dart';
 import 'app/settings.dart';
+import 'app/settings_navigation.dart';
 import 'sync/sync_controller.dart';
 import 'ui/shell/app_shell.dart';
 import 'ui/theme/app_theme.dart';
@@ -16,13 +17,17 @@ import 'ui/theme/tokens.dart';
 /// `--inbox=<people|feeds>` pick the initial screen; the `mailto:` handler
 /// (milestone 10) builds on the same mechanism.
 class StartupArgs {
-  const StartupArgs({this.destination, this.inbox});
+  const StartupArgs({this.destination, this.inbox, this.addAccount = false});
   final Destination? destination;
   final InboxMode? inbox;
+
+  /// `--add-account` opens Settings → Accounts with the add panel expanded.
+  final bool addAccount;
 
   static StartupArgs parse(List<String> args) {
     Destination? destination;
     InboxMode? inbox;
+    var addAccount = false;
     for (final a in args) {
       if (a.startsWith('--destination=')) {
         final v = a.substring('--destination='.length);
@@ -30,14 +35,18 @@ class StartupArgs {
       } else if (a.startsWith('--inbox=')) {
         final v = a.substring('--inbox='.length);
         inbox = InboxMode.values.where((m) => m.name == v).firstOrNull;
+      } else if (a == '--add-account') {
+        addAccount = true;
+        destination = Destination.settings;
       }
     }
-    return StartupArgs(destination: destination, inbox: inbox);
+    return StartupArgs(destination: destination, inbox: inbox, addAccount: addAccount);
   }
 
   List<Override> get overrides => [
         if (destination != null) destinationProvider.overrideWith(() => DestinationNotifier(initial: destination)),
         if (inbox != null) inboxModeProvider.overrideWith(() => InboxModeNotifier(initial: inbox)),
+        if (addAccount) settingsAddAccountRequestProvider.overrideWith(() => AddAccountRequestNotifier(initial: true)),
       ];
 }
 

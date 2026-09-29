@@ -28,10 +28,13 @@ class SettingsSectionNotifier extends Notifier<SettingsSection> {
 }
 
 /// Set when a screen wants Settings → Accounts to open with the add flow.
-final settingsAddAccountRequestProvider = NotifierProvider<_FlagNotifier, bool>(_FlagNotifier.new);
+final settingsAddAccountRequestProvider = NotifierProvider<AddAccountRequestNotifier, bool>(AddAccountRequestNotifier.new);
 
-class _FlagNotifier extends Notifier<bool> {
+class AddAccountRequestNotifier extends Notifier<bool> {
+  AddAccountRequestNotifier({bool initial = false}) : _initial = initial; // ignore: prefer_initializing_formals
+  final bool _initial;
+
   @override
-  bool build() => false;
+  bool build() => _initial;
   void set(bool v) => state = v;
 }

@@ -28,6 +28,14 @@ class _AccountsDetailState extends ConsumerState<AccountsDetail> {
   late bool _adding = widget.startAdding;
 
   @override
+  void didUpdateWidget(AccountsDetail old) {
+    super.didUpdateWidget(old);
+    // Open on the rising edge only; the request flag is cleared right after
+    // it is consumed, and that must not close the panel.
+    if (widget.startAdding && !old.startAdding) _adding = true;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final accounts = ref.watch(accountsStreamProvider);
     final statuses = ref.watch(syncStatusProvider);
