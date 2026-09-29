@@ -8,7 +8,13 @@ Visual reference: `docs/email-client-visual-mockups.html`.
 
 ## Status
 
-Milestone 0 — foundations and design system. See `docs/email-client-windows-dev-plan.md` section 2.
+| Milestone | State | Notes |
+|---|---|---|
+| M0 Foundations & design system | **Done** (2026-09-29) | Shell, theme, custom M3 Expressive widgets, settings store, 16 tests, release build runs |
+| M1 Accounts, credentials, sync | Next | Gmail via app password first |
+| M2–M12 | Planned | See `docs/email-client-windows-dev-plan.md` section 2 |
+
+Run with `--destination=<chats|boards|planner|settings>` or `--inbox=<people|feeds>` to open on a given screen.
 
 ## Layout
 
