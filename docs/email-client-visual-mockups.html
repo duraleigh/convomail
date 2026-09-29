@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sender-Centric Email Client — Visual Mockups (Material 3 Expressive)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wght@8..144,300..800&display=swap" rel="stylesheet">
+<style>
+  /* =====================================================================
+     MATERIAL 3 EXPRESSIVE TOKENS
+     Color roles follow M3 naming. Seed: indigo. Light scheme on :root,
+     dark scheme on .dark. Shape scale uses the M3 Expressive values.
+     ===================================================================== */
+  :root{
+    /* --- color roles (light) --- */
+    --primary:#4653D0;            --on-primary:#FFFFFF;
+    --primary-container:#DFE0FF;  --on-primary-container:#0B1A7A;
+    --secondary:#5B5D72;          --on-secondary:#FFFFFF;
+    --secondary-container:#E0E1F9;--on-secondary-container:#181A2C;
+    --tertiary:#77536D;           --tertiary-container:#FFD7F1; --on-tertiary-container:#2D1228;
+    --error:#BA1A1A;              --error-container:#FFDAD6;    --on-error-container:#410002;
+    --surface:#FBF8FF;            --surface-dim:#DBD9E0;
+    --surface-container-lowest:#FFFFFF;
+    --surface-container-low:#F5F2FA;
+    --surface-container:#EFEDF4;
+    --surface-container-high:#E9E7EF;
+    --surface-container-highest:#E3E1E9;
+    --on-surface:#1B1B21;         --on-surface-variant:#46464F;
+    --outline:#777680;            --outline-variant:#C7C5D0;
+    --inverse-surface:#303036;    --inverse-on-surface:#F2EFF7;
+    /* --- tonal avatar pairs (bg / fg), deterministic per contact --- */
+    --av1-bg:#DFE0FF; --av1-fg:#0B1A7A;   --av2-bg:#BFEFD0; --av2-fg:#003920;
+    --av3-bg:#F0DBFF; --av3-fg:#3A0A5C;   --av4-bg:#FFDBD1; --av4-fg:#5A1600;
+    --av5-bg:#BEEFF4; --av5-fg:#00373B;   --av6-bg:#FFE59A; --av6-fg:#3F2E00;
+    --av7-bg:#FFD8E6; --av7-fg:#5C0F33;   --av8-bg:#E3E1E9; --av8-fg:#1B1B21;
+    /* --- shape scale (M3 Expressive) --- */
+    --shape-xs:4px; --shape-sm:8px; --shape-md:12px; --shape-lg:16px; --shape-lg-inc:20px;
+    --shape-xl:28px; --shape-xl-inc:32px; --shape-xxl:48px; --shape-full:9999px;
+    /* --- elevation (tonal, minimal shadow) --- */
+    --elev-1:0 1px 2px rgba(27,27,33,.08), 0 1px 3px 1px rgba(27,27,33,.05);
+    --elev-3:0 4px 8px 3px rgba(27,27,33,.10), 0 1px 3px rgba(27,27,33,.14);
+    /* --- type --- */
+    --font-android:"Roboto Flex",Roboto,system-ui,sans-serif;
+    --font-windows:"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+    --font-page:"Roboto Flex",Roboto,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;
+  }
+  .dark{
+    --primary:#BDC2FF;            --on-primary:#0B1E9A;
+    --primary-container:#2C3AB6;  --on-primary-container:#DFE0FF;
+    --secondary-container:#43455A;--on-secondary-container:#E0E1F9;
+    --tertiary-container:#5C3B54; --on-tertiary-container:#FFD7F1;
+    --surface:#131318;            --surface-dim:#131318;
+    --surface-container-lowest:#0E0E13;
+    --surface-container-low:#1B1B21;
+    --surface-container:#1F1F25;
+    --surface-container-high:#2A292F;
+    --surface-container-highest:#35343A;
+    --on-surface:#E4E1E9;         --on-surface-variant:#C7C5D0;
+    --outline:#918F9A;            --outline-variant:#46464F;
+    --av1-bg:#2C3AB6; --av1-fg:#DFE0FF;   --av2-bg:#0F5132; --av2-fg:#BFEFD0;
+    --av3-bg:#5A2C7A; --av3-fg:#F0DBFF;   --av4-bg:#7A2E14; --av4-fg:#FFDBD1;
+    --av5-bg:#0F4F55; --av5-fg:#BEEFF4;   --av6-bg:#5E4A00; --av6-fg:#FFE59A;
+    --av7-bg:#7A2A4E; --av7-fg:#FFD8E6;   --av8-bg:#46464F; --av8-fg:#E4E1E9;
+  }
+
+  *{box-sizing:border-box;}
+  body{margin:0;background:#EAE7F0;font-family:var(--font-page);color:var(--on-surface);-webkit-font-smoothing:antialiased;}
+  .page{max-width:1360px;margin:0 auto;padding:56px 32px 100px;}
+
+  /* Inline SVG icons (self-contained; no icon font, no network) */
+  .ic{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0;display:inline-block;vertical-align:middle;}
+  .ic .f{fill:currentColor;stroke:none;}
+  .ic.fill{fill:currentColor;}
+  .ic.fill .k{stroke:var(--surface-container);}
+  .ic.s20{width:20px;height:20px;}
+  .ic.s18{width:18px;height:18px;stroke-width:2.2;}
+  .ic.s16{width:16px;height:16px;stroke-width:2.2;}
+
+  /* ---------- Page chrome ---------- */
+  .intro{max-width:780px;margin:0 auto 40px;text-align:center;}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--primary);margin-bottom:10px;}
+  .intro h1{font-size:40px;font-weight:700;letter-spacing:-.02em;margin:0 0 12px;line-height:1.1;}
+  .intro p{font-size:15px;line-height:1.6;color:var(--on-surface-variant);margin:0;}
+  .tokens{background:var(--surface-container-lowest);border-radius:var(--shape-xl);padding:28px 32px;margin:0 auto 64px;max-width:1040px;}
+  .tokens h3{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-variant);margin:0 0 14px;}
+  .token-row{display:flex;flex-wrap:wrap;gap:18px 22px;margin-bottom:24px;}
+  .token-row:last-child{margin-bottom:0;}
+  .swatch{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--on-surface-variant);}
+  .swatch i{width:26px;height:26px;border-radius:var(--shape-sm);display:block;border:1px solid rgba(0,0,0,.06);}
+  .shape-sample{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+  .shape-sample div{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:var(--on-surface-variant);}
+  .shape-sample i{width:48px;height:48px;background:var(--primary-container);display:block;}
+  .type-sample{display:flex;flex-wrap:wrap;gap:28px;align-items:baseline;}
+  .type-sample div span{display:block;font-size:11px;color:var(--on-surface-variant);margin-top:4px;font-weight:400;}
+  .section-head{max-width:1000px;margin:0 auto 28px;text-align:center;}
+  .section-head h2{font-size:26px;font-weight:700;margin:0 0 8px;letter-spacing:-.01em;}
+  .section-head p{font-size:14px;color:var(--on-surface-variant);margin:0;}
+  section{margin-bottom:88px;}
+  .gallery{display:flex;flex-wrap:wrap;gap:44px;justify-content:center;}
+  .frame-block{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .frame-label{font-size:13px;font-weight:700;color:var(--on-surface);}
+  .frame-label small{display:block;font-size:11px;font-weight:400;color:var(--on-surface-variant);margin-top:2px;text-align:center;}
+  footer{text-align:center;margin-top:20px;font-size:12px;color:var(--on-surface-variant);}
+
+  /* ---------- Phone frame ---------- */
+  .phone-frame{position:relative;width:300px;background:#0C0D12;border-radius:46px;padding:10px;box-shadow:0 24px 60px rgba(15,16,35,.20),0 6px 16px rgba(15,16,35,.12);font-family:var(--font-android);}
+  .phone-screen{position:relative;background:var(--surface);border-radius:36px;overflow:hidden;height:634px;display:flex;flex-direction:column;color:var(--on-surface);}
+  .notch{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:100px;height:22px;background:#0C0D12;border-radius:0 0 16px 16px;z-index:5;}
+  .status-bar{flex:0 0 auto;height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-size:12px;font-weight:600;}
+  .status-icons{display:flex;align-items:center;gap:6px;}
+  .status-icons .ms{font-size:16px;}
+
+  /* ---------- App bars (M3 flexible top app bar) ---------- */
+  .app-bar{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;padding:4px 8px 0 8px;min-height:48px;}
+  .app-bar-actions{display:flex;gap:2px;align-items:center;}
+  .app-bar-title-row{flex:0 0 auto;padding:2px 20px 10px;}
+  .headline{font-size:28px;font-weight:700;letter-spacing:-.02em;line-height:1.15;}   /* headline-medium emphasized */
+  .app-bar-center{flex:1;display:flex;align-items:center;justify-content:center;gap:4px;font-size:16px;font-weight:600;white-space:nowrap;min-width:0;}
+  .icon-btn{width:40px;height:40px;border-radius:var(--shape-full);display:flex;align-items:center;justify-content:center;color:var(--on-surface-variant);flex-shrink:0;}
+  .icon-btn.tonal{background:var(--secondary-container);color:var(--on-secondary-container);}
+  .icon-btn.filled{background:var(--primary);color:var(--on-primary);}
+  .icon-btn.outlined{border:1px solid var(--outline-variant);}
+  .icon-btn.sq{border-radius:var(--shape-md);}  /* Expressive: icon buttons can morph shape */
+
+  /* ---------- Search bar (M3, 48dp pill) ---------- */
+  .search-bar{flex:0 0 auto;margin:2px 16px 12px;height:48px;padding:0 6px 0 16px;border-radius:var(--shape-full);background:var(--surface-container-high);display:flex;align-items:center;gap:12px;color:var(--on-surface-variant);font-size:15px;}
+  .search-bar .q{flex:1;color:var(--on-surface);}
+  .search-bar .avatar{width:30px;height:30px;font-size:11px;}
+
+  /* ---------- Chips (M3 filter chip, 32dp, radius 8) ---------- */
+  .chip-row{flex:0 0 auto;display:flex;gap:8px;padding:0 16px 12px;overflow-x:hidden;}
+  .chip{flex-shrink:0;height:32px;padding:0 14px;border-radius:var(--shape-sm);font-size:13px;font-weight:500;border:1px solid var(--outline-variant);color:var(--on-surface-variant);white-space:nowrap;display:flex;align-items:center;gap:6px;background:transparent;}
+  .chip.sel{background:var(--secondary-container);border-color:transparent;color:var(--on-secondary-container);padding-left:10px;}
+  .chip.sel .ms{font-size:18px;}
+
+  /* ---------- Connected button group (M3 Expressive) ---------- */
+  .btn-group{flex:0 0 auto;display:flex;gap:2px;margin:0 16px 12px;}
+  .btn-group > span{flex:1;height:40px;display:flex;align-items:center;justify-content:center;gap:6px;font-size:14px;font-weight:500;background:var(--surface-container-high);color:var(--on-surface-variant);border-radius:var(--shape-sm);white-space:nowrap;}
+  .btn-group > span:first-child{border-radius:var(--shape-full) var(--shape-sm) var(--shape-sm) var(--shape-full);}
+  .btn-group > span:last-child{border-radius:var(--shape-sm) var(--shape-full) var(--shape-full) var(--shape-sm);}
+  .btn-group > span.sel{background:var(--primary);color:var(--on-primary);border-radius:var(--shape-full);}
+  .btn-group.compact{margin:0;}
+  .btn-group.compact > span{height:36px;font-size:13px;}
+
+  /* ---------- Avatars (tonal) ---------- */
+  .avatar{width:40px;height:40px;border-radius:var(--shape-full);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;flex-shrink:0;position:relative;background:var(--av8-bg);color:var(--av8-fg);}
+  .avatar.sm{width:36px;height:36px;font-size:13px;}
+  .avatar.xs{width:24px;height:24px;font-size:10px;}
+  .avatar.lg{width:48px;height:48px;font-size:17px;}
+  .avatar.squircle{border-radius:var(--shape-md);}  /* Feeds / non-human senders */
+  .av1{background:var(--av1-bg);color:var(--av1-fg);} .av2{background:var(--av2-bg);color:var(--av2-fg);}
+  .av3{background:var(--av3-bg);color:var(--av3-fg);} .av4{background:var(--av4-bg);color:var(--av4-fg);}
+  .av5{background:var(--av5-bg);color:var(--av5-fg);} .av6{background:var(--av6-bg);color:var(--av6-fg);}
+  .av7{background:var(--av7-bg);color:var(--av7-fg);} .av8{background:var(--av8-bg);color:var(--av8-fg);}
+  .avatar-stack{width:36px;height:36px;position:relative;flex-shrink:0;}
+  .avatar-stack .avatar{position:absolute;width:24px;height:24px;font-size:9px;border:2px solid var(--surface-container-lowest);}
+  .avatar-stack .avatar:first-child{top:0;left:0;z-index:2;}
+  .avatar-stack .avatar:last-child{bottom:0;right:0;}
+  .avatar .mark{position:absolute;top:-5px;right:-5px;width:18px;height:18px;border-radius:var(--shape-full);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;justify-content:center;border:2px solid var(--surface-container-lowest);}
+  .avatar .mark .ms{font-size:12px;font-variation-settings:'FILL' 1,'wght' 600,'GRAD' 0,'opsz' 20;}
+
+  /* ---------- Grouped list (Expressive: items in a segmented group, large outer radius) ---------- */
+  .list{flex:1;overflow:hidden;padding:0 16px;}
+  .group{display:flex;flex-direction:column;gap:2px;}
+  .item{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface-container-lowest);border-radius:var(--shape-xs);}
+  .group .item:first-child{border-radius:var(--shape-lg-inc) var(--shape-lg-inc) var(--shape-xs) var(--shape-xs);}
+  .group .item:last-child{border-radius:var(--shape-xs) var(--shape-xs) var(--shape-lg-inc) var(--shape-lg-inc);}
+  .group .item:only-child{border-radius:var(--shape-lg-inc);}
+  .item.sel{background:var(--secondary-container);}
+  .item-content{flex:1;min-width:0;}
+  .item-top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .item-name{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}   /* title-medium */
+  .item-name.unread{font-weight:700;}
+  .item-time{font-size:11px;color:var(--on-surface-variant);flex-shrink:0;font-weight:500;}
+  .item-time.unread{color:var(--primary);font-weight:600;}
+  .item-bottom{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:2px;}
+  .item-preview{font-size:13px;color:var(--on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}   /* body-medium */
+  .badge{min-width:20px;height:20px;padding:0 6px;border-radius:var(--shape-full);background:var(--primary);color:var(--on-primary);font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .label{padding:8px 4px 8px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-variant);}
+  .label.inset{padding-left:20px;}
+
+  /* ---------- FAB & navigation bar ---------- */
+  .fab{position:absolute;right:16px;bottom:92px;width:56px;height:56px;border-radius:var(--shape-lg);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;justify-content:center;box-shadow:var(--elev-3);z-index:4;}
+  .fab.ext{width:auto;padding:0 20px 0 16px;gap:10px;font-size:14px;font-weight:600;border-radius:var(--shape-lg);}
+  .nav-bar{flex:0 0 auto;height:80px;background:var(--surface-container);display:flex;align-items:center;justify-content:space-around;padding:0 4px;}
+  .nav-dest{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11px;font-weight:500;color:var(--on-surface-variant);width:64px;}
+  .nav-dest .pill{width:56px;height:32px;border-radius:var(--shape-full);display:flex;align-items:center;justify-content:center;}
+  .nav-dest.active{color:var(--on-surface);font-weight:700;}
+  .nav-dest.active .pill{background:var(--secondary-container);color:var(--on-secondary-container);}
+
+  /* ---------- Conversation ---------- */
+  .conv{flex:1;overflow:hidden;padding:0 12px;display:flex;flex-direction:column;gap:8px;}
+  .card{background:var(--surface-container-lowest);border-radius:var(--shape-lg-inc);padding:14px;}
+  .card.tonal{background:var(--surface-container-low);}
+  .thread-collapsed{display:flex;align-items:center;gap:10px;}
+  .thread-subject{font-size:15px;font-weight:600;line-height:1.25;}
+  .thread-meta{font-size:12.5px;color:var(--on-surface-variant);margin-top:2px;display:flex;gap:6px;align-items:center;}
+  .thread-meta b{color:var(--on-surface);font-weight:600;}
+  .count-pill{background:var(--secondary-container);color:var(--on-secondary-container);font-size:11px;font-weight:600;padding:2px 8px;border-radius:var(--shape-full);flex-shrink:0;}
+  .msg-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+  .msg-head-name{font-size:15px;font-weight:700;}
+  .msg-head-sub{font-size:11.5px;color:var(--on-surface-variant);margin-top:1px;}
+  .msg-body{font-size:14px;line-height:1.5;margin-bottom:12px;}
+  .msg-body p{margin:0 0 8px;}
+  .attach-row{display:flex;gap:8px;margin-bottom:12px;}
+  .attach{flex:1;min-width:0;background:var(--surface-container-high);border-radius:var(--shape-md);padding:8px;display:flex;flex-direction:column;gap:6px;}
+  .attach .thumb{height:40px;border-radius:var(--shape-sm);background:var(--primary-container);display:flex;align-items:flex-end;gap:3px;padding:6px;}
+  .attach .thumb span{flex:1;background:var(--primary);border-radius:3px 3px 0 0;}
+  .attach .pie{width:36px;height:36px;border-radius:var(--shape-full);margin:2px auto;background:conic-gradient(var(--primary) 0 40%,#2FA36B 40% 65%,#D6A72A 65% 85%,#E2604C 85% 100%);}
+  .attach small{font-size:10.5px;font-weight:600;color:var(--on-surface-variant);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .tonal-btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 16px 0 12px;border-radius:var(--shape-full);background:var(--secondary-container);color:var(--on-secondary-container);font-size:13px;font-weight:600;}
+  .tonal-btn .ms{font-size:18px;}
+  .text-btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 10px;border-radius:var(--shape-full);color:var(--primary);font-size:13.5px;font-weight:600;}
+  .text-btn .ms{font-size:18px;}
+  .msg-actions{display:flex;align-items:center;gap:2px;padding-top:6px;border-top:1px solid var(--outline-variant);}
+  .msg-actions .spacer{flex:1;}
+  .reply-bar{flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:10px 12px 14px;background:var(--surface);}
+  .reply-field{flex:1;height:48px;padding:0 16px;border-radius:var(--shape-full);background:var(--surface-container-high);color:var(--on-surface-variant);font-size:14px;display:flex;align-items:center;gap:10px;}
+  .reply-field .q{flex:1;}
+  .send-fab{width:48px;height:48px;border-radius:var(--shape-lg);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+
+  /* ---------- Compose (filled text fields + floating toolbar + wavy progress) ---------- */
+  .fields{flex:0 0 auto;padding:4px 16px 0;display:flex;flex-direction:column;gap:8px;}
+  .field{background:var(--surface-container-highest);border-radius:var(--shape-xs) var(--shape-xs) 0 0;border-bottom:1px solid var(--on-surface-variant);padding:6px 14px 8px;min-height:50px;display:flex;flex-direction:column;justify-content:center;}
+  .field label{font-size:11px;color:var(--on-surface-variant);font-weight:500;}
+  .field .val{font-size:14.5px;display:flex;align-items:center;gap:8px;margin-top:2px;}
+  .field .val .ms{margin-left:auto;color:var(--on-surface-variant);}
+  .field.focus{border-bottom:2px solid var(--primary);}
+  .field.focus label{color:var(--primary);}
+  .recipient{display:inline-flex;align-items:center;gap:6px;background:var(--secondary-container);color:var(--on-secondary-container);padding:3px 10px 3px 3px;border-radius:var(--shape-full);font-size:13px;font-weight:600;}
+  .editor{flex:1;padding:14px 20px;font-size:14.5px;line-height:1.55;}
+  .editor .ghost{color:var(--on-surface-variant);}
+  .compose-attach{margin:0 16px 8px;display:inline-flex;align-items:center;gap:8px;background:var(--surface-container-high);border-radius:var(--shape-sm);padding:8px 10px;font-size:12.5px;font-weight:600;color:var(--on-surface-variant);}
+  .compose-attach .ms{font-size:18px;}
+  .float-toolbar-wrap{flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:8px 16px 4px;}
+  .float-toolbar{flex:1;height:56px;border-radius:var(--shape-full);background:var(--primary-container);color:var(--on-primary-container);display:flex;align-items:center;justify-content:space-around;padding:0 6px;box-shadow:var(--elev-1);}
+  .float-toolbar .ms{font-size:22px;}
+  .progress-wrap{flex:0 0 auto;padding:6px 20px 16px;}
+  .progress-label{font-size:12px;font-weight:600;color:var(--on-surface-variant);margin-bottom:6px;display:flex;justify-content:space-between;}
+  .wavy{width:100%;height:14px;display:block;}
+
+  /* ---------- Attachments ---------- */
+  .featured{margin:0 16px 12px;border-radius:var(--shape-xl);background:linear-gradient(150deg,var(--primary-container),var(--tertiary-container));padding:16px;height:156px;display:flex;flex-direction:column;justify-content:space-between;color:var(--on-primary-container);}
+  .featured .tag{align-self:flex-start;background:var(--surface-container-lowest);color:var(--on-surface);padding:5px 12px;border-radius:var(--shape-full);font-size:11px;font-weight:600;}
+  .featured .meta{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;}
+  .featured .meta b{display:block;font-size:15px;font-weight:700;}
+  .featured .meta span{font-size:11.5px;opacity:.85;}
+  .filetype{width:40px;height:40px;border-radius:var(--shape-md);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .filetype .ms{font-size:22px;font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;}
+  .file-name{font-size:14px;font-weight:600;}
+  .file-meta{font-size:11.5px;color:var(--on-surface-variant);}
+  .photo-grid{display:flex;gap:6px;padding:0 16px 16px;}
+  .photo-grid i{flex:1;aspect-ratio:1;border-radius:var(--shape-md);display:block;}
+
+  /* ---------- Boards ---------- */
+  .cols{flex:1;display:flex;gap:10px;padding:0 16px 16px;overflow:hidden;}
+  .col{flex-shrink:0;width:158px;background:var(--surface-container-low);border-radius:var(--shape-lg-inc);padding:10px;display:flex;flex-direction:column;gap:8px;}
+  .col-head{display:flex;align-items:center;gap:8px;padding:2px 4px 4px;}
+  .col-head b{font-size:14px;font-weight:700;flex:1;}
+  .kcard{background:var(--surface-container-lowest);border-radius:var(--shape-md);padding:10px;}
+  .kcard.lift{box-shadow:var(--elev-3);outline:2px solid var(--primary);transform:rotate(-1.5deg);}
+  .kcard.ghost{background:transparent;border:1.5px dashed var(--outline-variant);}
+  .kcard-title{font-size:13px;font-weight:600;margin-bottom:8px;line-height:1.3;}
+  .kcard-owner{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--on-surface-variant);font-weight:500;}
+
+  /* ---------- Planner ---------- */
+  .week{flex:0 0 auto;display:flex;justify-content:space-between;padding:4px 16px 12px;}
+  .day{display:flex;flex-direction:column;align-items:center;gap:6px;font-size:11px;color:var(--on-surface-variant);font-weight:600;}
+  .day .num{width:34px;height:34px;border-radius:var(--shape-full);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--on-surface);}
+  .day.today .num{background:var(--primary);color:var(--on-primary);}
+  .day.today{color:var(--primary);}
+  .grid{flex:1;overflow:hidden;padding:0 16px;}
+  .hour{display:flex;gap:10px;min-height:58px;border-top:1px solid var(--outline-variant);}
+  .hour-label{width:38px;font-size:10.5px;color:var(--on-surface-variant);font-weight:600;padding-top:6px;flex-shrink:0;}
+  .hour-events{flex:1;padding:5px 0;}
+  .event{border-radius:var(--shape-md);padding:8px 12px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .event .ms{font-size:16px;margin-left:auto;opacity:.8;}
+
+  /* ---------- Feeds ---------- */
+  .banner{margin:0 16px 12px;background:var(--primary-container);color:var(--on-primary-container);border-radius:var(--shape-lg);padding:10px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px;}
+  .banner .ms{font-size:18px;}
+  .cat{background:var(--surface-container-high);color:var(--on-surface-variant);font-size:9.5px;font-weight:600;padding:2px 6px;border-radius:var(--shape-sm);flex-shrink:0;line-height:1.3;letter-spacing:.01em;}
+  .item-top .cat{margin-left:auto;}
+  .item:has(.cat){padding-left:12px;padding-right:12px;}
+  .cat.custom{background:var(--tertiary-container);color:var(--on-tertiary-container);}
+
+  /* ---------- Settings (M3 switch: 52x32) ---------- */
+  .sgroup{margin-bottom:16px;}
+  .srow{display:flex;align-items:center;gap:12px;padding:12px 14px;}
+  .srow-label{flex:1;font-size:14.5px;font-weight:500;}
+  .srow-sub{font-size:11.5px;color:var(--on-surface-variant);font-weight:400;margin-top:1px;}
+  .switch{width:52px;height:32px;border-radius:var(--shape-full);background:var(--surface-container-highest);border:2px solid var(--outline);position:relative;flex-shrink:0;}
+  .switch i{position:absolute;top:6px;left:6px;width:16px;height:16px;border-radius:var(--shape-full);background:var(--outline);}
+  .switch.on{background:var(--primary);border-color:var(--primary);}
+  .switch.on i{top:2px;left:22px;width:24px;height:24px;background:var(--on-primary);display:flex;align-items:center;justify-content:center;}
+  .switch.on i::after{content:"";width:9px;height:5px;border-left:2.2px solid var(--primary);border-bottom:2.2px solid var(--primary);transform:rotate(-45deg) translate(1px,-1px);}
+  .stat{display:inline-flex;align-items:center;gap:6px;background:var(--tertiary-container);color:var(--on-tertiary-container);font-size:12px;font-weight:600;padding:8px 12px;border-radius:var(--shape-full);}
+
+  /* ---------- Desktop (Windows) ---------- */
+  .desktop-frame{max-width:1180px;margin:0 auto;background:#1F1F25;border-radius:14px;padding:8px;box-shadow:0 30px 70px rgba(15,16,35,.22);font-family:var(--font-windows);}
+  .win-titlebar{display:flex;align-items:center;justify-content:flex-end;gap:2px;padding:4px 6px;color:#C7C5D0;}
+  .win-titlebar span{width:46px;height:28px;display:flex;align-items:center;justify-content:center;font-size:10px;}
+  .desktop-screen{background:var(--surface);border-radius:10px;overflow:hidden;display:flex;height:660px;color:var(--on-surface);}
+  .rail{width:88px;background:var(--surface-container);display:flex;flex-direction:column;align-items:center;padding:12px 0 16px;gap:6px;}
+  .rail .fab-rail{width:56px;height:56px;border-radius:var(--shape-lg);background:var(--primary);color:var(--on-primary);display:flex;align-items:center;justify-content:center;margin-bottom:14px;box-shadow:var(--elev-1);}
+  .rail .nav-dest{width:80px;padding:6px 0;}
+  .rail .spacer{flex:1;}
+  .d-middle{width:340px;display:flex;flex-direction:column;background:var(--surface);}
+  .d-right{flex:1;display:flex;flex-direction:column;background:var(--surface-container-low);margin:12px 12px 12px 0;border-radius:var(--shape-xl);overflow:hidden;}
+
+  /* ---------- Mode compare ---------- */
+  .mode-compare{display:flex;gap:44px;justify-content:center;flex-wrap:wrap;}
+  .mini{width:280px;border-radius:var(--shape-xl);overflow:hidden;background:var(--surface);color:var(--on-surface);font-family:var(--font-android);box-shadow:var(--elev-1);}
+  .mini .caption{text-align:center;padding:10px;font-size:12px;font-weight:600;color:var(--on-surface-variant);background:var(--surface-container);}
+</style>
+</head>
+<body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <symbol id="i-menu" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20.5" y2="20.5"/></symbol>
+  <symbol id="i-tune" viewBox="0 0 24 24"><line x1="4" y1="6.5" x2="20" y2="6.5"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17.5" x2="20" y2="17.5"/><circle class="f" cx="9" cy="6.5" r="2.2"/><circle class="f" cx="15" cy="12" r="2.2"/><circle class="f" cx="11" cy="17.5" r="2.2"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20l1-5L15.5 4.5a2.1 2.1 0 0 1 3 3L8 18l-4 2z"/><line x1="13.5" y1="6.5" x2="17.5" y2="10.5"/></symbol>
+  <symbol id="i-chat_bubble" viewBox="0 0 24 24"><path d="M4 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4z"/></symbol>
+  <symbol id="i-view_kanban" viewBox="0 0 24 24"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="9.5" y="4" width="5" height="10" rx="1.5"/><rect x="16" y="4" width="5" height="13" rx="1.5"/></symbol>
+  <symbol id="i-calendar_month" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><line class="k" x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/><circle class="k f" cx="8" cy="15" r="1.2"/><circle class="k f" cx="12" cy="15" r="1.2"/><circle class="k f" cx="16" cy="15" r="1.2"/></symbol>
+  <symbol id="i-today" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="3" x2="8" y2="7"/><line x1="16" y1="3" x2="16" y2="7"/><rect class="f" x="6.5" y="13" width="4" height="4" rx="1"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><line x1="12" y1="2.5" x2="12" y2="5.2"/><line x1="12" y1="18.8" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5.2" y2="12"/><line x1="18.8" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="7.2" y2="7.2"/><line x1="16.8" y1="16.8" x2="18.7" y2="18.7"/><line x1="5.3" y1="18.7" x2="7.2" y2="16.8"/><line x1="16.8" y1="7.2" x2="18.7" y2="5.3"/></symbol>
+  <symbol id="i-arrow_back" viewBox="0 0 24 24"><line x1="20" y1="12" x2="4" y2="12"/><polyline points="11 5 4 12 11 19"/></symbol>
+  <symbol id="i-more_vert" viewBox="0 0 24 24"><circle class="f" cx="12" cy="5" r="1.9"/><circle class="f" cx="12" cy="12" r="1.9"/><circle class="f" cx="12" cy="19" r="1.9"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 24 24"><polyline points="9 7 4 12 9 17"/><path d="M4 12h9a6 6 0 0 1 6 6v1.5"/></symbol>
+  <symbol id="i-forward" viewBox="0 0 24 24"><polyline points="15 7 20 12 15 17"/><path d="M20 12h-9a6 6 0 0 0-6 6v1.5"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><polygon points="12 3 14.7 9.2 21.4 9.6 16.2 13.9 18 20.4 12 16.7 6 20.4 7.8 13.9 2.6 9.6 9.3 9.2"/></symbol>
+  <symbol id="i-attach_file" viewBox="0 0 24 24"><path d="M7 12.5l6.8-6.8a4 4 0 1 1 5.6 5.6l-9 9a6 6 0 1 1-8.4-8.4l8-8"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><polygon class="f" points="3 11 21 3 13 21 11 13 3 11"/></symbol>
+  <symbol id="i-add" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-add_circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></symbol>
+  <symbol id="i-remove" viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+  <symbol id="i-crop_square" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1.5"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle class="f" cx="9" cy="10" r="1.7"/><path d="M3 17l5-5 4 4 3-3 6 6"/></symbol>
+  <symbol id="i-format_bold" viewBox="0 0 24 24"><path d="M7 4h6a3.5 3.5 0 0 1 0 7H7z"/><path d="M7 11h7a3.5 3.5 0 0 1 0 7H7z"/></symbol>
+  <symbol id="i-format_italic" viewBox="0 0 24 24"><line x1="10" y1="4" x2="19" y2="4"/><line x1="5" y1="20" x2="14" y2="20"/><line x1="14.5" y1="4" x2="9.5" y2="20"/></symbol>
+  <symbol id="i-title" viewBox="0 0 24 24"><line x1="5" y1="5" x2="19" y2="5"/><line x1="12" y1="5" x2="12" y2="20"/></symbol>
+  <symbol id="i-format_list_bulleted" viewBox="0 0 24 24"><circle class="f" cx="5" cy="6.5" r="1.6"/><circle class="f" cx="5" cy="12" r="1.6"/><circle class="f" cx="5" cy="17.5" r="1.6"/><line x1="10" y1="6.5" x2="20" y2="6.5"/><line x1="10" y1="12" x2="20" y2="12"/><line x1="10" y1="17.5" x2="20" y2="17.5"/></symbol>
+  <symbol id="i-notifications" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></symbol>
+  <symbol id="i-notifications_active" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/><path d="M3.5 9a8.5 8.5 0 0 1 3-5.5"/><path d="M20.5 9a8.5 8.5 0 0 0-3-5.5"/></symbol>
+  <symbol id="i-forum" viewBox="0 0 24 24"><path d="M3 4h12v9H7l-4 3z"/><path d="M18 8h3v9l-3-2h-8v-2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><polyline points="5 12.5 9.5 17 19 7.5"/></symbol>
+  <symbol id="i-expand_more" viewBox="0 0 24 24"><polyline points="6 9.5 12 15.5 18 9.5"/></symbol>
+  <symbol id="i-chevron_right" viewBox="0 0 24 24"><polyline points="9.5 6 15.5 12 9.5 18"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 5-3.5 7.5-7 9-3.5-1.5-7-4-7-9V6l7-3z"/><polyline class="k" points="9 12.3 11 14.3 15.3 10"/></symbol>
+  <symbol id="i-description" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></symbol>
+  <symbol id="i-picture_as_pdf" viewBox="0 0 24 24"><path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/><path d="M9 17v-6h2a1.6 1.6 0 0 1 0 3.2H9"/><path d="M14.5 17v-6h2.5"/><line x1="14.5" y1="14" x2="16.5" y2="14"/></symbol>
+  <symbol id="i-table_chart" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9.5" x2="21" y2="9.5"/><line x1="9" y1="9.5" x2="9" y2="20"/><line x1="15" y1="9.5" x2="15" y2="20"/></symbol>
+  <symbol id="i-slideshow" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><polygon class="f" points="10 8.5 15.5 12 10 15.5"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-grid_view" viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></symbol>
+  <symbol id="i-view_list" viewBox="0 0 24 24"><rect class="f" x="3.5" y="5" width="3" height="3" rx=".8"/><rect class="f" x="3.5" y="10.5" width="3" height="3" rx=".8"/><rect class="f" x="3.5" y="16" width="3" height="3" rx=".8"/><line x1="10" y1="6.5" x2="20.5" y2="6.5"/><line x1="10" y1="12" x2="20.5" y2="12"/><line x1="10" y1="17.5" x2="20.5" y2="17.5"/></symbol>
+  <symbol id="i-visibility" viewBox="0 0 24 24"><path d="M2.5 12s3.5-6.5 9.5-6.5 9.5 6.5 9.5 6.5-3.5 6.5-9.5 6.5S2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-group_add" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 19a6.5 6.5 0 0 1 13 0"/><line x1="18.5" y1="6" x2="18.5" y2="12"/><line x1="15.5" y1="9" x2="21.5" y2="9"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><polyline points="3.5 7 12 13 20.5 7"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 13h5l1.5 2.5h5L16 13h5"/></symbol>
+  <symbol id="i-label" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h10l6 7-6 7H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-rule" viewBox="0 0 24 24"><polyline points="3 7.5 5 9.5 9 5.5"/><line x1="12" y1="7.5" x2="21" y2="7.5"/><line x1="3.5" y1="14.5" x2="8.5" y2="19.5"/><line x1="8.5" y1="14.5" x2="3.5" y2="19.5"/><line x1="12" y1="17" x2="21" y2="17"/></symbol>
+  <symbol id="i-light_mode" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2.5" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="21.5"/><line x1="2.5" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="21.5" y2="12"/><line x1="5.3" y1="5.3" x2="7" y2="7"/><line x1="17" y1="17" x2="18.7" y2="18.7"/><line x1="5.3" y1="18.7" x2="7" y2="17"/><line x1="17" y1="7" x2="18.7" y2="5.3"/></symbol>
+  <symbol id="i-dark_mode" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></symbol>
+  <symbol id="i-filter_list" viewBox="0 0 24 24"><line x1="4" y1="7" x2="20" y2="7"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="10" y1="17" x2="14" y2="17"/></symbol>
+  <symbol id="i-rss_feed" viewBox="0 0 24 24"><circle class="f" cx="6" cy="18" r="2"/><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4.5A15.5 15.5 0 0 1 19.5 20"/></symbol>
+  <symbol id="i-signal_cellular_alt" viewBox="0 0 24 24"><rect class="f" x="3" y="14" width="4" height="7" rx="1"/><rect class="f" x="10" y="9" width="4" height="12" rx="1"/><rect class="f" x="17" y="3" width="4" height="18" rx="1"/></symbol>
+  <symbol id="i-battery_full" viewBox="0 0 24 24"><rect class="f" x="7" y="5" width="10" height="17" rx="2"/><rect class="f" x="10" y="2" width="4" height="3" rx="1"/></symbol>
+</defs>
+</svg>
+
+<div class="page">
+
+  <div class="intro">
+    <div class="eyebrow">Build Spec Companion — Visual Reference · Material 3 Expressive</div>
+    <h1>Sender-Centric Email Client</h1>
+    <p>Static visual mockups for every core screen in the build specification, restyled on Material 3 Expressive: tonal surface containers instead of drop shadows, the M3 shape scale with large outer radii, emphasized type, filled FABs, connected button groups, a floating toolbar, and a navigation bar with pill indicators. Android frames use Roboto Flex (falling back to Roboto or the system font when offline); the Windows frame uses Segoe UI Variable. Icons are inline SVG stand-ins for Material Symbols Rounded, so the file renders fully with no network access.</p>
+  </div>
+
+  <!-- ================= TOKENS ================= -->
+  <div class="tokens">
+    <h3>Color roles (light scheme, indigo seed)</h3>
+    <div class="token-row">
+      <div class="swatch"><i style="background:#4653D0"></i>primary #4653D0</div>
+      <div class="swatch"><i style="background:#DFE0FF"></i>primary-container #DFE0FF</div>
+      <div class="swatch"><i style="background:#E0E1F9"></i>secondary-container #E0E1F9</div>
+      <div class="swatch"><i style="background:#FFD7F1"></i>tertiary-container #FFD7F1</div>
+      <div class="swatch"><i style="background:#FBF8FF"></i>surface #FBF8FF</div>
+      <div class="swatch"><i style="background:#F5F2FA"></i>surface-container-low #F5F2FA</div>
+      <div class="swatch"><i style="background:#EFEDF4"></i>surface-container #EFEDF4</div>
+      <div class="swatch"><i style="background:#E9E7EF"></i>surface-container-high #E9E7EF</div>
+      <div class="swatch"><i style="background:#1B1B21"></i>on-surface #1B1B21</div>
+      <div class="swatch"><i style="background:#46464F"></i>on-surface-variant #46464F</div>
+      <div class="swatch"><i style="background:#C7C5D0"></i>outline-variant #C7C5D0</div>
+      <div class="swatch"><i style="background:#BA1A1A"></i>error #BA1A1A</div>
+    </div>
+    <h3>Tonal avatar pairs (deterministic per contact)</h3>
+    <div class="token-row">
+      <div class="swatch"><i style="background:#DFE0FF"></i>#DFE0FF / #0B1A7A</div>
+      <div class="swatch"><i style="background:#BFEFD0"></i>#BFEFD0 / #003920</div>
+      <div class="swatch"><i style="background:#F0DBFF"></i>#F0DBFF / #3A0A5C</div>
+      <div class="swatch"><i style="background:#FFDBD1"></i>#FFDBD1 / #5A1600</div>
+      <div class="swatch"><i style="background:#BEEFF4"></i>#BEEFF4 / #00373B</div>
+      <div class="swatch"><i style="background:#FFE59A"></i>#FFE59A / #3F2E00</div>
+      <div class="swatch"><i style="background:#FFD8E6"></i>#FFD8E6 / #5C0F33</div>
+      <div class="swatch"><i style="background:#E3E1E9"></i>#E3E1E9 / #1B1B21</div>
+    </div>
+    <h3>Shape scale (M3 Expressive)</h3>
+    <div class="shape-sample">
+      <div><i style="border-radius:4px"></i>xs · 4</div>
+      <div><i style="border-radius:8px"></i>sm · 8</div>
+      <div><i style="border-radius:12px"></i>md · 12</div>
+      <div><i style="border-radius:16px"></i>lg · 16</div>
+      <div><i style="border-radius:20px"></i>lg-increased · 20</div>
+      <div><i style="border-radius:28px"></i>xl · 28</div>
+      <div><i style="border-radius:32px"></i>xl-increased · 32</div>
+      <div><i style="border-radius:9999px"></i>full</div>
+    </div>
+    <h3 style="margin-top:24px">Type scale (Roboto Flex on Android · Segoe UI Variable on Windows)</h3>
+    <div class="type-sample">
+      <div style="font-size:28px;font-weight:700;letter-spacing:-.02em">Headline<span>headline-medium emphasized · 28 / 700</span></div>
+      <div style="font-size:15px;font-weight:500">Title medium<span>list item name · 15–16 / 500 (700 unread)</span></div>
+      <div style="font-size:14px;font-weight:400;color:var(--on-surface-variant)">Body medium<span>previews, message body · 13–14 / 400</span></div>
+      <div style="font-size:12px;font-weight:600;color:var(--on-surface-variant);letter-spacing:.06em">LABEL<span>chips, timestamps · 11–13 / 500–600</span></div>
+    </div>
+  </div>
+
+  <!-- ================= ANDROID ================= -->
+  <section>
+    <div class="section-head">
+      <h2>Android — Mobile Screens</h2>
+      <p>All nine core screens from Spec Section 5.2. Bottom navigation bar on top-level screens (Chats, Boards, Planner, Settings); FAB for compose. Settings is shown in two frames so its Groups and Feeds sections are visible.</p>
+    </div>
+    <div class="gallery">
+
+      <!-- 1. HOME / CHATS -->
+      <div class="frame-block">
+        <div class="frame-label">Home — Chats<small>People-centric inbox · grouped list, filter chips, FAB</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-menu"/></svg></div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-tune"/></svg></div><div class="avatar xs av1" style="margin:0 8px;width:30px;height:30px;font-size:11px;">Y</div></div>
+          </div>
+          <div class="app-bar-title-row"><div class="headline">Chats</div></div>
+          <div class="search-bar"><svg class="ic"><use href="#i-search"/></svg><span class="q" style="color:var(--on-surface-variant)">Search people and mail</span></div>
+          <div class="chip-row">
+            <div class="chip sel"><svg class="ic"><use href="#i-check"/></svg>All</div><div class="chip">Unread</div><div class="chip">Starred</div><div class="chip">This Week</div><div class="chip">Sent</div>
+          </div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="avatar sm av6">JK</div><div class="item-content"><div class="item-top"><div class="item-name">James Kowalski</div><div class="item-time">1:34 PM</div></div><div class="item-preview">API Deployment Complete</div></div></div>
+              <div class="item"><div class="avatar sm av2">PS</div><div class="item-content"><div class="item-top"><div class="item-name unread">Priya Sharma</div><div class="item-time unread">1:04 PM</div></div><div class="item-bottom"><div class="item-preview">Re: Weekly Sync</div><div class="badge">1</div></div></div></div>
+              <div class="item"><div class="avatar-stack"><div class="avatar av5">SR</div><div class="avatar av7">JB</div></div><div class="item-content"><div class="item-top"><div class="item-name">Simon &amp; Joann</div><div class="item-time">12:40 PM</div></div><div class="item-preview">Simon: Draft agenda attached</div></div></div>
+              <div class="item"><div class="avatar sm av6">TA</div><div class="item-content"><div class="item-top"><div class="item-name">Tom Andersen</div><div class="item-time">12:14 PM</div></div><div class="item-preview">Slides from Yesterday's Talk</div></div></div>
+              <div class="item"><div class="avatar sm av7">MJ</div><div class="item-content"><div class="item-top"><div class="item-name">Mia Johnson</div><div class="item-time">11:14 AM</div></div><div class="item-preview">A/B Test Results</div></div></div>
+              <div class="item"><div class="avatar sm av4">CM</div><div class="item-content"><div class="item-top"><div class="item-name unread">Carlos Mendez</div><div class="item-time unread">9:54 AM</div></div><div class="item-bottom"><div class="item-preview">Conference Travel Plans</div><div class="badge">1</div></div></div></div>
+              <div class="item"><div class="avatar sm av3">AB</div><div class="item-content"><div class="item-top"><div class="item-name unread">Anna Bergström</div><div class="item-time unread">7:34 AM</div></div><div class="item-bottom"><div class="item-preview">Monthly Finance Report</div><div class="badge">1</div></div></div></div>
+            </div>
+          </div>
+          <div class="fab"><svg class="ic"><use href="#i-edit"/></svg></div>
+          <div class="nav-bar">
+            <div class="nav-dest active"><div class="pill"><svg class="ic fill"><use href="#i-chat_bubble"/></svg></div>Chats</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-view_kanban"/></svg></div>Boards</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-calendar_month"/></svg></div>Planner</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-settings"/></svg></div>Settings</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 2. CONVERSATION -->
+      <div class="frame-block">
+        <div class="frame-label">Conversation<small>One person, one thread · View thread control</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-arrow_back"/></svg></div>
+            <div class="app-bar-center"><div class="avatar xs av1" style="margin-right:6px">SC</div>Sarah Chen <svg class="ic s20"><use href="#i-expand_more"/></svg></div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-search"/></svg></div><div class="icon-btn"><svg class="ic"><use href="#i-more_vert"/></svg></div></div>
+          </div>
+          <div class="label inset" style="padding-top:6px">Today</div>
+          <div class="conv">
+            <div class="card tonal thread-collapsed">
+              <div style="flex:1;min-width:0"><div class="thread-subject">Design Review: Dashboard Redesign</div><div class="thread-meta"><b>Alex</b> These look fantastic — the collapsi…</div></div>
+              <span class="count-pill">2</span>
+            </div>
+            <div class="card">
+              <div class="msg-head"><div class="avatar sm av1">SC</div><div style="flex:1;min-width:0"><div class="msg-head-name">Sarah Chen</div><div class="msg-head-sub">To: Alex, Joann · 3:05 PM</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-star"/></svg></div>
+              <div class="msg-body"><p>The mockups are ready for review — let me know your thoughts on the new layout. Want a quick walkthrough before Thursday?</p></div>
+              <div class="attach-row">
+                <div class="attach"><div class="thumb"><span style="height:30%"></span><span style="height:55%"></span><span style="height:40%"></span><span style="height:80%"></span></div><small>Dashboard_Rev.png · 1.9 MB</small></div>
+                <div class="attach"><div class="pie"></div><small>Dashboard_Traffic.png · 1.6 MB</small></div>
+              </div>
+              <div style="margin-bottom:8px"><span class="tonal-btn"><svg class="ic"><use href="#i-forum"/></svg>View thread · 3</span></div>
+              <div class="msg-actions">
+                <span class="text-btn"><svg class="ic"><use href="#i-reply"/></svg>Reply</span>
+                <span class="text-btn"><svg class="ic"><use href="#i-forward"/></svg>Forward</span>
+                <span class="spacer"></span>
+                <div class="icon-btn" style="width:36px;height:36px"><svg class="ic s20"><use href="#i-more_vert"/></svg></div>
+              </div>
+            </div>
+            <div class="card tonal thread-collapsed">
+              <div style="flex:1;min-width:0"><div class="thread-subject">Figma Library Access</div><div class="thread-meta"><b>Sarah</b> Added you to the shared library…</div></div>
+              <span class="count-pill">2</span>
+            </div>
+          </div>
+          <div class="reply-bar"><div class="reply-field"><svg class="ic s20"><use href="#i-add_circle"/></svg><span class="q">Reply to Sarah…</span></div><div class="send-fab"><svg class="ic"><use href="#i-send"/></svg></div></div>
+        </div></div>
+      </div>
+
+      <!-- 3. COMPOSE -->
+      <div class="frame-block">
+        <div class="frame-label">Compose<small>Filled text fields · floating toolbar · wavy progress</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-close"/></svg></div>
+            <div class="app-bar-center" style="justify-content:flex-start;padding-left:4px">New message</div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-attach_file"/></svg></div><div class="icon-btn"><svg class="ic"><use href="#i-more_vert"/></svg></div></div>
+          </div>
+          <div class="fields">
+            <div class="field"><label>From</label><div class="val">you@work.com <svg class="ic s20"><use href="#i-expand_more"/></svg></div></div>
+            <div class="field"><label>To</label><div class="val"><span class="recipient"><span class="avatar xs av1">SC</span>Sarah Chen</span></div></div>
+            <div class="field focus"><label>Subject</label><div class="val">Re: Dashboard Redesign</div></div>
+          </div>
+          <div class="editor">Thanks for sending this over —<br><span class="ghost">Start typing…</span></div>
+          <div class="compose-attach"><svg class="ic"><use href="#i-description"/></svg>Contract_Draft.docx<svg class="ic s18" style="margin-left:2px"><use href="#i-close"/></svg></div>
+          <div class="float-toolbar-wrap">
+            <div class="float-toolbar"><svg class="ic"><use href="#i-format_bold"/></svg><svg class="ic"><use href="#i-format_italic"/></svg><svg class="ic"><use href="#i-title"/></svg><svg class="ic"><use href="#i-format_list_bulleted"/></svg><svg class="ic"><use href="#i-image"/></svg><svg class="ic"><use href="#i-attach_file"/></svg></div>
+            <div class="send-fab" style="width:56px;height:56px"><svg class="ic"><use href="#i-send"/></svg></div>
+          </div>
+          <div class="progress-wrap">
+            <div class="progress-label"><span>Sending…</span><span>62%</span></div>
+            <svg class="wavy" viewBox="0 0 260 14" preserveAspectRatio="none">
+              <path d="M0 7 Q5 1 10 7 T20 7 T30 7 T40 7 T50 7 T60 7 T70 7 T80 7 T90 7 T100 7 T110 7 T120 7 T130 7 T140 7 T150 7 T160 7" fill="none" stroke="#4653D0" stroke-width="4" stroke-linecap="round"/>
+              <line x1="168" y1="7" x2="256" y2="7" stroke="#DFE0FF" stroke-width="4" stroke-linecap="round"/>
+              <circle cx="258" cy="7" r="2" fill="#4653D0"/>
+            </svg>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 4. ATTACHMENTS -->
+      <div class="frame-block">
+        <div class="frame-label">Attachments<small>Every file, one contact · button group toggle</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-arrow_back"/></svg></div>
+            <div class="app-bar-center" style="justify-content:flex-start;padding-left:4px">Sarah Chen · Files</div>
+            <div class="icon-btn"><svg class="ic"><use href="#i-search"/></svg></div>
+          </div>
+          <div class="btn-group" style="margin-top:4px"><span class="sel"><svg class="ic s18"><use href="#i-view_list"/></svg>List</span><span><svg class="ic s18"><use href="#i-grid_view"/></svg>Grid</span></div>
+          <div class="featured">
+            <span class="tag">14 files · one contact</span>
+            <div class="meta"><div><b>Team_Photo.jpg</b><span>Sarah Chen · 3.8 MB · Mar 12</span></div><span class="tonal-btn" style="background:var(--surface-container-lowest);color:var(--on-surface)"><svg class="ic"><use href="#i-visibility"/></svg>Preview</span></div>
+          </div>
+          <div class="label inset">All attachments</div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="filetype" style="background:var(--error-container);color:var(--on-error-container)"><svg class="ic"><use href="#i-picture_as_pdf"/></svg></div><div class="item-content"><div class="file-name">Brand_Guidelines.pdf</div><div class="file-meta">4.8 MB · Mar 10</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+              <div class="item"><div class="filetype av2"><svg class="ic"><use href="#i-table_chart"/></svg></div><div class="item-content"><div class="file-name">Q3_Budget.xlsx</div><div class="file-meta">1.2 MB · Mar 8</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+              <div class="item"><div class="filetype av6"><svg class="ic"><use href="#i-slideshow"/></svg></div><div class="item-content"><div class="file-name">Design_Principles.pptx</div><div class="file-meta">12.4 MB · Mar 6</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+              <div class="item"><div class="filetype av1"><svg class="ic"><use href="#i-description"/></svg></div><div class="item-content"><div class="file-name">Contract_Draft.docx</div><div class="file-meta">890 KB · Mar 3</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+            </div>
+          </div>
+          <div class="label inset">Photos</div>
+          <div class="photo-grid"><i style="background:var(--av1-bg)"></i><i style="background:var(--av6-bg)"></i><i style="background:var(--av2-bg)"></i><i style="background:var(--av3-bg)"></i></div>
+        </div></div>
+      </div>
+
+      <!-- 5. BOARDS -->
+      <div class="frame-block">
+        <div class="frame-label">Boards<small>Mail organized like tasks · drag lifts the card</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-menu"/></svg></div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-filter_list"/></svg></div><div class="icon-btn"><svg class="ic"><use href="#i-more_vert"/></svg></div></div>
+          </div>
+          <div class="app-bar-title-row"><div class="headline">Boards</div></div>
+          <div class="cols">
+            <div class="col">
+              <div class="col-head"><b>Next</b><span class="count-pill">6</span></div>
+              <div class="kcard"><div class="kcard-title">Design Review: Dashboard Redesign</div><div class="kcard-owner"><div class="avatar xs av1">SC</div>Sarah Chen</div></div>
+              <div class="kcard ghost"><div class="kcard-title" style="color:var(--on-surface-variant)">Re: Q3 Budget Proposal</div><div class="kcard-owner"><div class="avatar xs av4" style="opacity:.5">DO</div>David Okafor</div></div>
+              <div class="kcard"><div class="kcard-title">Monthly Finance Report</div><div class="kcard-owner"><div class="avatar xs av3">AB</div>Anna Bergström</div></div>
+              <div class="kcard"><div class="kcard-title">Conference Travel Plans</div><div class="kcard-owner"><div class="avatar xs av4">CM</div>Carlos Mendez</div></div>
+            </div>
+            <div class="col">
+              <div class="col-head"><b>In Progress</b><span class="count-pill">5</span></div>
+              <div class="kcard lift"><div class="kcard-title">Re: Q3 Budget Proposal</div><div class="kcard-owner"><div class="avatar xs av4">DO</div>David Okafor</div></div>
+              <div class="kcard"><div class="kcard-title">Sprint Planning — Thursday</div><div class="kcard-owner"><div class="avatar xs av2">MR</div>Marcus Rivera</div></div>
+              <div class="kcard"><div class="kcard-title">Model Training Update</div><div class="kcard-owner"><div class="avatar xs av1">KW</div>Kevin Wu</div></div>
+              <div class="kcard"><div class="kcard-title">Illustration Drafts</div><div class="kcard-owner"><div class="avatar xs av7">SL</div>Sophie Laurent</div></div>
+            </div>
+          </div>
+          <div class="fab ext"><svg class="ic"><use href="#i-add"/></svg>New column</div>
+          <div class="nav-bar">
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-chat_bubble"/></svg></div>Chats</div>
+            <div class="nav-dest active"><div class="pill"><svg class="ic fill"><use href="#i-view_kanban"/></svg></div>Boards</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-calendar_month"/></svg></div>Planner</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-settings"/></svg></div>Settings</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 6. PLANNER -->
+      <div class="frame-block">
+        <div class="frame-label">Planner<small>Emails become events, linked both ways</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-menu"/></svg></div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-today"/></svg></div><div class="icon-btn"><svg class="ic"><use href="#i-more_vert"/></svg></div></div>
+          </div>
+          <div class="app-bar-title-row"><div class="headline" style="display:flex;align-items:center;gap:4px">July <svg class="ic" style="width:28px;height:28px;color:var(--on-surface-variant)"><use href="#i-expand_more"/></svg></div></div>
+          <div class="week">
+            <div class="day">S<div class="num">5</div></div>
+            <div class="day today">M<div class="num">6</div></div>
+            <div class="day">T<div class="num">7</div></div>
+            <div class="day">W<div class="num">8</div></div>
+            <div class="day">T<div class="num">9</div></div>
+            <div class="day">F<div class="num">10</div></div>
+            <div class="day">S<div class="num">11</div></div>
+          </div>
+          <div class="grid">
+            <div class="hour"><div class="hour-label">10 AM</div><div class="hour-events"><div class="event" style="background:var(--av2-bg);color:var(--av2-fg)">Farmers Market</div></div></div>
+            <div class="hour"><div class="hour-label">12 PM</div><div class="hour-events"><div class="event" style="background:var(--tertiary-container);color:var(--on-tertiary-container)">Brunch with Priya<svg class="ic"><use href="#i-mail"/></svg></div></div></div>
+            <div class="hour"><div class="hour-label">2 PM</div><div class="hour-events"><div class="event" style="background:var(--primary-container);color:var(--on-primary-container)">Afternoon Hike</div></div></div>
+            <div class="hour"><div class="hour-label">4 PM</div><div class="hour-events"><div class="event" style="background:var(--av3-bg);color:var(--av3-fg)">Call with Mom</div></div></div>
+            <div class="hour"><div class="hour-label">6 PM</div><div class="hour-events"><div class="event" style="background:var(--primary-container);color:var(--on-primary-container)">Prep for the week ahead<svg class="ic"><use href="#i-mail"/></svg></div></div></div>
+          </div>
+          <div class="fab"><svg class="ic"><use href="#i-add"/></svg></div>
+          <div class="nav-bar">
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-chat_bubble"/></svg></div>Chats</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-view_kanban"/></svg></div>Boards</div>
+            <div class="nav-dest active"><div class="pill"><svg class="ic fill"><use href="#i-calendar_month"/></svg></div>Planner</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-settings"/></svg></div>Settings</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 7. FEEDS -->
+      <div class="frame-block">
+        <div class="frame-label">Feeds<small>People / Feeds button group · category tags · unread marker</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar">
+            <div class="icon-btn"><svg class="ic"><use href="#i-menu"/></svg></div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-tune"/></svg></div><div class="avatar xs av1" style="margin:0 8px;width:30px;height:30px;font-size:11px;">Y</div></div>
+          </div>
+          <div class="app-bar-title-row"><div class="headline">Chats</div></div>
+          <div class="btn-group"><span><svg class="ic s18"><use href="#i-person"/></svg>People</span><span class="sel"><svg class="ic s18 fill"><use href="#i-rss_feed"/></svg>Feeds</span></div>
+          <div class="banner"><svg class="ic"><use href="#i-inbox"/></svg>24 filed to Feeds automatically</div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="avatar sm squircle av4">D<span class="mark"><svg class="ic"><use href="#i-notifications"/></svg></span></div><div class="item-content"><div class="item-top"><div class="item-name">Design Weekly</div><span class="cat">Newsletter</span></div><div class="item-preview">This week in product design</div></div></div>
+              <div class="item"><div class="avatar sm squircle av2">$</div><div class="item-content"><div class="item-top"><div class="item-name">Acme Store</div><span class="cat">Receipt</span></div><div class="item-preview">Your receipt — order #4821</div></div></div>
+              <div class="item"><div class="avatar sm squircle av1">CI</div><div class="item-content"><div class="item-top"><div class="item-name">Build Bot</div><span class="cat">Notification</span></div><div class="item-preview">Pipeline passed on main</div></div></div>
+              <div class="item"><div class="avatar sm squircle av7">S</div><div class="item-content"><div class="item-top"><div class="item-name">Shopwave</div><span class="cat">Promotion</span></div><div class="item-preview">Weekend sale — 30% off</div></div></div>
+              <div class="item"><div class="avatar sm squircle av3">FB</div><div class="item-content"><div class="item-top"><div class="item-name">First Bank</div><span class="cat custom">OTP</span></div><div class="item-preview">Your one-time passcode is 4821</div></div></div>
+              <div class="item"><div class="avatar sm squircle av6">A</div><div class="item-content"><div class="item-top"><div class="item-name">Frontend Digest</div><span class="cat">Newsletter</span></div><div class="item-preview">12 links you missed this week</div></div></div>
+            </div>
+          </div>
+          <div class="nav-bar">
+            <div class="nav-dest active"><div class="pill"><svg class="ic fill"><use href="#i-chat_bubble"/></svg></div>Chats</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-view_kanban"/></svg></div>Boards</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-calendar_month"/></svg></div>Planner</div>
+            <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-settings"/></svg></div>Settings</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 8. SETTINGS -->
+      <div class="frame-block">
+        <div class="frame-label">Settings<small>Accounts, appearance, notifications, privacy</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar"><div class="icon-btn"><svg class="ic"><use href="#i-arrow_back"/></svg></div><div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-search"/></svg></div></div></div>
+          <div class="app-bar-title-row"><div class="headline">Settings</div></div>
+          <div class="list">
+            <div class="sgroup"><div class="label">Accounts</div>
+              <div class="group">
+                <div class="item"><div class="avatar sm av1">Y</div><div class="srow-label">you@work.com<div class="srow-sub">Primary · IMAP / OAuth</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+                <div class="item"><div class="icon-btn tonal" style="width:36px;height:36px"><svg class="ic s20"><use href="#i-add"/></svg></div><div class="srow-label">Add account</div></div>
+              </div>
+            </div>
+            <div class="sgroup"><div class="label">Appearance</div>
+              <div class="btn-group compact"><span><svg class="ic s18"><use href="#i-light_mode"/></svg>Light</span><span class="sel"><svg class="ic s18 fill"><use href="#i-dark_mode"/></svg>Dark</span><span>System</span></div>
+            </div>
+            <div class="sgroup"><div class="label">Notifications</div>
+              <div class="group">
+                <div class="item"><div class="srow-label">New mail</div><div class="switch on"><i></i></div></div>
+                <div class="item"><div class="srow-label">Snooze alerts</div><div class="switch on"><i></i></div></div>
+                <div class="item"><div class="srow-label">Show unread badge<div class="srow-sub">App icon badge count</div></div><div class="switch"><i></i></div></div>
+              </div>
+            </div>
+            <div class="sgroup"><div class="label">Privacy</div>
+              <div class="group">
+                <div class="item"><svg class="ic s20" style="color:var(--primary)"><use href="#i-shield"/></svg><div class="srow-label">Block remote images</div><div class="switch on"><i></i></div></div>
+              </div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 8b. SETTINGS (continued) -->
+      <div class="frame-block">
+        <div class="frame-label">Settings — Groups &amp; Feeds<small>Same screen, scrolled down</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="app-bar"><div class="icon-btn"><svg class="ic"><use href="#i-arrow_back"/></svg></div><div class="app-bar-center" style="justify-content:flex-start;padding-left:4px">Settings</div><div class="icon-btn"><svg class="ic"><use href="#i-search"/></svg></div></div>
+          <div class="list" style="padding-top:4px">
+            <div class="sgroup"><div class="label">People groups</div>
+              <div class="group">
+                <div class="item"><div class="avatar-stack"><div class="avatar av5">SR</div><div class="avatar av7">JB</div></div><div class="srow-label">Simon &amp; Joann<div class="srow-sub">2 members · exact match only</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+                <div class="item"><div class="icon-btn tonal" style="width:36px;height:36px"><svg class="ic s20"><use href="#i-group_add"/></svg></div><div class="srow-label">Add group<div class="srow-sub">Groups are never created automatically</div></div></div>
+              </div>
+            </div>
+            <div class="sgroup"><div class="label">Feeds</div>
+              <div class="group">
+                <div class="item"><div class="srow-label">Feeds count toward badge<div class="srow-sub">Off: People only</div></div><div class="switch"><i></i></div></div>
+                <div class="item"><svg class="ic s20" style="color:var(--primary)"><use href="#i-notifications_active"/></svg><div class="srow-label">Always count unread<div class="srow-sub">1 sender · Design Weekly</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+                <div class="item"><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-label"/></svg><div class="srow-label">Categories<div class="srow-sub">5 default · 1 custom (OTP)</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+                <div class="item"><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-rule"/></svg><div class="srow-label">Classification rules<div class="srow-sub">3 rules you've accepted</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-chevron_right"/></svg></div>
+              </div>
+            </div>
+            <div class="sgroup"><div class="label">Groups &amp; tags</div>
+              <div class="chip-row" style="padding:0"><div class="chip">Work</div><div class="chip">Travel</div><div class="chip">Education</div><div class="chip"><svg class="ic s18"><use href="#i-add"/></svg>Add</div></div>
+            </div>
+            <div class="sgroup"><div class="label">Privacy stats</div><span class="stat"><svg class="ic s18 fill"><use href="#i-shield"/></svg>47 trackers blocked this week</span></div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- 9. SEARCH RESULTS -->
+      <div class="frame-block">
+        <div class="frame-label">Search Results<small>People by default, Feeds on request</small></div>
+        <div class="phone-frame"><div class="notch"></div><div class="phone-screen">
+          <div class="status-bar"><span>9:41</span><div class="status-icons"><svg class="ic fill"><use href="#i-signal_cellular_alt"/></svg><svg class="ic fill"><use href="#i-battery_full"/></svg></div></div>
+          <div class="search-bar" style="margin-top:6px"><svg class="ic"><use href="#i-arrow_back"/></svg><span class="q">budget</span><div class="icon-btn" style="width:36px;height:36px"><svg class="ic s20"><use href="#i-close"/></svg></div></div>
+          <div class="list" style="flex:0 0 auto">
+            <div class="group"><div class="item"><div class="srow-label">Include Feeds<div class="srow-sub">Off by default</div></div><div class="switch"><i></i></div></div></div>
+          </div>
+          <div class="label inset">3 results · People</div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="avatar sm av4">DO</div><div class="item-content"><div class="item-top"><div class="item-name">David Okafor</div><div class="item-time">Mon</div></div><div class="item-preview">Re: Q3 <b style="color:var(--on-surface)">Budget</b> Proposal</div></div></div>
+              <div class="item"><div class="avatar sm av3">AB</div><div class="item-content"><div class="item-top"><div class="item-name">Anna Bergström</div><div class="item-time">Jul 2</div></div><div class="item-preview">Monthly Finance Report — <b style="color:var(--on-surface)">budget</b> variance</div></div></div>
+              <div class="item"><div class="avatar-stack"><div class="avatar av5">SR</div><div class="avatar av7">JB</div></div><div class="item-content"><div class="item-top"><div class="item-name">Simon &amp; Joann</div><div class="item-time">Jun 28</div></div><div class="item-preview"><b style="color:var(--on-surface)">Budget</b> for offsite</div></div></div>
+            </div>
+          </div>
+        </div></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= DESKTOP ================= -->
+  <section>
+    <div class="section-head">
+      <h2>Windows — Desktop Three-Pane Layout</h2>
+      <p>M3 navigation rail with compose FAB, grouped contact list, and an inline conversation pane in a large-radius container. No popup compose windows. Segoe UI Variable.</p>
+    </div>
+    <div class="desktop-frame">
+      <div class="win-titlebar"><svg class="ic" style="width:14px;height:14px"><use href="#i-remove"/></svg><svg class="ic" style="width:14px;height:14px"><use href="#i-crop_square"/></svg><svg class="ic" style="width:14px;height:14px"><use href="#i-close"/></svg></div>
+      <div class="desktop-screen">
+        <div class="rail">
+          <div class="fab-rail"><svg class="ic"><use href="#i-edit"/></svg></div>
+          <div class="nav-dest active"><div class="pill"><svg class="ic fill"><use href="#i-chat_bubble"/></svg></div>Chats</div>
+          <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-view_kanban"/></svg></div>Boards</div>
+          <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-calendar_month"/></svg></div>Planner</div>
+          <div class="spacer"></div>
+          <div class="nav-dest"><div class="pill"><svg class="ic"><use href="#i-settings"/></svg></div>Settings</div>
+          <div class="avatar sm av1" style="margin-top:8px">Y</div>
+        </div>
+        <div class="d-middle">
+          <div class="app-bar" style="padding:14px 12px 0 20px"><div class="headline" style="font-size:26px">Chats</div><div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-tune"/></svg></div></div></div>
+          <div class="search-bar" style="margin:10px 16px 12px"><svg class="ic"><use href="#i-search"/></svg><span class="q" style="color:var(--on-surface-variant)">Search people and mail</span></div>
+          <div class="chip-row"><div class="chip sel"><svg class="ic"><use href="#i-check"/></svg>All</div><div class="chip">Unread</div><div class="chip">Starred</div><div class="chip">This Week</div></div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="avatar sm av6">JK</div><div class="item-content"><div class="item-top"><div class="item-name">James Kowalski</div><div class="item-time">1:34 PM</div></div><div class="item-preview">API Deployment Complete</div></div></div>
+              <div class="item"><div class="avatar sm av2">PS</div><div class="item-content"><div class="item-top"><div class="item-name unread">Priya Sharma</div><div class="item-time unread">1:04 PM</div></div><div class="item-bottom"><div class="item-preview">Re: Weekly Sync</div><div class="badge">1</div></div></div></div>
+              <div class="item sel"><div class="avatar sm av1">SC</div><div class="item-content"><div class="item-top"><div class="item-name">Sarah Chen</div><div class="item-time">12:52 PM</div></div><div class="item-preview">Design Review: Dashboard Redesign</div></div></div>
+              <div class="item"><div class="avatar-stack"><div class="avatar av5">SR</div><div class="avatar av7">JB</div></div><div class="item-content"><div class="item-top"><div class="item-name">Simon &amp; Joann</div><div class="item-time">12:40 PM</div></div><div class="item-preview">Simon: Draft agenda attached</div></div></div>
+              <div class="item"><div class="avatar sm av6">TA</div><div class="item-content"><div class="item-top"><div class="item-name">Tom Andersen</div><div class="item-time">12:14 PM</div></div><div class="item-preview">Slides from Yesterday's Talk</div></div></div>
+              <div class="item"><div class="avatar sm av7">MJ</div><div class="item-content"><div class="item-top"><div class="item-name">Mia Johnson</div><div class="item-time">11:14 AM</div></div><div class="item-preview">A/B Test Results</div></div></div>
+              <div class="item"><div class="avatar sm av4">CM</div><div class="item-content"><div class="item-top"><div class="item-name unread">Carlos Mendez</div><div class="item-time unread">9:54 AM</div></div><div class="item-bottom"><div class="item-preview">Conference Travel Plans</div><div class="badge">1</div></div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="d-right">
+          <div class="app-bar" style="padding:12px 12px 4px 20px">
+            <div class="app-bar-center" style="justify-content:flex-start;font-size:18px"><div class="avatar xs av1" style="margin-right:8px;width:30px;height:30px;font-size:11px">SC</div>Sarah Chen <svg class="ic s20"><use href="#i-expand_more"/></svg></div>
+            <div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-search"/></svg></div><div class="icon-btn"><svg class="ic"><use href="#i-folder"/></svg></div><div class="icon-btn"><svg class="ic"><use href="#i-more_vert"/></svg></div></div>
+          </div>
+          <div class="label inset">Today</div>
+          <div class="conv" style="padding:0 16px">
+            <div class="card">
+              <div class="msg-head"><div class="avatar sm av1">SC</div><div style="flex:1"><div class="msg-head-name">Sarah Chen</div><div class="msg-head-sub">To: Alex, Joann · Inbox · Jul 5, 3:05 PM</div></div><svg class="ic s20" style="color:var(--on-surface-variant)"><use href="#i-star"/></svg></div>
+              <div class="msg-body"><p>The mockups are ready for review — let me know your thoughts on the new layout.</p><p>The sidebar collapses now and the key metrics moved into card components. Want a quick walkthrough before Thursday's review?</p></div>
+              <div class="attach-row" style="max-width:420px">
+                <div class="attach"><div class="thumb"><span style="height:30%"></span><span style="height:55%"></span><span style="height:40%"></span><span style="height:80%"></span></div><small>Dashboard_Rev.png · 1.9 MB</small></div>
+                <div class="attach"><div class="pie"></div><small>Dashboard_Traffic.png · 1.6 MB</small></div>
+              </div>
+              <div style="margin-bottom:8px"><span class="tonal-btn"><svg class="ic"><use href="#i-forum"/></svg>View thread · 3</span></div>
+              <div class="msg-actions"><span class="text-btn"><svg class="ic"><use href="#i-reply"/></svg>Reply</span><span class="text-btn"><svg class="ic"><use href="#i-forward"/></svg>Forward</span><span class="spacer"></span><div class="icon-btn" style="width:36px;height:36px"><svg class="ic s20"><use href="#i-more_vert"/></svg></div></div>
+            </div>
+            <div class="card tonal thread-collapsed" style="background:var(--surface-container)">
+              <div style="flex:1;min-width:0"><div class="thread-subject">Figma Library Access</div><div class="thread-meta"><b>Sarah</b> Added you to the shared library…</div></div>
+              <span class="count-pill">2</span>
+            </div>
+          </div>
+          <div class="reply-bar" style="background:transparent;padding:10px 16px 16px"><div class="reply-field" style="background:var(--surface-container-lowest)"><svg class="ic s20"><use href="#i-add_circle"/></svg><span class="q">Reply to Sarah…</span></div><div class="send-fab"><svg class="ic"><use href="#i-send"/></svg></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= LIGHT / DARK ================= -->
+  <section>
+    <div class="section-head">
+      <h2>Light / Dark Mode</h2>
+      <p>Same Home screen with the light and dark M3 color schemes. Dark mode raises surface containers tonally rather than adding shadows.</p>
+    </div>
+    <div class="mode-compare">
+      <div class="mini">
+        <div style="padding:14px 0 10px">
+          <div class="app-bar" style="padding:0 8px 0 8px"><div class="icon-btn"><svg class="ic"><use href="#i-menu"/></svg></div><div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-tune"/></svg></div></div></div>
+          <div class="app-bar-title-row"><div class="headline">Chats</div></div>
+          <div class="chip-row"><div class="chip sel"><svg class="ic"><use href="#i-check"/></svg>All</div><div class="chip">Unread</div><div class="chip">Starred</div></div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="avatar sm av6">JK</div><div class="item-content"><div class="item-top"><div class="item-name">James Kowalski</div><div class="item-time">1:34 PM</div></div><div class="item-preview">API Deployment Complete</div></div></div>
+              <div class="item"><div class="avatar sm av2">PS</div><div class="item-content"><div class="item-top"><div class="item-name unread">Priya Sharma</div><div class="item-time unread">1:04 PM</div></div><div class="item-bottom"><div class="item-preview">Re: Weekly Sync</div><div class="badge">1</div></div></div></div>
+              <div class="item"><div class="avatar sm av4">CM</div><div class="item-content"><div class="item-top"><div class="item-name">Carlos Mendez</div><div class="item-time">9:54 AM</div></div><div class="item-preview">Conference Travel Plans</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="caption">Light</div>
+      </div>
+      <div class="mini dark">
+        <div style="padding:14px 0 10px">
+          <div class="app-bar" style="padding:0 8px 0 8px"><div class="icon-btn"><svg class="ic"><use href="#i-menu"/></svg></div><div class="app-bar-actions"><div class="icon-btn"><svg class="ic"><use href="#i-tune"/></svg></div></div></div>
+          <div class="app-bar-title-row"><div class="headline">Chats</div></div>
+          <div class="chip-row"><div class="chip sel"><svg class="ic"><use href="#i-check"/></svg>All</div><div class="chip">Unread</div><div class="chip">Starred</div></div>
+          <div class="list">
+            <div class="group">
+              <div class="item"><div class="avatar sm av6">JK</div><div class="item-content"><div class="item-top"><div class="item-name">James Kowalski</div><div class="item-time">1:34 PM</div></div><div class="item-preview">API Deployment Complete</div></div></div>
+              <div class="item"><div class="avatar sm av2">PS</div><div class="item-content"><div class="item-top"><div class="item-name unread">Priya Sharma</div><div class="item-time unread">1:04 PM</div></div><div class="item-bottom"><div class="item-preview">Re: Weekly Sync</div><div class="badge">1</div></div></div></div>
+              <div class="item"><div class="avatar sm av4">CM</div><div class="item-content"><div class="item-top"><div class="item-name">Carlos Mendez</div><div class="item-time">9:54 AM</div></div><div class="item-preview">Conference Travel Plans</div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="caption">Dark</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>Companion to email-client-build-spec.md — structural behavior lives in the spec; visual styling lives here. Material 3 Expressive tokens: color roles, shape scale, Roboto Flex. Icons are self-contained inline SVG; the built app uses Material Symbols Rounded.</footer>
+
+</div>
+</body>
+</html>
