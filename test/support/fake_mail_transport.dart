@@ -182,6 +182,20 @@ class FakeMailTransport implements MailTransport {
   }
 
   @override
+  Future<void> moveMessages(List<int> uids, String targetPath) async {
+    _requireConnected();
+    final target = folders[targetPath];
+    if (target == null) throw MailTransportException('No such folder $targetPath');
+    for (final uid in uids) {
+      final m = _sel.messages[uid];
+      if (m == null) continue;
+      _sel.remove(uid);
+      target.add(m, body: _sel.bodies.remove(uid));
+    }
+    log.add('move ${uids.join(',')} -> $targetPath');
+  }
+
+  @override
   Future<MailboxEvent?> idle({required Duration timeout}) async {
     _requireConnected();
     log.add('idle');

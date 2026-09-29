@@ -239,6 +239,53 @@ void main() {
     expect((await db.foldersForAccount(account.id)).map((f) => f.path).toSet(), {'INBOX'});
   });
 
+  test('send-as aliases are discovered from the Sent folder and mail is re-filed', () async {
+    // The user (me@example.com) also sends as me@mydomain.com. A reply to
+    // that alias arrived in INBOX first, before Sent was synced.
+    final inbox = server.folder('INBOX', role: FolderRole.inbox);
+    inbox.add(hdr(from: 'sarah@x.com', to: ['me@mydomain.com'], subject: 'Re: hello'));
+    inbox.add(hdr(from: 'me@mydomain.com', to: ['me@example.com'], subject: 'note to self'));
+    final sent = server.folder('Sent', role: FolderRole.sent);
+    sent.add(hdr(from: 'me@mydomain.com', fromName: 'Me Alias', to: ['sarah@x.com'], subject: 'hello'));
+    sent.add(hdr(from: 'me@mydomain.com', to: ['tom@x.com'], subject: 'hi tom'));
+
+    await syncer.syncOnce();
+
+    final ids = await db.select(db.identities).get();
+    expect(ids.map((i) => i.email), contains('me@mydomain.com'));
+    expect(ids.firstWhere((i) => i.email == 'me@mydomain.com').discovered, isTrue);
+    expect(ids.firstWhere((i) => i.email == 'me@mydomain.com').name, 'Me Alias');
+
+    final msgs = await allMessages();
+    final fromAlias = msgs.where((m) => m.fromAddress == 'me@mydomain.com').toList();
+    expect(fromAlias.length, 3);
+    expect(fromAlias.every((m) => m.isFromMe && m.fromContactKey == 'me'), isTrue, reason: 'alias resolves to me after discovery');
+
+    final rows = await db.select(db.messageRowAssignments).get();
+    final keys = <int, Set<String>>{};
+    for (final r in rows) {
+      keys.putIfAbsent(r.messageId, () => {}).add(r.rowKey);
+    }
+    final hello = msgs.firstWhere((m) => m.subject == 'hello');
+    final hiTom = msgs.firstWhere((m) => m.subject == 'hi tom');
+    final noteToSelf = msgs.firstWhere((m) => m.subject == 'note to self');
+    expect(keys[hello.id], {'c:sarah@x.com'}, reason: 'sent mail files under the recipient');
+    expect(keys[hiTom.id], {'c:tom@x.com'});
+    expect(keys[noteToSelf.id], {'c:me'});
+    expect(rows.any((r) => r.rowKey == 'c:me@mydomain.com'), isFalse, reason: 'no row for my own alias');
+
+    final contacts = await db.select(db.contacts).get();
+    expect(contacts.map((c) => c.key), isNot(contains('me@mydomain.com')));
+    expect(contacts.map((c) => c.key), containsAll(['sarah@x.com', 'tom@x.com']));
+
+    // The "to" participant on Sarah's reply is now marked as me.
+    final parts = await (db.select(db.messageParticipants)..where((p) => p.address.equals('me@mydomain.com'))).get();
+    expect(parts.every((p) => p.isMe && p.contactKey == 'me'), isTrue);
+
+    // A second sync discovers nothing new and does not re-file.
+    expect(await db.discoverIdentitiesFromSent(account.id, (await db.foldersForAccount(account.id)).firstWhere((f) => f.role == 'sent').id), 0);
+  });
+
   test('accounts can be soft-checked for message counts', () async {
     server.folder('INBOX', role: FolderRole.inbox).add(hdr(from: 'a@x.com'));
     await syncer.syncOnce();

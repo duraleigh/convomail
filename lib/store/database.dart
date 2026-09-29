@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 import 'settings_store.dart';
 
@@ -58,6 +62,10 @@ class Identities extends Table {
   IntColumn get smtpPort => integer().nullable()();
   TextColumn get smtpSecurity => text().nullable()();
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
+
+  /// True when the identity was learned from the account's Sent folder
+  /// (a "send as" alias) rather than entered by the user.
+  BoolColumn get discovered => boolean().withDefault(const Constant(false))();
 }
 
 /// IMAP folders with sync state per folder.
@@ -189,6 +197,19 @@ class GroupMembers extends Table {
   Set<Column> get primaryKey => {groupId, contactKey};
 }
 
+/// Per-row user preferences: pin, mute, snooze (spec 4.2, 4.9, 4.17).
+/// rowKey matches [MessageRowAssignments.rowKey].
+class RowPrefs extends Table {
+  TextColumn get rowKey => text()();
+  BoolColumn get pinned => boolean().withDefault(const Constant(false))();
+  BoolColumn get muted => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get snoozedUntil => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {rowKey};
+}
+
 /// Which People-list row(s) a message lives in (spec 4.3, 4.19).
 /// rowKey is `c:<contactKey>` or `g:<groupId>`. Stored separately from
 /// threading (plan 1.2).
@@ -215,6 +236,7 @@ class MessageRowAssignments extends Table {
   PeopleGroups,
   GroupMembers,
   MessageRowAssignments,
+  RowPrefs,
 ])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
@@ -223,7 +245,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -250,6 +272,10 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             }
             await _createIndexes();
           }
+          if (from < 3) {
+            await m.createTable(rowPrefs);
+            await m.addColumn(identities, identities.discovered);
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -268,8 +294,33 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
 
   static QueryExecutor _open() => driftDatabase(
         name: 'convomail',
-        native: const DriftNativeOptions(shareAcrossIsolates: true),
+        native: const DriftNativeOptions(shareAcrossIsolates: true, databasePath: databasePath),
       );
+
+  /// The database lives in the per-user application support folder
+  /// (`%APPDATA%\com.convomail\convomail` on Windows). Early builds used
+  /// drift's default, the Documents folder; a file found there is moved
+  /// once so synced mail is not lost.
+  static Future<String> databasePath() async {
+    final support = await getApplicationSupportDirectory();
+    final target = p.join(support.path, 'convomail.sqlite');
+    if (!File(target).existsSync()) {
+      try {
+        final documents = await getApplicationDocumentsDirectory();
+        final legacy = p.join(documents.path, 'convomail.sqlite');
+        if (File(legacy).existsSync()) {
+          await support.create(recursive: true);
+          for (final suffix in ['', '-wal', '-shm', '-journal']) {
+            final f = File('$legacy$suffix');
+            if (f.existsSync()) await f.rename('$target$suffix');
+          }
+        }
+      } catch (_) {
+        // Fall through: a fresh database is created at the new location.
+      }
+    }
+    return target;
+  }
 
   @override
   Future<String?> getSetting(String key) async {

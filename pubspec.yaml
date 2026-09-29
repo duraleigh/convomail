@@ -41,6 +41,8 @@ dependencies:
   enough_mail: ^2.1.7
   win32: ^6.4.0
   ffi: ^2.2.0
+  path_provider: ^2.1.6
+  path: ^1.9.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

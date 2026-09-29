@@ -263,6 +263,24 @@ class ImapTransport implements MailTransport {
   }
 
   @override
+  Future<void> moveMessages(List<int> uids, String targetPath) async {
+    _requireSelected();
+    if (uids.isEmpty) return;
+    final seq = MessageSequence.fromIds(uids, isUid: true);
+    if (_c.serverInfo.supportsMove) {
+      await _c.uidMove(seq, targetMailboxPath: targetPath);
+    } else {
+      await _c.uidCopy(seq, targetMailboxPath: targetPath);
+      await _c.uidStore(seq, [MessageFlags.deleted], action: StoreAction.add, silent: true);
+      if (_c.serverInfo.supportsUidPlus) {
+        await _c.uidExpunge(seq);
+      } else {
+        await _c.expunge();
+      }
+    }
+  }
+
+  @override
   Future<MailboxEvent?> idle({required Duration timeout}) async {
     _requireSelected();
     final c = _c;

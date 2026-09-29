@@ -41,6 +41,10 @@ abstract interface class MailTransport {
 
   Future<void> setFlags(List<int> uids, {bool? seen, bool? flagged, bool? answered, bool? deleted});
 
+  /// Moves messages from the selected folder to [targetPath]. Uses MOVE when
+  /// the server supports it, otherwise COPY + \Deleted + EXPUNGE.
+  Future<void> moveMessages(List<int> uids, String targetPath);
+
   /// Waits in IDLE on the selected folder until the server pushes something
   /// or [timeout] elapses (returns null on timeout).
   Future<MailboxEvent?> idle({required Duration timeout});

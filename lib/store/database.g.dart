@@ -1327,6 +1327,21 @@ class $IdentitiesTable extends Identities
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _discoveredMeta = const VerificationMeta(
+    'discovered',
+  );
+  @override
+  late final GeneratedColumn<bool> discovered = GeneratedColumn<bool>(
+    'discovered',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("discovered" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1338,6 +1353,7 @@ class $IdentitiesTable extends Identities
     smtpPort,
     smtpSecurity,
     isDefault,
+    discovered,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1409,6 +1425,12 @@ class $IdentitiesTable extends Identities
         isDefault.isAcceptableOrUnknown(data['is_default']!, _isDefaultMeta),
       );
     }
+    if (data.containsKey('discovered')) {
+      context.handle(
+        _discoveredMeta,
+        discovered.isAcceptableOrUnknown(data['discovered']!, _discoveredMeta),
+      );
+    }
     return context;
   }
 
@@ -1454,6 +1476,10 @@ class $IdentitiesTable extends Identities
         DriftSqlType.bool,
         data['${effectivePrefix}is_default'],
       )!,
+      discovered: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}discovered'],
+      )!,
     );
   }
 
@@ -1473,6 +1499,10 @@ class Identity extends DataClass implements Insertable<Identity> {
   final int? smtpPort;
   final String? smtpSecurity;
   final bool isDefault;
+
+  /// True when the identity was learned from the account's Sent folder
+  /// (a "send as" alias) rather than entered by the user.
+  final bool discovered;
   const Identity({
     required this.id,
     required this.accountId,
@@ -1483,6 +1513,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     this.smtpPort,
     this.smtpSecurity,
     required this.isDefault,
+    required this.discovered,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1502,6 +1533,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       map['smtp_security'] = Variable<String>(smtpSecurity);
     }
     map['is_default'] = Variable<bool>(isDefault);
+    map['discovered'] = Variable<bool>(discovered);
     return map;
   }
 
@@ -1522,6 +1554,7 @@ class Identity extends DataClass implements Insertable<Identity> {
           ? const Value.absent()
           : Value(smtpSecurity),
       isDefault: Value(isDefault),
+      discovered: Value(discovered),
     );
   }
 
@@ -1540,6 +1573,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       smtpPort: serializer.fromJson<int?>(json['smtpPort']),
       smtpSecurity: serializer.fromJson<String?>(json['smtpSecurity']),
       isDefault: serializer.fromJson<bool>(json['isDefault']),
+      discovered: serializer.fromJson<bool>(json['discovered']),
     );
   }
   @override
@@ -1555,6 +1589,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       'smtpPort': serializer.toJson<int?>(smtpPort),
       'smtpSecurity': serializer.toJson<String?>(smtpSecurity),
       'isDefault': serializer.toJson<bool>(isDefault),
+      'discovered': serializer.toJson<bool>(discovered),
     };
   }
 
@@ -1568,6 +1603,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     Value<int?> smtpPort = const Value.absent(),
     Value<String?> smtpSecurity = const Value.absent(),
     bool? isDefault,
+    bool? discovered,
   }) => Identity(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -1578,6 +1614,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     smtpPort: smtpPort.present ? smtpPort.value : this.smtpPort,
     smtpSecurity: smtpSecurity.present ? smtpSecurity.value : this.smtpSecurity,
     isDefault: isDefault ?? this.isDefault,
+    discovered: discovered ?? this.discovered,
   );
   Identity copyWithCompanion(IdentitiesCompanion data) {
     return Identity(
@@ -1592,6 +1629,9 @@ class Identity extends DataClass implements Insertable<Identity> {
           ? data.smtpSecurity.value
           : this.smtpSecurity,
       isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
+      discovered: data.discovered.present
+          ? data.discovered.value
+          : this.discovered,
     );
   }
 
@@ -1606,7 +1646,8 @@ class Identity extends DataClass implements Insertable<Identity> {
           ..write('smtpHost: $smtpHost, ')
           ..write('smtpPort: $smtpPort, ')
           ..write('smtpSecurity: $smtpSecurity, ')
-          ..write('isDefault: $isDefault')
+          ..write('isDefault: $isDefault, ')
+          ..write('discovered: $discovered')
           ..write(')'))
         .toString();
   }
@@ -1622,6 +1663,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     smtpPort,
     smtpSecurity,
     isDefault,
+    discovered,
   );
   @override
   bool operator ==(Object other) =>
@@ -1635,7 +1677,8 @@ class Identity extends DataClass implements Insertable<Identity> {
           other.smtpHost == this.smtpHost &&
           other.smtpPort == this.smtpPort &&
           other.smtpSecurity == this.smtpSecurity &&
-          other.isDefault == this.isDefault);
+          other.isDefault == this.isDefault &&
+          other.discovered == this.discovered);
 }
 
 class IdentitiesCompanion extends UpdateCompanion<Identity> {
@@ -1648,6 +1691,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
   final Value<int?> smtpPort;
   final Value<String?> smtpSecurity;
   final Value<bool> isDefault;
+  final Value<bool> discovered;
   const IdentitiesCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -1658,6 +1702,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     this.smtpPort = const Value.absent(),
     this.smtpSecurity = const Value.absent(),
     this.isDefault = const Value.absent(),
+    this.discovered = const Value.absent(),
   });
   IdentitiesCompanion.insert({
     this.id = const Value.absent(),
@@ -1669,6 +1714,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     this.smtpPort = const Value.absent(),
     this.smtpSecurity = const Value.absent(),
     this.isDefault = const Value.absent(),
+    this.discovered = const Value.absent(),
   }) : accountId = Value(accountId),
        email = Value(email);
   static Insertable<Identity> custom({
@@ -1681,6 +1727,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     Expression<int>? smtpPort,
     Expression<String>? smtpSecurity,
     Expression<bool>? isDefault,
+    Expression<bool>? discovered,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1692,6 +1739,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
       if (smtpPort != null) 'smtp_port': smtpPort,
       if (smtpSecurity != null) 'smtp_security': smtpSecurity,
       if (isDefault != null) 'is_default': isDefault,
+      if (discovered != null) 'discovered': discovered,
     });
   }
 
@@ -1705,6 +1753,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     Value<int?>? smtpPort,
     Value<String?>? smtpSecurity,
     Value<bool>? isDefault,
+    Value<bool>? discovered,
   }) {
     return IdentitiesCompanion(
       id: id ?? this.id,
@@ -1716,6 +1765,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
       smtpPort: smtpPort ?? this.smtpPort,
       smtpSecurity: smtpSecurity ?? this.smtpSecurity,
       isDefault: isDefault ?? this.isDefault,
+      discovered: discovered ?? this.discovered,
     );
   }
 
@@ -1749,6 +1799,9 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     if (isDefault.present) {
       map['is_default'] = Variable<bool>(isDefault.value);
     }
+    if (discovered.present) {
+      map['discovered'] = Variable<bool>(discovered.value);
+    }
     return map;
   }
 
@@ -1763,7 +1816,8 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
           ..write('smtpHost: $smtpHost, ')
           ..write('smtpPort: $smtpPort, ')
           ..write('smtpSecurity: $smtpSecurity, ')
-          ..write('isDefault: $isDefault')
+          ..write('isDefault: $isDefault, ')
+          ..write('discovered: $discovered')
           ..write(')'))
         .toString();
   }
@@ -6354,6 +6408,373 @@ class MessageRowAssignmentsCompanion
   }
 }
 
+class $RowPrefsTable extends RowPrefs with TableInfo<$RowPrefsTable, RowPref> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RowPrefsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _rowKeyMeta = const VerificationMeta('rowKey');
+  @override
+  late final GeneratedColumn<String> rowKey = GeneratedColumn<String>(
+    'row_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
+  @override
+  late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
+    'pinned',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("pinned" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _mutedMeta = const VerificationMeta('muted');
+  @override
+  late final GeneratedColumn<bool> muted = GeneratedColumn<bool>(
+    'muted',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("muted" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _snoozedUntilMeta = const VerificationMeta(
+    'snoozedUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> snoozedUntil = GeneratedColumn<DateTime>(
+    'snoozed_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    rowKey,
+    pinned,
+    muted,
+    snoozedUntil,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'row_prefs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RowPref> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('row_key')) {
+      context.handle(
+        _rowKeyMeta,
+        rowKey.isAcceptableOrUnknown(data['row_key']!, _rowKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_rowKeyMeta);
+    }
+    if (data.containsKey('pinned')) {
+      context.handle(
+        _pinnedMeta,
+        pinned.isAcceptableOrUnknown(data['pinned']!, _pinnedMeta),
+      );
+    }
+    if (data.containsKey('muted')) {
+      context.handle(
+        _mutedMeta,
+        muted.isAcceptableOrUnknown(data['muted']!, _mutedMeta),
+      );
+    }
+    if (data.containsKey('snoozed_until')) {
+      context.handle(
+        _snoozedUntilMeta,
+        snoozedUntil.isAcceptableOrUnknown(
+          data['snoozed_until']!,
+          _snoozedUntilMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {rowKey};
+  @override
+  RowPref map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RowPref(
+      rowKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}row_key'],
+      )!,
+      pinned: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}pinned'],
+      )!,
+      muted: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}muted'],
+      )!,
+      snoozedUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}snoozed_until'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $RowPrefsTable createAlias(String alias) {
+    return $RowPrefsTable(attachedDatabase, alias);
+  }
+}
+
+class RowPref extends DataClass implements Insertable<RowPref> {
+  final String rowKey;
+  final bool pinned;
+  final bool muted;
+  final DateTime? snoozedUntil;
+  final DateTime updatedAt;
+  const RowPref({
+    required this.rowKey,
+    required this.pinned,
+    required this.muted,
+    this.snoozedUntil,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['row_key'] = Variable<String>(rowKey);
+    map['pinned'] = Variable<bool>(pinned);
+    map['muted'] = Variable<bool>(muted);
+    if (!nullToAbsent || snoozedUntil != null) {
+      map['snoozed_until'] = Variable<DateTime>(snoozedUntil);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  RowPrefsCompanion toCompanion(bool nullToAbsent) {
+    return RowPrefsCompanion(
+      rowKey: Value(rowKey),
+      pinned: Value(pinned),
+      muted: Value(muted),
+      snoozedUntil: snoozedUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(snoozedUntil),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory RowPref.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RowPref(
+      rowKey: serializer.fromJson<String>(json['rowKey']),
+      pinned: serializer.fromJson<bool>(json['pinned']),
+      muted: serializer.fromJson<bool>(json['muted']),
+      snoozedUntil: serializer.fromJson<DateTime?>(json['snoozedUntil']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'rowKey': serializer.toJson<String>(rowKey),
+      'pinned': serializer.toJson<bool>(pinned),
+      'muted': serializer.toJson<bool>(muted),
+      'snoozedUntil': serializer.toJson<DateTime?>(snoozedUntil),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  RowPref copyWith({
+    String? rowKey,
+    bool? pinned,
+    bool? muted,
+    Value<DateTime?> snoozedUntil = const Value.absent(),
+    DateTime? updatedAt,
+  }) => RowPref(
+    rowKey: rowKey ?? this.rowKey,
+    pinned: pinned ?? this.pinned,
+    muted: muted ?? this.muted,
+    snoozedUntil: snoozedUntil.present ? snoozedUntil.value : this.snoozedUntil,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  RowPref copyWithCompanion(RowPrefsCompanion data) {
+    return RowPref(
+      rowKey: data.rowKey.present ? data.rowKey.value : this.rowKey,
+      pinned: data.pinned.present ? data.pinned.value : this.pinned,
+      muted: data.muted.present ? data.muted.value : this.muted,
+      snoozedUntil: data.snoozedUntil.present
+          ? data.snoozedUntil.value
+          : this.snoozedUntil,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RowPref(')
+          ..write('rowKey: $rowKey, ')
+          ..write('pinned: $pinned, ')
+          ..write('muted: $muted, ')
+          ..write('snoozedUntil: $snoozedUntil, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(rowKey, pinned, muted, snoozedUntil, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RowPref &&
+          other.rowKey == this.rowKey &&
+          other.pinned == this.pinned &&
+          other.muted == this.muted &&
+          other.snoozedUntil == this.snoozedUntil &&
+          other.updatedAt == this.updatedAt);
+}
+
+class RowPrefsCompanion extends UpdateCompanion<RowPref> {
+  final Value<String> rowKey;
+  final Value<bool> pinned;
+  final Value<bool> muted;
+  final Value<DateTime?> snoozedUntil;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const RowPrefsCompanion({
+    this.rowKey = const Value.absent(),
+    this.pinned = const Value.absent(),
+    this.muted = const Value.absent(),
+    this.snoozedUntil = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RowPrefsCompanion.insert({
+    required String rowKey,
+    this.pinned = const Value.absent(),
+    this.muted = const Value.absent(),
+    this.snoozedUntil = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : rowKey = Value(rowKey);
+  static Insertable<RowPref> custom({
+    Expression<String>? rowKey,
+    Expression<bool>? pinned,
+    Expression<bool>? muted,
+    Expression<DateTime>? snoozedUntil,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (rowKey != null) 'row_key': rowKey,
+      if (pinned != null) 'pinned': pinned,
+      if (muted != null) 'muted': muted,
+      if (snoozedUntil != null) 'snoozed_until': snoozedUntil,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RowPrefsCompanion copyWith({
+    Value<String>? rowKey,
+    Value<bool>? pinned,
+    Value<bool>? muted,
+    Value<DateTime?>? snoozedUntil,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return RowPrefsCompanion(
+      rowKey: rowKey ?? this.rowKey,
+      pinned: pinned ?? this.pinned,
+      muted: muted ?? this.muted,
+      snoozedUntil: snoozedUntil ?? this.snoozedUntil,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (rowKey.present) {
+      map['row_key'] = Variable<String>(rowKey.value);
+    }
+    if (pinned.present) {
+      map['pinned'] = Variable<bool>(pinned.value);
+    }
+    if (muted.present) {
+      map['muted'] = Variable<bool>(muted.value);
+    }
+    if (snoozedUntil.present) {
+      map['snoozed_until'] = Variable<DateTime>(snoozedUntil.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RowPrefsCompanion(')
+          ..write('rowKey: $rowKey, ')
+          ..write('pinned: $pinned, ')
+          ..write('muted: $muted, ')
+          ..write('snoozedUntil: $snoozedUntil, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6373,6 +6794,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $GroupMembersTable groupMembers = $GroupMembersTable(this);
   late final $MessageRowAssignmentsTable messageRowAssignments =
       $MessageRowAssignmentsTable(this);
+  late final $RowPrefsTable rowPrefs = $RowPrefsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6390,6 +6812,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     peopleGroups,
     groupMembers,
     messageRowAssignments,
+    rowPrefs,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -7364,6 +7787,7 @@ typedef $$IdentitiesTableCreateCompanionBuilder = IdentitiesCompanion Function({
   Value<int?> smtpPort,
   Value<String?> smtpSecurity,
   Value<bool> isDefault,
+  Value<bool> discovered,
 });
 typedef $$IdentitiesTableUpdateCompanionBuilder = IdentitiesCompanion Function({
   Value<int> id,
@@ -7375,6 +7799,7 @@ typedef $$IdentitiesTableUpdateCompanionBuilder = IdentitiesCompanion Function({
   Value<int?> smtpPort,
   Value<String?> smtpSecurity,
   Value<bool> isDefault,
+  Value<bool> discovered,
 });
 
 final class $$IdentitiesTableReferences
@@ -7445,6 +7870,11 @@ class $$IdentitiesTableFilterComposer
 
   ColumnFilters<bool> get isDefault => $composableBuilder(
     column: $table.isDefault,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get discovered => $composableBuilder(
+    column: $table.discovered,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7521,6 +7951,11 @@ class $$IdentitiesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get discovered => $composableBuilder(
+    column: $table.discovered,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$AccountsTableOrderingComposer get accountId {
     final $$AccountsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -7579,6 +8014,11 @@ class $$IdentitiesTableAnnotationComposer
 
   GeneratedColumn<bool> get isDefault =>
       $composableBuilder(column: $table.isDefault, builder: (column) => column);
+
+  GeneratedColumn<bool> get discovered => $composableBuilder(
+    column: $table.discovered,
+    builder: (column) => column,
+  );
 
   $$AccountsTableAnnotationComposer get accountId {
     final $$AccountsTableAnnotationComposer composer = $composerBuilder(
@@ -7641,6 +8081,7 @@ class $$IdentitiesTableTableManager
                 Value<int?> smtpPort = const Value.absent(),
                 Value<String?> smtpSecurity = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
+                Value<bool> discovered = const Value.absent(),
               }) => IdentitiesCompanion(
                 id: id,
                 accountId: accountId,
@@ -7651,6 +8092,7 @@ class $$IdentitiesTableTableManager
                 smtpPort: smtpPort,
                 smtpSecurity: smtpSecurity,
                 isDefault: isDefault,
+                discovered: discovered,
               ),
           createCompanionCallback:
               ({
@@ -7663,6 +8105,7 @@ class $$IdentitiesTableTableManager
                 Value<int?> smtpPort = const Value.absent(),
                 Value<String?> smtpSecurity = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
+                Value<bool> discovered = const Value.absent(),
               }) => IdentitiesCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -7673,6 +8116,7 @@ class $$IdentitiesTableTableManager
                 smtpPort: smtpPort,
                 smtpSecurity: smtpSecurity,
                 isDefault: isDefault,
+                discovered: discovered,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -11571,6 +12015,209 @@ typedef $$MessageRowAssignmentsTableProcessedTableManager =
       MessageRowAssignment,
       PrefetchHooks Function({bool messageId})
     >;
+typedef $$RowPrefsTableCreateCompanionBuilder = RowPrefsCompanion Function({
+  required String rowKey,
+  Value<bool> pinned,
+  Value<bool> muted,
+  Value<DateTime?> snoozedUntil,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+typedef $$RowPrefsTableUpdateCompanionBuilder = RowPrefsCompanion Function({
+  Value<String> rowKey,
+  Value<bool> pinned,
+  Value<bool> muted,
+  Value<DateTime?> snoozedUntil,
+  Value<DateTime> updatedAt,
+  Value<int> rowid,
+});
+
+class $$RowPrefsTableFilterComposer
+    extends Composer<_$AppDatabase, $RowPrefsTable> {
+  $$RowPrefsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get rowKey => $composableBuilder(
+    column: $table.rowKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get muted => $composableBuilder(
+    column: $table.muted,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get snoozedUntil => $composableBuilder(
+    column: $table.snoozedUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RowPrefsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RowPrefsTable> {
+  $$RowPrefsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get rowKey => $composableBuilder(
+    column: $table.rowKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get pinned => $composableBuilder(
+    column: $table.pinned,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get muted => $composableBuilder(
+    column: $table.muted,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get snoozedUntil => $composableBuilder(
+    column: $table.snoozedUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RowPrefsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RowPrefsTable> {
+  $$RowPrefsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get rowKey =>
+      $composableBuilder(column: $table.rowKey, builder: (column) => column);
+
+  GeneratedColumn<bool> get pinned =>
+      $composableBuilder(column: $table.pinned, builder: (column) => column);
+
+  GeneratedColumn<bool> get muted =>
+      $composableBuilder(column: $table.muted, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get snoozedUntil => $composableBuilder(
+    column: $table.snoozedUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$RowPrefsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RowPrefsTable,
+          RowPref,
+          $$RowPrefsTableFilterComposer,
+          $$RowPrefsTableOrderingComposer,
+          $$RowPrefsTableAnnotationComposer,
+          $$RowPrefsTableCreateCompanionBuilder,
+          $$RowPrefsTableUpdateCompanionBuilder,
+          (RowPref, BaseReferences<_$AppDatabase, $RowPrefsTable, RowPref>),
+          RowPref,
+          PrefetchHooks Function()
+        > {
+  $$RowPrefsTableTableManager(_$AppDatabase db, $RowPrefsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RowPrefsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RowPrefsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$RowPrefsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> rowKey = const Value.absent(),
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> muted = const Value.absent(),
+                Value<DateTime?> snoozedUntil = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RowPrefsCompanion(
+                rowKey: rowKey,
+                pinned: pinned,
+                muted: muted,
+                snoozedUntil: snoozedUntil,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String rowKey,
+                Value<bool> pinned = const Value.absent(),
+                Value<bool> muted = const Value.absent(),
+                Value<DateTime?> snoozedUntil = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RowPrefsCompanion.insert(
+                rowKey: rowKey,
+                pinned: pinned,
+                muted: muted,
+                snoozedUntil: snoozedUntil,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RowPrefsTable, RowPref>(table),
+                  BaseReferences<_$AppDatabase, $RowPrefsTable, RowPref>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RowPrefsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RowPrefsTable,
+      RowPref,
+      $$RowPrefsTableFilterComposer,
+      $$RowPrefsTableOrderingComposer,
+      $$RowPrefsTableAnnotationComposer,
+      $$RowPrefsTableCreateCompanionBuilder,
+      $$RowPrefsTableUpdateCompanionBuilder,
+      (RowPref, BaseReferences<_$AppDatabase, $RowPrefsTable, RowPref>),
+      RowPref,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -11599,4 +12246,6 @@ class $AppDatabaseManager {
       $$GroupMembersTableTableManager(_db, _db.groupMembers);
   $$MessageRowAssignmentsTableTableManager get messageRowAssignments =>
       $$MessageRowAssignmentsTableTableManager(_db, _db.messageRowAssignments);
+  $$RowPrefsTableTableManager get rowPrefs =>
+      $$RowPrefsTableTableManager(_db, _db.rowPrefs);
 }

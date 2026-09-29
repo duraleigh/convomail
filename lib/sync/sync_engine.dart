@@ -116,6 +116,15 @@ class AccountSyncer {
         _emit(_status.copyWith(phase: SyncPhase.syncingFolder, folderPath: folder.path, folderDone: done, folderTotal: targets.length));
         await syncFolder(folder.id);
         done++;
+        if (_roleOf(folder) == FolderRole.sent) {
+          // Learn "send as" aliases from what the user actually sent, then
+          // re-file everything that was attributed to those addresses.
+          final added = await db.discoverIdentitiesFromSent(account.id, folder.id);
+          if (added > 0) {
+            _emit(_status.copyWith(message: 'found $added sending identit${added == 1 ? 'y' : 'ies'}, re-filing'));
+            await db.refileAccount(account.id);
+          }
+        }
       }
       await db.setAccountSyncResult(account.id);
       _consecutiveFailures = 0;

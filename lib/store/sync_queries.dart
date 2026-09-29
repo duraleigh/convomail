@@ -33,6 +33,76 @@ extension SyncQueries on AppDatabase {
 
   Future<FilingRule> loadFilingRule() async => FilingRule(await loadIdentityResolver(), groups: await loadGroupDefinitions());
 
+  /// Every From address in the account's Sent folder was written by the
+  /// user (Gmail "send as" aliases, custom domains). Adds any not yet known
+  /// as identities and returns how many were new (spec 4.1 aliases).
+  Future<int> discoverIdentitiesFromSent(int accountId, int sentFolderId) async {
+    final known = <String>{};
+    final acct = await accountById(accountId);
+    if (acct != null) known.add(normalizeAddress(acct.email));
+    for (final i in await (select(identities)..where((i) => i.accountId.equals(accountId))).get()) {
+      known.add(normalizeAddress(i.email));
+    }
+    final fromQuery = selectOnly(messages, distinct: true)
+      ..addColumns([messages.fromAddress, messages.fromName])
+      ..where(messages.folderId.equals(sentFolderId) & messages.fromAddress.isNotValue(''));
+    var added = 0;
+    for (final row in await fromQuery.get()) {
+      final address = normalizeAddress(row.read(messages.fromAddress)!);
+      if (known.contains(address)) continue;
+      known.add(address);
+      await into(identities).insert(IdentitiesCompanion.insert(
+        accountId: accountId,
+        email: address,
+        name: Value(row.read(messages.fromName) ?? ''),
+        discovered: const Value(true),
+      ));
+      added++;
+    }
+    return added;
+  }
+
+  /// Recomputes identity resolution and filing for every message of an
+  /// account. Run when the set of "me" addresses or groups changes.
+  Future<void> refileAccount(int accountId) async {
+    final filing = await loadFilingRule();
+    final identity = filing.identity;
+    await transaction(() async {
+      final msgs = await (select(messages)..where((m) => m.accountId.equals(accountId))).get();
+      for (final m in msgs) {
+        final parts = await (select(messageParticipants)..where((p) => p.messageId.equals(m.id))).get();
+        final to = <String>[];
+        final cc = <String>[];
+        for (final part in parts) {
+          final r = identity.resolve(part.address);
+          if (r.contactKey != part.contactKey || r.isMe != part.isMe) {
+            await (update(messageParticipants)..where((p) => p.id.equals(part.id))).write(MessageParticipantsCompanion(contactKey: Value(r.contactKey), isMe: Value(r.isMe)));
+          }
+          if (part.role == 'to') to.add(part.address);
+          if (part.role == 'cc') cc.add(part.address);
+        }
+        final sender = identity.resolve(m.fromAddress);
+        if (sender.contactKey != m.fromContactKey || sender.isMe != m.isFromMe) {
+          await (update(messages)..where((x) => x.id.equals(m.id))).write(MessagesCompanion(fromContactKey: Value(sender.contactKey), isFromMe: Value(sender.isMe)));
+        }
+        final filed = filing.file(MessageEnvelope(from: m.fromAddress, to: to, cc: cc));
+        final current = (await (select(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).get()).map((r) => r.rowKey).toSet();
+        final wanted = filed.rows.map((r) => r.key).toSet();
+        if (current.length != wanted.length || !current.containsAll(wanted)) {
+          await (delete(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).go();
+          for (final key in wanted) {
+            await into(messageRowAssignments).insert(MessageRowAssignmentsCompanion.insert(messageId: m.id, rowKey: key), mode: InsertMode.insertOrIgnore);
+          }
+        }
+      }
+      // Contacts that turned out to be the user are not people.
+      for (final address in identity.myAddresses) {
+        await (delete(contacts)..where((c) => c.key.equals(address))).go();
+        await (delete(contactAddresses)..where((c) => c.address.equals(address))).go();
+      }
+    });
+  }
+
   // ---- folders ---------------------------------------------------------------
 
   /// Inserts new folders, updates names/roles of known ones, and removes
