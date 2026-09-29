@@ -6,6 +6,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
+import 'package:sqlite3/sqlite3.dart' as sqlite;
 
 import 'settings_store.dart';
 
@@ -396,23 +397,58 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   /// once so synced mail is not lost.
   static Future<String> databasePath() async {
     final support = await getApplicationSupportDirectory();
+    Directory? documents;
+    try {
+      documents = await getApplicationDocumentsDirectory();
+    } catch (_) {}
+    return resolveDatabasePath(support: support, documents: documents);
+  }
+
+  /// Pure part of [databasePath], testable with temp directories.
+  ///
+  /// Moves `documents/convomail.sqlite` to `support/convomail.sqlite` when
+  /// the target is missing, or when the target exists but holds no accounts
+  /// (a blank file created while the legacy one was still locked by an
+  /// older running instance).
+  static Future<String> resolveDatabasePath({required Directory support, required Directory? documents}) async {
     final target = p.join(support.path, 'convomail.sqlite');
-    if (!File(target).existsSync()) {
-      try {
-        final documents = await getApplicationDocumentsDirectory();
-        final legacy = p.join(documents.path, 'convomail.sqlite');
-        if (File(legacy).existsSync()) {
-          await support.create(recursive: true);
-          for (final suffix in ['', '-wal', '-shm', '-journal']) {
-            final f = File('$legacy$suffix');
-            if (f.existsSync()) await f.rename('$target$suffix');
-          }
-        }
-      } catch (_) {
-        // Fall through: a fresh database is created at the new location.
+    final legacy = documents == null ? null : p.join(documents.path, 'convomail.sqlite');
+    if (legacy == null || !File(legacy).existsSync()) return target;
+    try {
+      final targetExists = File(target).existsSync();
+      if (targetExists && !_isEmptyDatabase(target)) return target;
+      if (!_hasAccounts(legacy)) return target;
+      await support.create(recursive: true);
+      for (final suffix in ['', '-wal', '-shm', '-journal']) {
+        final t = File('$target$suffix');
+        if (t.existsSync()) await t.delete();
+        final f = File('$legacy$suffix');
+        if (f.existsSync()) await f.rename('$target$suffix');
       }
+    } catch (_) {
+      // Locked or unreadable: keep using the target; retried next launch.
     }
     return target;
+  }
+
+  static bool _isEmptyDatabase(String path) => !_hasAccounts(path);
+
+  /// True when the file is a readable SQLite database with at least one
+  /// account. Unreadable/locked files count as "has accounts" so they are
+  /// never deleted.
+  static bool _hasAccounts(String path) {
+    sqlite.Database? db;
+    try {
+      db = sqlite.sqlite3.open(path, mode: sqlite.OpenMode.readOnly);
+      final hasTable = db.select("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'accounts'").isNotEmpty;
+      if (!hasTable) return false;
+      final n = db.select('SELECT COUNT(*) AS n FROM accounts').first['n'] as int;
+      return n > 0;
+    } catch (_) {
+      return true;
+    } finally {
+      db?.close();
+    }
   }
 
   @override
