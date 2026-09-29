@@ -59,8 +59,14 @@ class SyncController {
       transport: _ref.read(transportFactoryProvider)(),
       account: account,
       credentials: () async {
-        final pw = await store.read(CredentialStore.passwordKey(account.id));
-        if (pw == null) throw const MailTransportException('No saved password for this account.', isAuthFailure: true);
+        // Brief grace period: the credential write and the accounts stream
+        // can race by a few milliseconds on a fresh account.
+        String? pw;
+        for (var attempt = 0; attempt < 5 && pw == null; attempt++) {
+          pw = await store.read(CredentialStore.passwordKey(account.id));
+          if (pw == null) await Future<void>.delayed(const Duration(milliseconds: 300));
+        }
+        if (pw == null) throw const MailTransportException('No saved password for this account. Remove it and add it again.', isAuthFailure: true);
         return MailCredentials(username: account.username, password: pw);
       },
       onStatus: (s) => _ref.read(syncStatusProvider.notifier).put(s),
@@ -77,6 +83,14 @@ class SyncController {
   }
 
   AccountSyncer? syncerFor(int accountId) => _syncers[accountId];
+
+  /// Stops and restarts one account's syncer, e.g. after an error or a
+  /// password change.
+  Future<void> restartAccount(int accountId) async {
+    await _stopAccount(accountId);
+    final account = await _db.accountById(accountId);
+    if (account != null && account.enabled) _startAccount(account);
+  }
 
   Future<void> dispose() async {
     await _sub?.cancel();

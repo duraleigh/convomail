@@ -94,6 +94,12 @@ class _AccountTile extends ConsumerWidget {
         children: [
           if (status?.phase == SyncPhase.syncingFolder || status?.phase == SyncPhase.connecting || status?.phase == SyncPhase.listingFolders)
             const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+          if (status == null || status?.phase == SyncPhase.error || status?.phase == SyncPhase.stopped)
+            IconButton(
+              tooltip: 'Sync now',
+              icon: const Icon(Icons.sync_rounded),
+              onPressed: () => ref.read(syncControllerProvider).restartAccount(account.id),
+            ),
           IconButton(
             tooltip: 'Remove account',
             icon: const Icon(Icons.delete_outline_rounded),

@@ -105,21 +105,26 @@ class AccountSetupService {
   /// Persists the account and stores the password in the credential store.
   /// Returns the new account id.
   Future<int> save(AccountProposal p, String password, {String displayName = ''}) async {
-    final id = await db.into(db.accounts).insert(AccountsCompanion.insert(
-          email: p.email,
-          displayName: Value(displayName),
-          imapHost: p.imap.host,
-          imapPort: p.imap.port,
-          imapSecurity: p.imap.security.name,
-          smtpHost: p.smtp.host,
-          smtpPort: p.smtp.port,
-          smtpSecurity: p.smtp.security.name,
-          username: p.username,
-          providerId: Value(p.providerId),
-        ));
-    await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: id, email: p.email, name: Value(displayName), isDefault: const Value(true)));
-    await credentials.write(CredentialStore.passwordKey(id), password);
-    return id;
+    // The password is written inside the transaction so that, by the time
+    // the accounts stream fires on commit and the sync controller starts a
+    // syncer for the new row, the credential is already readable.
+    return db.transaction(() async {
+      final id = await db.into(db.accounts).insert(AccountsCompanion.insert(
+            email: p.email,
+            displayName: Value(displayName),
+            imapHost: p.imap.host,
+            imapPort: p.imap.port,
+            imapSecurity: p.imap.security.name,
+            smtpHost: p.smtp.host,
+            smtpPort: p.smtp.port,
+            smtpSecurity: p.smtp.security.name,
+            username: p.username,
+            providerId: Value(p.providerId),
+          ));
+      await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: id, email: p.email, name: Value(displayName), isDefault: const Value(true)));
+      await credentials.write(CredentialStore.passwordKey(id), password);
+      return id;
+    });
   }
 
   Future<void> remove(int accountId) async {
