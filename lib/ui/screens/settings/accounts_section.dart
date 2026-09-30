@@ -11,6 +11,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import '../../widgets/wavy_progress.dart';
+import 'signatures_section.dart';
 
 final accountsStreamProvider = StreamProvider<List<Account>>((ref) => ref.watch(databaseProvider).watchAccounts());
 
@@ -70,6 +71,7 @@ class _AccountsDetailState extends ConsumerState<AccountsDetail> {
           )
         else
           _AddAccountPanel(onClose: () => setState(() => _adding = false)),
+        SignaturesSection(accounts: accounts.value ?? const []),
       ],
     );
   }

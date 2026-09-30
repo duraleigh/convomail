@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:window_manager/window_manager.dart';
 
 import 'app/bench.dart';
+import 'app/compose_state.dart';
 import 'app/destinations.dart';
 import 'app/people_state.dart';
 import 'app/settings.dart';
@@ -31,6 +32,11 @@ class StartupArgs {
   bool get openFirst => _openFirst;
   static bool _openFirst = false;
 
+  /// `--compose` opens the new-message pane; `--reply` (with `--open-first`)
+  /// opens the inline reply on the first row.
+  static bool _compose = false;
+  static bool _reply = false;
+
   static StartupArgs parse(List<String> args) {
     Destination? destination;
     InboxMode? inbox;
@@ -47,6 +53,11 @@ class StartupArgs {
         destination = Destination.settings;
       } else if (a == '--open-first') {
         _openFirst = true;
+      } else if (a == '--compose') {
+        _compose = true;
+      } else if (a == '--reply') {
+        _reply = true;
+        _openFirst = true;
       }
     }
     return StartupArgs(destination: destination, inbox: inbox, addAccount: addAccount);
@@ -57,6 +68,8 @@ class StartupArgs {
         if (inbox != null) inboxModeProvider.overrideWith(() => InboxModeNotifier(initial: inbox)),
         if (addAccount) settingsAddAccountRequestProvider.overrideWith(() => AddAccountRequestNotifier(initial: true)),
         if (_openFirst) autoOpenFirstProvider.overrideWith((ref) => true),
+        if (_compose) autoComposeProvider.overrideWith((ref) => true),
+        if (_reply) autoReplyProvider.overrideWith((ref) => true),
       ];
 }
 

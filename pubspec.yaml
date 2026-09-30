@@ -39,7 +39,7 @@ dependencies:
   drift_flutter: ^0.3.1
   window_manager: ^0.5.2
   enough_mail: ^2.1.7
-  win32: ^6.4.0
+  win32: ^5.15.0
   ffi: ^2.2.0
   path_provider: ^2.1.6
   path: ^1.9.1
@@ -47,6 +47,16 @@ dependencies:
   webview_windows: ^0.4.0
   url_launcher: ^6.3.2
   sqlite3: ^3.6.0
+  appflowy_editor: ^6.2.0
+  file_selector: ^1.1.0
+  desktop_drop: ^0.8.4
+  pasteboard: ^0.5.0
+dependency_overrides:
+  # 6.2.0 predates Flutter 3.47's TextInputClient.onFocusReceived; see
+  # third_party/appflowy_editor/PATCHES.md for the one-line fix.
+  appflowy_editor:
+    path: third_party/appflowy_editor
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

@@ -14,8 +14,9 @@ Visual reference: `docs/email-client-visual-mockups.html`.
 | M1 Accounts, credentials, sync | **Done** (2026-09-29) | Data model, identity resolution, filing, IMAP transport, sync engine with IDLE, Credential Manager storage, account setup screen, send-as alias discovery. Verified against the owner's Gmail (11k messages) and a local pymap server. |
 | M2 People list & filing | **Done** (2026-09-29) | Grouped People list with filters, search, pin, hover/context actions, keyboard nav; archive/trash/mark-read with undo and selective keep; trigger-maintained summary table. Release benchmark: 240 ms median list over 50k messages / 5k senders (`--bench-people`). |
 | M3 Conversation & threading | **Done** (2026-09-29) | Hybrid threading (headers → provider id → subject fallback), conversation pane with day groups and thread cards, cross-participant thread overlay, HTML sanitizer with remote-image blocking, tracker log and privacy stats, WebView2 rendering with CSP and link interception, Settings → Privacy. |
-| M4 Compose & send | Next | |
-| M4–M12 | Planned | See `docs/email-client-windows-dev-plan.md` section 2 |
+| M4 Compose & send | **Done** (2026-09-29) | Block editor (appflowy_editor, vendored with a one-line Flutter 3.47 patch) with floating M3 toolbar, inline images and pasted screenshots, drag-and-drop and picked attachments; From/To/Cc/Bcc with contact autocomplete; signatures per identity in Settings; inline reply / reply-all / forward with quoted original, right-pane new message; drafts autosave and resume; SMTP send with wavy progress, Sent-copy APPEND for servers that need it, answered flag, thread continuity. Not yet verified against Gmail web / Outlook / Apple Mail rendering (needs a real send from the owner's account). |
+| M5 Attachments | Next | |
+| M5–M12 | Planned | See `docs/email-client-windows-dev-plan.md` section 2 |
 
 Run with `--destination=<chats|boards|planner|settings>` or `--inbox=<people|feeds>` to open on a given screen.
 

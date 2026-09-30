@@ -35,8 +35,10 @@ abstract final class AppShortcuts {
     ('Ctrl+1 … Ctrl+4', 'Switch to Chats, Boards, Planner, Settings'),
     ('Ctrl+N', 'New message'),
     ('Ctrl+F or /', 'Search'),
-    ('R / Shift+R / F', 'Reply / Reply all / Forward (M3)'),
-    ('E / Del / S', 'Archive / Delete / Snooze (M2)'),
+    ('R / Shift+R / F', 'Reply / Reply all / Forward the selected conversation'),
+    ('Ctrl+Enter', 'Send the message being composed'),
+    ('Esc', 'Close the composer (the draft is kept)'),
+    ('E / Del / P', 'Archive / Delete / Pin the selected row'),
   ];
 }
 

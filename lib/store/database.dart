@@ -271,6 +271,35 @@ class MessageRowAssignments extends Table {
   Set<Column> get primaryKey => {messageId, rowKey};
 }
 
+/// Compose drafts (spec 4.4 autosave). One row per open composition; a
+/// reply draft is keyed by the row it belongs to so it comes back when the
+/// conversation is reopened.
+class Drafts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get accountId => integer().references(Accounts, #id, onDelete: KeyAction.cascade)();
+  IntColumn get identityId => integer().nullable()();
+
+  /// `new`, `reply`, `replyAll`, or `forward`.
+  TextColumn get kind => text().withDefault(const Constant('new'))();
+
+  /// People-list row the composer was opened from (replies/forwards).
+  TextColumn get rowKey => text().nullable()();
+
+  /// Local id of the message being replied to / forwarded.
+  IntColumn get inReplyToMessageId => integer().nullable()();
+  TextColumn get recipientsTo => text().withDefault(const Constant('[]'))();
+  TextColumn get recipientsCc => text().withDefault(const Constant('[]'))();
+  TextColumn get recipientsBcc => text().withDefault(const Constant('[]'))();
+  TextColumn get subject => text().withDefault(const Constant(''))();
+
+  /// Editor document (appflowy JSON) so formatting survives a restart.
+  TextColumn get bodyJson => text().nullable()();
+  TextColumn get bodyHtml => text().withDefault(const Constant(''))();
+  TextColumn get attachmentsJson => text().withDefault(const Constant('[]'))();
+  BoolColumn get includeQuote => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 // ---------------------------------------------------------------------------
 
 @DriftDatabase(tables: [
@@ -290,6 +319,7 @@ class MessageRowAssignments extends Table {
   RowSummaries,
   DirtyRows,
   TrackerEvents,
+  Drafts,
 ])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
@@ -298,7 +328,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -345,6 +375,10 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await customStatement('CREATE INDEX IF NOT EXISTS idx_tracker_message ON tracker_events(message_id)');
             // thread_key stays null; ThreadQueries.rebuildAllThreads runs on
             // the first conversation open / sync after this migration.
+          }
+          if (from < 6) {
+            await m.createTable(drafts);
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_drafts_row ON drafts(row_key)');
           }
         },
         beforeOpen: (details) async {

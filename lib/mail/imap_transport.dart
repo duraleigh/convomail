@@ -134,13 +134,15 @@ class ImapTransport implements MailTransport {
     for (final m in result.messages) {
       final uid = m.uid;
       if (uid == null) continue;
-      out.add(_toHeader(uid, m));
+      out.add(headerFromMime(uid, m));
     }
     out.sort((a, b) => a.uid.compareTo(b.uid));
     return out;
   }
 
-  static RemoteMessageHeader _toHeader(int uid, MimeMessage m) {
+  /// Header-level view of a parsed MIME message. Public so the test fake
+  /// can accept appended messages the same way a server would.
+  static RemoteMessageHeader headerFromMime(int uid, MimeMessage m) {
     final from = m.from?.firstOrNull ?? m.sender;
     return RemoteMessageHeader(
       uid: uid,
@@ -217,6 +219,11 @@ class ImapTransport implements MailTransport {
     final result = await _c.uidFetchMessage(uid, 'BODY.PEEK[]');
     final m = result.messages.firstOrNull;
     if (m == null) throw MailTransportException('Message $uid not found on server');
+    return bodyFromMime(m);
+  }
+
+  /// Body and attachment list of a parsed MIME message.
+  static RemoteMessageBody bodyFromMime(MimeMessage m) {
     final attachments = <RemoteAttachment>[];
     for (final info in m.findContentInfo(disposition: ContentDisposition.attachment)) {
       attachments.add(RemoteAttachment(
@@ -339,10 +346,13 @@ class ImapTransport implements MailTransport {
   /// Appends a raw RFC 822 message to a folder. Used by integration tests to
   /// simulate mail arriving from elsewhere; the app's own sending goes
   /// through SMTP and the server's Sent folder in milestone 4.
-  Future<void> appendForTest(String folderPath, String rawMessage) async {
+  Future<void> appendForTest(String folderPath, String rawMessage) => appendMessage(folderPath, rawMessage, seen: false);
+
+  @override
+  Future<void> appendMessage(String folderPath, String rawMessage, {bool seen = true}) async {
     final box = await _c.selectMailboxByPath(folderPath);
     _selected = box;
-    await _c.appendMessageText(rawMessage, targetMailbox: box);
+    await _c.appendMessageText(rawMessage, targetMailbox: box, flags: seen ? [MessageFlags.seen] : null);
   }
 
   void _requireSelected() {

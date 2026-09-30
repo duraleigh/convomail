@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/compose_state.dart';
 import '../../app/destinations.dart';
 import '../../app/shortcuts.dart';
 import '../screens/boards_screen.dart';
@@ -15,13 +16,22 @@ import '../widgets/tonal_avatar.dart';
 class AppShell extends ConsumerWidget {
   const AppShell({super.key});
 
+  static bool _autoComposed = false;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final destination = ref.watch(destinationProvider);
     final scheme = Theme.of(context).colorScheme;
+    if (ref.read(autoComposeProvider) && !_autoComposed) {
+      _autoComposed = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(composeProvider.notifier).open());
+    }
 
     return AppShortcutScope(
-      onCompose: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Compose arrives in milestone 4'))),
+      onCompose: () {
+        ref.read(destinationProvider.notifier).select(Destination.chats);
+        ref.read(composeProvider.notifier).open();
+      },
       child: Scaffold(
         backgroundColor: scheme.surface,
         body: Row(

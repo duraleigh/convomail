@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/compose_state.dart';
 import '../../../app/destinations.dart';
 import '../../../app/people_state.dart';
 import '../../../app/settings_navigation.dart';
 import '../../../app/shortcuts.dart';
+import '../../../store/database.dart';
 import '../../../store/people_queries.dart';
 import '../../../sync/row_actions.dart';
 import '../../theme/tokens.dart';
@@ -54,6 +56,14 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     var i = rows.indexWhere((r) => r.rowKey == current);
     i = (i + delta).clamp(0, rows.length - 1);
     ref.read(selectedRowProvider.notifier).select(rows[i].rowKey);
+  }
+
+  /// R / Shift+R / F: open the inline composer on the row's newest message.
+  Future<void> _reply(PeopleRow row, {bool all = false, bool forward = false}) async {
+    final newest = (await ref.read(databaseProvider).messagesForRow(row.rowKey)).where((m) => !m.isDraft).firstOrNull;
+    if (newest == null || !mounted) return;
+    final n = ref.read(replyRequestProvider.notifier);
+    n.open(forward ? ComposeRequest.forward(newest.id, rowKey: row.rowKey) : ComposeRequest.reply(newest.id, rowKey: row.rowKey, all: all));
   }
 
   Future<void> _act(PeopleRow row, RowAction action) async {
@@ -194,6 +204,14 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   }
                   if (key == LogicalKeyboardKey.keyP) {
                     _act(current, RowAction.pin);
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.keyR) {
+                    _reply(current, all: HardwareKeyboard.instance.isShiftPressed);
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.keyF) {
+                    _reply(current, forward: true);
                     return KeyEventResult.handled;
                   }
                   return KeyEventResult.ignored;

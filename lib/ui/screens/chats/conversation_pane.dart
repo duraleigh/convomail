@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/people_state.dart';
 import '../../../store/database.dart';
@@ -9,6 +10,7 @@ import '../../../sync/row_actions.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/tonal_avatar.dart';
+import 'compose/reply_composer.dart';
 import 'message_card.dart';
 import 'people_list_pane.dart';
 import 'thread_view_panel.dart';
@@ -28,6 +30,9 @@ class ConversationPane extends ConsumerWidget {
     final row = rows.where((r) => r.rowKey == selectedKey).firstOrNull;
     final messages = ref.watch(selectedRowMessagesProvider);
     final openThread = ref.watch(openThreadProvider);
+    ref.listen(selectedRowProvider, (prev, next) {
+      if (prev != next) ref.read(replyRequestProvider.notifier).close();
+    });
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(4, 12, 12, 12),
@@ -78,7 +83,7 @@ class ConversationPane extends ConsumerWidget {
                               : _ThreadedList(messages: list),
                         ),
                       ),
-                      _ReplyBarPlaceholder(rowTitle: row?.title ?? ''),
+                      if (row != null) ReplyComposer(row: row, messages: messages.value ?? const []),
                     ],
                   ),
                   if (openThread != null) ThreadViewPanel(threadKey: openThread),
@@ -272,41 +277,6 @@ class _ThreadCard extends StatelessWidget {
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _ReplyBarPlaceholder extends StatelessWidget {
-  const _ReplyBarPlaceholder({required this.rowTitle});
-  final String rowTitle;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppShapes.full)),
-              alignment: Alignment.centerLeft,
-              child: Text('Reply to ${rowTitle.split(' ').first}… (compose arrives in milestone 4)', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(color: scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(AppShapes.lg)),
-            alignment: Alignment.center,
-            child: Icon(Icons.send_rounded, color: scheme.onSurfaceVariant),
-          ),
-        ],
       ),
     );
   }

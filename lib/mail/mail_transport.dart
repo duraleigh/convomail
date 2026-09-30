@@ -53,6 +53,10 @@ abstract interface class MailTransport {
   /// Creates a folder and returns its path.
   Future<String> createFolder(String name);
 
+  /// Appends a raw RFC 822 message to [folderPath] (IMAP APPEND). Used to
+  /// store a sent copy on servers that do not save one themselves.
+  Future<void> appendMessage(String folderPath, String rawMessage, {bool seen = true});
+
   /// Waits in IDLE on the selected folder until the server pushes something
   /// or [timeout] elapses (returns null on timeout).
   Future<MailboxEvent?> idle({required Duration timeout});

@@ -68,7 +68,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Saved: listed, password in the credential store, identity created.
-    expect(find.text('someone@gmail.com'), findsOneWidget);
+    expect(find.text('someone@gmail.com'), findsWidgets);
     final accounts = await db.allAccounts();
     expect(accounts.single.imapHost, 'imap.gmail.com');
     expect(accounts.single.providerId, 'gmail');

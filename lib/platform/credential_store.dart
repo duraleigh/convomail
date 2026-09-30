@@ -36,10 +36,11 @@ class WindowsCredentialStore implements CredentialStore {
     return using((arena) {
       final target = _target(key).toNativeUtf16(allocator: arena);
       final out = arena<Pointer<CREDENTIAL>>();
-      final result = CredRead(PCWSTR(target), CRED_TYPE_GENERIC, out);
-      if (!result.value) {
-        if (result.error == _errorNotFound) return null;
-        throw CredentialStoreException('CredRead failed (${result.error})');
+      final ok = CredRead(target, CRED_TYPE_GENERIC, 0, out) != 0;
+      if (!ok) {
+        final err = GetLastError();
+        if (err == _errorNotFound) return null;
+        throw CredentialStoreException('CredRead failed ($err)');
       }
       final cred = out.value;
       try {
@@ -62,26 +63,28 @@ class WindowsCredentialStore implements CredentialStore {
       final cred = arena<CREDENTIAL>();
       cred.ref
         ..Type = CRED_TYPE_GENERIC
-        ..TargetName = PWSTR(_target(key).toNativeUtf16(allocator: arena))
-        ..Comment = PWSTR('Stored by ConvoMail'.toNativeUtf16(allocator: arena))
+        ..TargetName = _target(key).toNativeUtf16(allocator: arena)
+        ..Comment = 'Stored by ConvoMail'.toNativeUtf16(allocator: arena)
         ..CredentialBlobSize = bytes.length
         ..CredentialBlob = blob
         ..Persist = CRED_PERSIST_LOCAL_MACHINE
-        ..UserName = PWSTR(key.toNativeUtf16(allocator: arena));
-      final result = CredWrite(cred, 0);
-      if (!result.value) throw CredentialStoreException('CredWrite failed (${result.error})');
+        ..UserName = key.toNativeUtf16(allocator: arena);
+      if (CredWrite(cred, 0) == 0) throw CredentialStoreException('CredWrite failed (${GetLastError()})');
     });
   }
 
   @override
   Future<void> delete(String key) async {
-    using((arena) {
+    final (ok, err) = using((arena) {
       final target = _target(key).toNativeUtf16(allocator: arena);
-      final result = CredDelete(PCWSTR(target), CRED_TYPE_GENERIC);
-      if (!result.value && result.error != _errorNotFound) {
-        throw CredentialStoreException('CredDelete failed (${result.error})');
-      }
+      final ok = CredDelete(target, CRED_TYPE_GENERIC, 0) != 0;
+      return (ok, ok ? 0 : GetLastError());
     });
+    if (ok || err == _errorNotFound) return;
+    // The error code can be stale by the time Dart reads it; the entry
+    // being gone is what matters.
+    if (await read(key) == null) return;
+    throw CredentialStoreException('CredDelete failed ($err)');
   }
 }
 

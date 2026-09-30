@@ -16,6 +16,7 @@ class ProviderProfile {
     required this.imap,
     required this.smtp,
     this.usesFullAddressAsUsername = true,
+    this.smtpSavesSentCopy = false,
     this.appPasswordHelp,
     this.appPasswordUrl,
   });
@@ -26,6 +27,10 @@ class ProviderProfile {
   final ServerConfig imap;
   final ServerConfig smtp;
   final bool usesFullAddressAsUsername;
+
+  /// True when the server files a copy of SMTP-sent mail in Sent itself
+  /// (Gmail, Outlook.com). Otherwise the app appends one over IMAP.
+  final bool smtpSavesSentCopy;
 
   /// Shown on the account setup screen so the user knows how to get a
   /// password that works with IMAP.
@@ -41,6 +46,7 @@ abstract final class ProviderProfiles {
       domains: ['gmail.com', 'googlemail.com'],
       imap: ServerConfig(host: 'imap.gmail.com', port: 993, security: ConnectionSecurity.ssl),
       smtp: ServerConfig(host: 'smtp.gmail.com', port: 465, security: ConnectionSecurity.ssl),
+      smtpSavesSentCopy: true,
       appPasswordHelp: 'Gmail needs an app password: turn on 2-Step Verification in your Google Account, then create an app password under Security → 2-Step Verification → App passwords.',
       appPasswordUrl: 'https://myaccount.google.com/apppasswords',
     ),
@@ -50,6 +56,7 @@ abstract final class ProviderProfiles {
       domains: ['outlook.com', 'hotmail.com', 'live.com', 'msn.com'],
       imap: ServerConfig(host: 'outlook.office365.com', port: 993, security: ConnectionSecurity.ssl),
       smtp: ServerConfig(host: 'smtp-mail.outlook.com', port: 587, security: ConnectionSecurity.starttls),
+      smtpSavesSentCopy: true,
       appPasswordHelp: 'Microsoft accounts no longer accept passwords over IMAP. Sign-in with Microsoft (OAuth) is planned for a later milestone.',
     ),
     ProviderProfile(

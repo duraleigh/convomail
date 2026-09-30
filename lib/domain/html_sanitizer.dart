@@ -21,10 +21,13 @@ class RemoteRef {
 }
 
 class SanitizedHtml {
-  const SanitizedHtml({required this.html, required this.remote, required this.allowedRemote});
+  const SanitizedHtml({required this.html, required this.remote, required this.allowedRemote, this.bodyInner = ''});
 
   /// A complete HTML document ready for the renderer.
   final String html;
+
+  /// The sanitized `<body>` contents alone, for quoting in replies.
+  final String bodyInner;
 
   /// Every remote reference found. Blocked when [allowedRemote] is false.
   final List<RemoteRef> remote;
@@ -108,7 +111,7 @@ class HtmlSanitizer {
     }
 
     final bodyInner = doc.body?.innerHtml ?? '';
-    return SanitizedHtml(html: _wrap(bodyInner, allowRemoteImages), remote: remote, allowedRemote: allowRemoteImages);
+    return SanitizedHtml(html: _wrap(bodyInner, allowRemoteImages), remote: remote, allowedRemote: allowRemoteImages, bodyInner: bodyInner);
   }
 
   void _handleImage(Element img, bool allow, List<RemoteRef> remote, String Function(String cid)? resolveCid) {

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/compose_state.dart';
 import '../shell/split_pane.dart';
 import '../theme/tokens.dart';
+import 'chats/compose/compose_pane.dart';
 import 'chats/conversation_pane.dart';
 import 'chats/people_list_pane.dart';
 
@@ -13,13 +15,14 @@ class ChatsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return const SplitPane(
+    final compose = ref.watch(composeProvider);
+    return SplitPane(
       initialLeftWidth: AppLayout.middlePaneDefault,
       minLeft: AppLayout.middlePaneMin,
       maxLeft: AppLayout.middlePaneMax,
       minRight: AppLayout.rightPaneMin,
-      left: PeopleListPane(),
-      right: ConversationPane(),
+      left: const PeopleListPane(),
+      right: compose == null ? const ConversationPane() : ComposePane(request: compose),
     );
   }
 }

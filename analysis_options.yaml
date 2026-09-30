@@ -6,6 +6,7 @@ analyzer:
     - "**/*.freezed.dart"
     - build/**
     - windows/**
+    - third_party/**
   language:
     strict-casts: true
     strict-inference: true

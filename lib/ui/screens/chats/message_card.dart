@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../store/database.dart';
 import '../../../sync/row_actions.dart';
@@ -90,8 +91,22 @@ class MessageCard extends ConsumerWidget {
         Divider(color: scheme.outlineVariant),
         Row(
           children: [
-            Tooltip(message: 'Reply arrives in milestone 4', child: TextButton.icon(onPressed: null, icon: const Icon(Icons.reply_rounded, size: 18), label: const Text('Reply'))),
-            Tooltip(message: 'Forward arrives in milestone 4', child: TextButton.icon(onPressed: null, icon: const Icon(Icons.forward_rounded, size: 18), label: const Text('Forward'))),
+            TextButton.icon(
+              onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(message.id, rowKey: _rowKey)),
+              icon: const Icon(Icons.reply_rounded, size: 18),
+              label: const Text('Reply'),
+            ),
+            IconButton(
+              tooltip: 'Reply all',
+              onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(message.id, rowKey: _rowKey, all: true)),
+              icon: const Icon(Icons.reply_all_rounded, size: 18),
+              visualDensity: VisualDensity.compact,
+            ),
+            TextButton.icon(
+              onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.forward(message.id, rowKey: _rowKey)),
+              icon: const Icon(Icons.forward_rounded, size: 18),
+              label: const Text('Forward'),
+            ),
             if (showViewThread && threadCount > 1) ...[
               const SizedBox(width: 4),
               FilledButton.tonalIcon(
@@ -134,6 +149,10 @@ class MessageCard extends ConsumerWidget {
       ],
     );
   }
+
+  /// The row this card is shown in: the sender's, or for our own mail the
+  /// selected row (the recipient's).
+  String get _rowKey => 'c:${message.fromContactKey}';
 
   static String _label(MessageParticipant p) => p.isMe ? 'me' : (p.name.isNotEmpty ? p.name : p.address);
 

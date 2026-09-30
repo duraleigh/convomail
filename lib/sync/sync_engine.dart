@@ -254,6 +254,23 @@ class AccountSyncer {
     await transport.moveMessages(uids, archive.path);
   }
 
+  /// After an SMTP send: appends the copy to Sent when the server does not
+  /// keep one itself, then re-syncs Sent so the message appears in the
+  /// recipients' rows. Returns false when no Sent folder is known.
+  Future<bool> storeSentCopy(String rawMessage, {required bool appendCopy}) async {
+    await _ensureConnected();
+    var sent = (await db.foldersForAccount(account.id)).where((f) => f.role == FolderRole.sent.name).firstOrNull;
+    if (sent == null && appendCopy) {
+      final path = await transport.createFolder('Sent');
+      await db.upsertFolders(account.id, await transport.listFolders());
+      sent = (await db.foldersForAccount(account.id)).where((f) => f.path == path || f.role == FolderRole.sent.name).firstOrNull;
+    }
+    if (sent == null) return false;
+    if (appendCopy) await transport.appendMessage(sent.path, rawMessage, seen: true);
+    await syncFolder(sent.id);
+    return true;
+  }
+
   /// Moves messages to the Trash folder on the server.
   Future<void> trashOnServer(int folderId, List<int> uids) async {
     if (uids.isEmpty) return;

@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:convomail/mail/imap_transport.dart';
 import 'package:convomail/mail/mail_transport.dart';
 import 'package:convomail/mail/models.dart';
+import 'package:enough_mail/enough_mail.dart' show MimeMessage;
 
 /// An in-memory IMAP server for engine tests. Folders hold messages by UID;
 /// tests mutate it between syncs to simulate another client.
@@ -122,6 +124,7 @@ class FakeMailTransport implements MailTransport {
 
   @override
   Future<FolderStatus> selectFolder(String path) async {
+    log.add('select $path');
     _requireConnected();
     final f = folders[path];
     if (f == null) throw MailTransportException('No such folder $path');
@@ -211,6 +214,38 @@ class FakeMailTransport implements MailTransport {
     log.add('create $name');
     return name;
   }
+
+  /// Parses the raw message like a server would and files it in [folderPath].
+  @override
+  Future<void> appendMessage(String folderPath, String rawMessage, {bool seen = true}) async {
+    _requireConnected();
+    final mime = MimeMessage.parseFromText(rawMessage);
+    final f = folder(folderPath);
+    final h = ImapTransport.headerFromMime(0, mime);
+    final uid = f.add(
+      RemoteMessageHeader(
+        uid: 0,
+        from: h.from,
+        messageId: h.messageId,
+        inReplyTo: h.inReplyTo,
+        references: h.references,
+        subject: h.subject,
+        to: h.to,
+        cc: h.cc,
+        date: h.date,
+        internalDate: DateTime.now(),
+        flags: MessageFlagsState(seen: seen),
+        size: rawMessage.length,
+        hasAttachments: h.hasAttachments,
+      ),
+      body: ImapTransport.bodyFromMime(mime),
+    );
+    appended.add((folderPath, uid, rawMessage));
+    log.add('append $folderPath');
+  }
+
+  /// Every appendMessage call: folder, assigned uid, raw text.
+  final List<(String, int, String)> appended = [];
 
   @override
   Future<MailboxEvent?> idle({required Duration timeout}) async {

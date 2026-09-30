@@ -9,6 +9,7 @@ import '../../store/database.dart';
 import '../theme/tokens.dart';
 import '../widgets/connected_button_group.dart';
 import '../widgets/grouped_list.dart';
+import 'chats/compose/compose_editor.dart';
 import 'destination_frame.dart';
 import 'settings/accounts_section.dart';
 
@@ -212,7 +213,7 @@ class _KeyboardDetail extends StatelessWidget {
       children: [
         GroupedList(
           children: [
-            for (final (keys, what) in AppShortcuts.descriptions)
+            for (final (keys, what) in [...AppShortcuts.descriptions, ...composeShortcutDescriptions])
               ListTile(
                 title: Text(what),
                 trailing: Container(
