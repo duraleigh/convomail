@@ -49,7 +49,10 @@ class ConversationPane extends ConsumerWidget {
         color: scheme.surfaceContainerLow,
         borderRadius: BorderRadius.circular(AppShapes.xl),
         clipBehavior: Clip.antiAlias,
-        child: selectedKey == null
+        // A selection can go stale when its messages vanish from the server
+        // (deleted elsewhere) or get re-filed; fall back to the empty state
+        // rather than showing a raw row key.
+        child: selectedKey == null || (row == null && (messages.value?.isEmpty ?? false))
             ? const EmptyState(icon: Icons.chat_bubble_outline_rounded, title: 'Pick a person', message: 'Their whole conversation with you will show here.')
             : Stack(
                 children: [
@@ -66,7 +69,7 @@ class ConversationPane extends ConsumerWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(row?.title ?? selectedKey, style: text.titleLarge, overflow: TextOverflow.ellipsis),
+                                  Text(row?.title ?? _titleFromMessages(messages.value), style: text.titleLarge, overflow: TextOverflow.ellipsis),
                                   if (row != null && !row.isGroup && row.identityKey != row.title)
                                     Text(row.identityKey, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
                                 ],
@@ -107,6 +110,14 @@ class ConversationPane extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Title for a row that is no longer in the list (hidden by a filter):
+/// the other party's name from its messages.
+String _titleFromMessages(List<Message>? list) {
+  final m = list?.where((m) => !m.isFromMe).firstOrNull ?? list?.firstOrNull;
+  if (m == null) return 'Conversation';
+  return m.fromName.isNotEmpty ? m.fromName : m.fromAddress;
 }
 
 bool _autoExpanded = false;
