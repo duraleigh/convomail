@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:convomail/mail/imap_transport.dart';
 import 'package:convomail/mail/mail_transport.dart';
@@ -16,6 +17,9 @@ class FakeFolder {
   int modSeq = 1;
   final Map<int, RemoteMessageHeader> messages = {};
   final Map<int, RemoteMessageBody> bodies = {};
+
+  /// Decoded part bytes by uid then partId, for fetchParts.
+  final Map<int, Map<String, Uint8List>> parts = {};
 
   int add(RemoteMessageHeader h, {RemoteMessageBody? body}) {
     final uid = nextUid++;
@@ -163,6 +167,14 @@ class FakeMailTransport implements MailTransport {
   Future<RemoteMessageBody> fetchBody(int uid) async {
     _requireConnected();
     return _sel.bodies[uid] ?? const RemoteMessageBody(text: '');
+  }
+
+  @override
+  Future<Map<String, Uint8List>> fetchParts(int uid, List<String> partIds) async {
+    _requireConnected();
+    log.add('parts $uid ${partIds.join(',')}');
+    final have = _sel.parts[uid] ?? const {};
+    return {for (final id in partIds) if (have.containsKey(id)) id: have[id]!};
   }
 
   @override

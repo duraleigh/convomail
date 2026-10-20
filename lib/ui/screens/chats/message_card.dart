@@ -9,6 +9,7 @@ import '../../../sync/row_actions.dart';
 import '../../../sync/sync_controller.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/tonal_avatar.dart';
+import 'files/attachment_ui.dart';
 import 'html_body_view.dart';
 import 'people_list_pane.dart';
 
@@ -84,7 +85,7 @@ class MessageCard extends ConsumerWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [for (final a in attachments.where((a) => !a.isInline)) _AttachmentChip(a)],
+            children: [for (final a in attachments.where((a) => !a.isInline)) AttachmentChip(key: ValueKey('chip-${a.id}'), attachment: a)],
           ),
         ],
         const SizedBox(height: AppSpace.sm),
@@ -246,46 +247,5 @@ class _PrivacyStripState extends ConsumerState<_PrivacyStrip> {
         ],
       ),
     );
-  }
-}
-
-class _AttachmentChip extends StatelessWidget {
-  const _AttachmentChip(this.a);
-  final Attachment a;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
-      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppShapes.md)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(_iconFor(a.mimeType), size: 20, color: scheme.onSurfaceVariant),
-          const SizedBox(width: 8),
-          Text(a.fileName, style: text.labelLarge),
-          const SizedBox(width: 8),
-          Text(_size(a.size), style: text.labelSmall!.copyWith(color: scheme.onSurfaceVariant, letterSpacing: 0)),
-        ],
-      ),
-    );
-  }
-
-  static IconData _iconFor(String mime) {
-    if (mime.startsWith('image/')) return Icons.image_outlined;
-    if (mime == 'application/pdf') return Icons.picture_as_pdf_outlined;
-    if (mime.contains('spreadsheet') || mime.contains('excel') || mime.contains('csv')) return Icons.table_chart_outlined;
-    if (mime.contains('presentation') || mime.contains('powerpoint')) return Icons.slideshow_outlined;
-    if (mime.contains('word') || mime.contains('document')) return Icons.description_outlined;
-    if (mime.contains('zip') || mime.contains('compressed')) return Icons.folder_zip_outlined;
-    return Icons.attach_file_rounded;
-  }
-
-  static String _size(int bytes) {
-    if (bytes >= 1 << 20) return '${(bytes / (1 << 20)).toStringAsFixed(1)} MB';
-    if (bytes >= 1 << 10) return '${(bytes / (1 << 10)).toStringAsFixed(0)} KB';
-    return '$bytes B';
   }
 }

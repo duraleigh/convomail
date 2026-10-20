@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -5,6 +7,7 @@ import '../domain/html_sanitizer.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
+import '../sync/attachment_service.dart';
 import '../sync/sync_controller.dart';
 import 'settings.dart';
 
@@ -73,7 +76,15 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   const sanitizer = HtmlSanitizer();
   final isPlain = (m.bodyHtml ?? '').trim().isEmpty;
   final source = isPlain ? plainTextToHtml(m.bodyText ?? '') : m.bodyHtml!;
-  final out = sanitizer.sanitize(source, allowRemoteImages: allow);
+
+  // Inline (cid:) images come from the message itself, never the network:
+  // downloaded parts are embedded as data URIs; missing ones are fetched
+  // and the attachments stream re-renders this provider when they land.
+  final inline = (ref.watch(messageAttachmentsProvider(messageId)).value ?? const <Attachment>[]).where((a) => a.isInline).toList();
+  if (inline.any((a) => a.localPath == null)) {
+    unawaited(ref.read(attachmentServiceProvider).downloadInline(messageId));
+  }
+  final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid));
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
   return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain);
 });

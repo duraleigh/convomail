@@ -36,6 +36,7 @@ class StartupArgs {
   /// opens the inline reply on the first row.
   static bool _compose = false;
   static bool _reply = false;
+  static bool _files = false;
 
   static StartupArgs parse(List<String> args) {
     Destination? destination;
@@ -58,6 +59,9 @@ class StartupArgs {
       } else if (a == '--reply') {
         _reply = true;
         _openFirst = true;
+      } else if (a == '--files') {
+        _files = true;
+        _openFirst = true;
       }
     }
     return StartupArgs(destination: destination, inbox: inbox, addAccount: addAccount);
@@ -70,6 +74,7 @@ class StartupArgs {
         if (_openFirst) autoOpenFirstProvider.overrideWith((ref) => true),
         if (_compose) autoComposeProvider.overrideWith((ref) => true),
         if (_reply) autoReplyProvider.overrideWith((ref) => true),
+        if (_files) autoFilesProvider.overrideWith((ref) => true),
       ];
 }
 

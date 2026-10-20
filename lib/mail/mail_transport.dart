@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'models.dart';
 
 /// Exception raised by a [MailTransport] with a user-presentable message.
@@ -38,6 +40,11 @@ abstract interface class MailTransport {
   Future<Set<int>> fetchExistingUids({required int maxUid});
 
   Future<RemoteMessageBody> fetchBody(int uid);
+
+  /// Decoded bytes of the given MIME parts (attachment `partId`s from
+  /// [fetchBody]) of a message in the selected folder. Parts that do not
+  /// exist are left out of the result.
+  Future<Map<String, Uint8List>> fetchParts(int uid, List<String> partIds);
 
   Future<void> setFlags(List<int> uids, {bool? seen, bool? flagged, bool? answered, bool? deleted});
 

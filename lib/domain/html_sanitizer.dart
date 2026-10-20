@@ -56,7 +56,7 @@ class HtmlSanitizer {
   /// SVG data URI (no raw markup inside the attribute).
   static final _placeholderSvg = 'data:image/svg+xml;utf8,${Uri.encodeComponent("<svg xmlns='http://www.w3.org/2000/svg' width='120' height='24'><rect width='120' height='24' rx='6' fill='#E9E7EF'/><text x='60' y='16' font-family='Segoe UI,sans-serif' font-size='11' fill='#46464F' text-anchor='middle'>Image blocked</text></svg>")}';
 
-  SanitizedHtml sanitize(String rawHtml, {bool allowRemoteImages = false, String Function(String cid)? resolveCid}) {
+  SanitizedHtml sanitize(String rawHtml, {bool allowRemoteImages = false, String? Function(String cid)? resolveCid}) {
     final doc = html_parser.parse(rawHtml);
     final remote = <RemoteRef>[];
 
@@ -114,7 +114,7 @@ class HtmlSanitizer {
     return SanitizedHtml(html: _wrap(bodyInner, allowRemoteImages), remote: remote, allowedRemote: allowRemoteImages, bodyInner: bodyInner);
   }
 
-  void _handleImage(Element img, bool allow, List<RemoteRef> remote, String Function(String cid)? resolveCid) {
+  void _handleImage(Element img, bool allow, List<RemoteRef> remote, String? Function(String cid)? resolveCid) {
     final src = img.attributes['src']?.trim() ?? '';
     if (src.isEmpty) return;
     final lower = src.toLowerCase();

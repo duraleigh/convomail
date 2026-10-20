@@ -58,6 +58,9 @@ class ComposeRequest {
 final autoComposeProvider = Provider<bool>((ref) => false);
 final autoReplyProvider = Provider<bool>((ref) => false);
 
+/// `--files` (with `--open-first`): open the Files panel on the first row.
+final autoFilesProvider = Provider<bool>((ref) => false);
+
 /// The new-message composer occupying the right pane, or null.
 final composeProvider = NotifierProvider<ComposeNotifier, ComposeRequest?>(ComposeNotifier.new);
 

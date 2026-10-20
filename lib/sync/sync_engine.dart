@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
@@ -215,6 +216,17 @@ class AccountSyncer {
     final body = await transport.fetchBody(m.uid);
     await db.storeBody(messageDbId, body);
     return body;
+  }
+
+  /// Decoded bytes for attachment parts of a stored message.
+  Future<Map<String, Uint8List>> fetchParts(int messageDbId, List<String> partIds) async {
+    final m = await db.messageById(messageDbId);
+    if (m == null) throw StateError('No message $messageDbId');
+    final folder = await db.folderById(m.folderId);
+    if (folder == null) throw StateError('No folder ${m.folderId}');
+    await _ensureConnected();
+    await transport.selectFolder(folder.path);
+    return transport.fetchParts(m.uid, partIds);
   }
 
   /// Pushes flag changes to the server and mirrors them locally.

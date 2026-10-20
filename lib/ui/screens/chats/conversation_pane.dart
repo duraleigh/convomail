@@ -11,6 +11,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'compose/reply_composer.dart';
+import 'files/files_panel.dart';
 import 'message_card.dart';
 import 'people_list_pane.dart';
 import 'thread_view_panel.dart';
@@ -30,8 +31,16 @@ class ConversationPane extends ConsumerWidget {
     final row = rows.where((r) => r.rowKey == selectedKey).firstOrNull;
     final messages = ref.watch(selectedRowMessagesProvider);
     final openThread = ref.watch(openThreadProvider);
+    final filesOpen = ref.watch(filesPanelOpenProvider);
+    if (ref.read(autoFilesProvider) && row != null && !_autoFilesOpened) {
+      _autoFilesOpened = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(filesPanelOpenProvider.notifier).open());
+    }
     ref.listen(selectedRowProvider, (prev, next) {
-      if (prev != next) ref.read(replyRequestProvider.notifier).close();
+      if (prev != next) {
+        ref.read(replyRequestProvider.notifier).close();
+        ref.read(filesPanelOpenProvider.notifier).close();
+      }
     });
 
     return Padding(
@@ -65,7 +74,12 @@ class ConversationPane extends ConsumerWidget {
                             ),
                             if (row != null) Text('${row.total} message${row.total == 1 ? '' : 's'}', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
                             const IconButton(tooltip: 'Search in conversation (milestone 6)', onPressed: null, icon: Icon(Icons.search_rounded)),
-                            const IconButton(tooltip: 'Files (milestone 5)', onPressed: null, icon: Icon(Icons.folder_outlined)),
+                            IconButton(
+                              key: const ValueKey('files-button'),
+                              tooltip: 'Files',
+                              onPressed: row == null ? null : () => ref.read(filesPanelOpenProvider.notifier).open(),
+                              icon: const Icon(Icons.folder_outlined),
+                            ),
                             IconButton(
                               tooltip: row?.unread == 0 ? 'All read' : 'Mark all as read',
                               onPressed: row == null || row.unread == 0 ? null : () => ref.read(rowActionsProvider).markRowRead(row.rowKey),
@@ -87,6 +101,7 @@ class ConversationPane extends ConsumerWidget {
                     ],
                   ),
                   if (openThread != null) ThreadViewPanel(threadKey: openThread),
+                  if (filesOpen && row != null) FilesPanel(row: row),
                 ],
               ),
       ),
@@ -95,6 +110,7 @@ class ConversationPane extends ConsumerWidget {
 }
 
 bool _autoExpanded = false;
+bool _autoFilesOpened = false;
 
 /// Groups the row's messages by day, then by thread key within a day.
 class _ThreadedList extends ConsumerWidget {

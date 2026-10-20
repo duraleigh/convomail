@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:enough_mail/enough_mail.dart' hide ServerConfig;
 
@@ -220,6 +221,32 @@ class ImapTransport implements MailTransport {
     final m = result.messages.firstOrNull;
     if (m == null) throw MailTransportException('Message $uid not found on server');
     return bodyFromMime(m);
+  }
+
+  /// Fetches the whole message once and decodes the requested parts. A
+  /// per-part BODY[n] fetch would be lighter, but decoding then depends on
+  /// headers that are not in that response; one full fetch is reliable.
+  @override
+  Future<Map<String, Uint8List>> fetchParts(int uid, List<String> partIds) async {
+    _requireSelected();
+    if (partIds.isEmpty) return const {};
+    final result = await _c.uidFetchMessage(uid, 'BODY.PEEK[]');
+    final m = result.messages.firstOrNull;
+    if (m == null) throw MailTransportException('Message $uid not found on server');
+    return partsFromMime(m, partIds);
+  }
+
+  static Map<String, Uint8List> partsFromMime(MimeMessage m, List<String> partIds) {
+    final out = <String, Uint8List>{};
+    for (final id in partIds) {
+      try {
+        final bytes = m.getPart(id)?.decodeContentBinary();
+        if (bytes != null) out[id] = bytes;
+      } catch (_) {
+        // Unknown or undecodable part: skip it.
+      }
+    }
+    return out;
   }
 
   /// Body and attachment list of a parsed MIME message.
