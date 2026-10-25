@@ -73,30 +73,7 @@ extension SyncQueries on AppDatabase {
     await transaction(() async {
       final msgs = await (select(messages)..where((m) => m.accountId.equals(accountId))).get();
       for (final m in msgs) {
-        final parts = await (select(messageParticipants)..where((p) => p.messageId.equals(m.id))).get();
-        final to = <String>[];
-        final cc = <String>[];
-        for (final part in parts) {
-          final r = identity.resolve(part.address);
-          if (r.contactKey != part.contactKey || r.isMe != part.isMe) {
-            await (update(messageParticipants)..where((p) => p.id.equals(part.id))).write(MessageParticipantsCompanion(contactKey: Value(r.contactKey), isMe: Value(r.isMe)));
-          }
-          if (part.role == 'to') to.add(part.address);
-          if (part.role == 'cc') cc.add(part.address);
-        }
-        final sender = identity.resolve(m.fromAddress);
-        if (sender.contactKey != m.fromContactKey || sender.isMe != m.isFromMe) {
-          await (update(messages)..where((x) => x.id.equals(m.id))).write(MessagesCompanion(fromContactKey: Value(sender.contactKey), isFromMe: Value(sender.isMe)));
-        }
-        final filed = filing.file(MessageEnvelope(from: m.fromAddress, to: to, cc: cc));
-        final current = (await (select(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).get()).map((r) => r.rowKey).toSet();
-        final wanted = filed.rows.map((r) => r.key).toSet();
-        if (current.length != wanted.length || !current.containsAll(wanted)) {
-          await (delete(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).go();
-          for (final key in wanted) {
-            await into(messageRowAssignments).insert(MessageRowAssignmentsCompanion.insert(messageId: m.id, rowKey: key), mode: InsertMode.insertOrIgnore);
-          }
-        }
+        await refileMessage(m, filing);
       }
       // Contacts that turned out to be the user are not people.
       for (final address in identity.myAddresses) {
@@ -105,6 +82,36 @@ extension SyncQueries on AppDatabase {
       }
     });
     await refreshDirtyRows();
+  }
+
+  /// Re-resolves one message's participants and sender and rewrites its row
+  /// assignments when the filing outcome changed. Call inside a transaction.
+  Future<void> refileMessage(Message m, FilingRule filing) async {
+    final identity = filing.identity;
+    final parts = await (select(messageParticipants)..where((p) => p.messageId.equals(m.id))).get();
+    final to = <String>[];
+    final cc = <String>[];
+    for (final part in parts) {
+      final r = identity.resolve(part.address);
+      if (r.contactKey != part.contactKey || r.isMe != part.isMe) {
+        await (update(messageParticipants)..where((p) => p.id.equals(part.id))).write(MessageParticipantsCompanion(contactKey: Value(r.contactKey), isMe: Value(r.isMe)));
+      }
+      if (part.role == 'to') to.add(part.address);
+      if (part.role == 'cc') cc.add(part.address);
+    }
+    final sender = identity.resolve(m.fromAddress);
+    if (sender.contactKey != m.fromContactKey || sender.isMe != m.isFromMe) {
+      await (update(messages)..where((x) => x.id.equals(m.id))).write(MessagesCompanion(fromContactKey: Value(sender.contactKey), isFromMe: Value(sender.isMe)));
+    }
+    final filed = filing.file(MessageEnvelope(from: m.fromAddress, to: to, cc: cc));
+    final current = (await (select(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).get()).map((r) => r.rowKey).toSet();
+    final wanted = filed.rows.map((r) => r.key).toSet();
+    if (current.length != wanted.length || !current.containsAll(wanted)) {
+      await (delete(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).go();
+      for (final key in wanted) {
+        await into(messageRowAssignments).insert(MessageRowAssignmentsCompanion.insert(messageId: m.id, rowKey: key), mode: InsertMode.insertOrIgnore);
+      }
+    }
   }
 
   // ---- folders ---------------------------------------------------------------

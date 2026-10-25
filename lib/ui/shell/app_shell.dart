@@ -24,7 +24,8 @@ class AppShell extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     if (ref.read(autoComposeProvider) && !_autoComposed) {
       _autoComposed = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(composeProvider.notifier).open());
+      final request = ref.read(autoComposeRequestProvider);
+      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(composeProvider.notifier).open(request));
     }
 
     return AppShortcutScope(

@@ -11,6 +11,7 @@ import 'app/destinations.dart';
 import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
+import 'platform/mailto_registration.dart';
 import 'sync/sync_controller.dart';
 import 'ui/shell/app_shell.dart';
 import 'ui/theme/app_theme.dart';
@@ -41,6 +42,9 @@ class StartupArgs {
   /// `--search=<text>` starts in search-results mode (screenshots).
   static String? _search;
 
+  /// A `mailto:` argument (Windows passes the clicked link as argv[1]).
+  static MailtoLink? _mailto;
+
   static StartupArgs parse(List<String> args) {
     Destination? destination;
     InboxMode? inbox;
@@ -67,6 +71,9 @@ class StartupArgs {
         _openFirst = true;
       } else if (a.startsWith('--search=')) {
         _search = a.substring('--search='.length);
+      } else if (a.toLowerCase().startsWith('mailto:')) {
+        _mailto = MailtoLink.parse(a);
+        destination = Destination.chats;
       }
     }
     return StartupArgs(destination: destination, inbox: inbox, addAccount: addAccount);
@@ -81,6 +88,10 @@ class StartupArgs {
         if (_reply) autoReplyProvider.overrideWith((ref) => true),
         if (_files) autoFilesProvider.overrideWith((ref) => true),
         if (_search != null) peopleSearchProvider.overrideWith(() => PeopleSearchNotifier(initial: _search!)),
+        if (_mailto != null) ...[
+          autoComposeProvider.overrideWith((ref) => true),
+          autoComposeRequestProvider.overrideWith((ref) => ComposeRequest.newMessage(to: [..._mailto!.to, ..._mailto!.cc], subject: _mailto!.subject, body: _mailto!.body)),
+        ],
       ];
 }
 

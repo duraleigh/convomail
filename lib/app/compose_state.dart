@@ -56,6 +56,9 @@ class ComposeRequest {
 /// `--compose` / `--reply` startup flags (screenshot verification): open
 /// the new-message pane, or the inline reply on the auto-opened first row.
 final autoComposeProvider = Provider<bool>((ref) => false);
+
+/// A prefilled new-message request from a `mailto:` launch argument.
+final autoComposeRequestProvider = Provider<ComposeRequest?>((ref) => null);
 final autoReplyProvider = Provider<bool>((ref) => false);
 
 /// `--files` (with `--open-first`): open the Files panel on the first row.

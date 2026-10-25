@@ -12,6 +12,8 @@ import '../widgets/grouped_list.dart';
 import 'chats/compose/compose_editor.dart';
 import 'destination_frame.dart';
 import 'settings/accounts_section.dart';
+import 'settings/misc_sections.dart';
+import 'settings/people_groups_section.dart';
 
 /// Settings destination: section list on the left, detail on the right
 /// (spec 5.3). Accounts, Appearance and Keyboard are live; the rest fill in
@@ -89,6 +91,12 @@ class _Detail extends ConsumerWidget {
         return const _PrivacyDetail();
       case SettingsSection.keyboard:
         return const _KeyboardDetail();
+      case SettingsSection.peopleGroups:
+        return const PeopleGroupsDetail();
+      case SettingsSection.notifications:
+        return const NotificationsDetail();
+      case SettingsSection.defaultApp:
+        return const DefaultAppDetail();
       default:
         return _Placeholder(section);
     }
@@ -237,11 +245,8 @@ class _Placeholder extends StatelessWidget {
   final SettingsSection section;
 
   static const _milestone = {
-    SettingsSection.notifications: 'milestone 10',
-    SettingsSection.peopleGroups: 'milestone 7',
     SettingsSection.feeds: 'milestone 8',
-    SettingsSection.tags: 'milestone 9',
-    SettingsSection.defaultApp: 'milestone 10',
+    SettingsSection.tags: 'milestone 9 (Kanban tags)',
   };
 
   @override

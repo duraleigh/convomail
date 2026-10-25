@@ -52,6 +52,7 @@ dependencies:
   desktop_drop: ^0.8.4
   pasteboard: ^0.5.0
   pdfrx: ^2.9.0
+  win32_registry: 2.1.0
 dependency_overrides:
   # 6.2.0 predates Flutter 3.47's TextInputClient.onFocusReceived; see
   # third_party/appflowy_editor/PATCHES.md for the one-line fix.
