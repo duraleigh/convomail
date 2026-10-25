@@ -136,8 +136,11 @@ void main() {
     await tester.tap(find.widgetWithText(FilterChip, 'All'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'tom');
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
-    expect(find.text('Tom Andersen'), findsOneWidget);
+    // Search mode (M6): Tom appears as a People match and as the sender of
+    // his message hit; Sarah appears nowhere.
+    expect(find.text('Tom Andersen'), findsWidgets);
     expect(find.text('Sarah Chen'), findsNothing);
     await teardown(tester);
   });

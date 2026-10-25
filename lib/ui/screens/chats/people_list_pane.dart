@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/destinations.dart';
 import '../../../app/people_state.dart';
+import '../../../app/search_state.dart';
 import '../../../app/settings_navigation.dart';
 import '../../../app/shortcuts.dart';
 import '../../../store/database.dart';
@@ -16,6 +17,7 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'person_row.dart';
+import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
 
 /// The middle pane of the Chats destination (spec 5.3): headline, search,
@@ -173,6 +175,15 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
             data: (list) {
               if (mode == InboxMode.feeds) {
                 return const EmptyState(icon: Icons.inbox_outlined, title: 'Nothing filed to Feeds', message: 'Feeds classification arrives in milestone 8.');
+              }
+              if (ref.watch(searchActiveProvider)) {
+                return SearchResultsView(
+                  people: list,
+                  onOpenRow: (row) {
+                    ref.read(selectedRowProvider.notifier).select(row.rowKey);
+                    _listFocus.requestFocus();
+                  },
+                );
               }
               if (list.isEmpty) return _empty(filter);
               if (ref.read(autoOpenFirstProvider) && selected == null && !_autoOpened) {

@@ -38,6 +38,9 @@ class StartupArgs {
   static bool _reply = false;
   static bool _files = false;
 
+  /// `--search=<text>` starts in search-results mode (screenshots).
+  static String? _search;
+
   static StartupArgs parse(List<String> args) {
     Destination? destination;
     InboxMode? inbox;
@@ -62,6 +65,8 @@ class StartupArgs {
       } else if (a == '--files') {
         _files = true;
         _openFirst = true;
+      } else if (a.startsWith('--search=')) {
+        _search = a.substring('--search='.length);
       }
     }
     return StartupArgs(destination: destination, inbox: inbox, addAccount: addAccount);
@@ -75,6 +80,7 @@ class StartupArgs {
         if (_compose) autoComposeProvider.overrideWith((ref) => true),
         if (_reply) autoReplyProvider.overrideWith((ref) => true),
         if (_files) autoFilesProvider.overrideWith((ref) => true),
+        if (_search != null) peopleSearchProvider.overrideWith(() => PeopleSearchNotifier(initial: _search!)),
       ];
 }
 
@@ -82,6 +88,10 @@ Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (args.contains('--bench-people')) {
     await runPeopleBench();
+    exit(0);
+  }
+  if (args.contains('--bench-search')) {
+    await runSearchBench();
     exit(0);
   }
   final startup = StartupArgs.parse(args);

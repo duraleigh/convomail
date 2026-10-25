@@ -328,7 +328,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -336,6 +336,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           await m.createAll();
           await _createIndexes();
           await _createTriggers();
+          await _createSearchIndex();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -380,11 +381,40 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await m.createTable(drafts);
             await customStatement('CREATE INDEX IF NOT EXISTS idx_drafts_row ON drafts(row_key)');
           }
+          if (from < 7) {
+            await _createSearchIndex();
+            await customStatement(
+              "INSERT INTO message_fts(message_id, subject, sender, body) SELECT id, subject, from_name || ' ' || from_address, COALESCE(body_text, snippet) FROM messages",
+            );
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
         },
       );
+
+  /// Full-text index over subject, sender, and body (spec 4.6, plan M6),
+  /// kept in step with `messages` by triggers so the sync engine needs no
+  /// extra code path. Bodies are indexed once fetched; until then the
+  /// snippet stands in.
+  Future<void> _createSearchIndex() async {
+    await customStatement("CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(subject, sender, body, message_id UNINDEXED, tokenize = 'unicode61 remove_diacritics 2')");
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_fts_ins AFTER INSERT ON messages BEGIN
+        INSERT INTO message_fts(message_id, subject, sender, body)
+          VALUES (new.id, new.subject, new.from_name || ' ' || new.from_address, COALESCE(new.body_text, new.snippet));
+      END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_fts_upd AFTER UPDATE OF subject, from_name, from_address, body_text, snippet ON messages BEGIN
+        DELETE FROM message_fts WHERE message_id = old.id;
+        INSERT INTO message_fts(message_id, subject, sender, body)
+          VALUES (new.id, new.subject, new.from_name || ' ' || new.from_address, COALESCE(new.body_text, new.snippet));
+      END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_fts_del AFTER DELETE ON messages BEGIN
+        DELETE FROM message_fts WHERE message_id = old.id;
+      END''');
+  }
 
   Future<void> _createIndexes() async {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)');

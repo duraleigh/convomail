@@ -56,7 +56,7 @@ class HtmlSanitizer {
   /// SVG data URI (no raw markup inside the attribute).
   static final _placeholderSvg = 'data:image/svg+xml;utf8,${Uri.encodeComponent("<svg xmlns='http://www.w3.org/2000/svg' width='120' height='24'><rect width='120' height='24' rx='6' fill='#E9E7EF'/><text x='60' y='16' font-family='Segoe UI,sans-serif' font-size='11' fill='#46464F' text-anchor='middle'>Image blocked</text></svg>")}';
 
-  SanitizedHtml sanitize(String rawHtml, {bool allowRemoteImages = false, String? Function(String cid)? resolveCid}) {
+  SanitizedHtml sanitize(String rawHtml, {bool allowRemoteImages = false, String? Function(String cid)? resolveCid, List<String> highlight = const []}) {
     final doc = html_parser.parse(rawHtml);
     final remote = <RemoteRef>[];
 
@@ -110,6 +110,8 @@ class HtmlSanitizer {
       style.text = _scrubCss(style.text, allowRemote: allowRemoteImages, remote: remote, isTracker: false);
     }
 
+    if (highlight.isNotEmpty && doc.body != null) _highlightTerms(doc.body!, highlight);
+
     final bodyInner = doc.body?.innerHtml ?? '';
     return SanitizedHtml(html: _wrap(bodyInner, allowRemoteImages), remote: remote, allowedRemote: allowRemoteImages, bodyInner: bodyInner);
   }
@@ -139,6 +141,49 @@ class HtmlSanitizer {
         img.classes.add('cm-blocked');
         img.attributes.remove('srcset');
       }
+    }
+  }
+
+  /// Wraps case-insensitive occurrences of [terms] in text nodes with
+  /// `<mark>` (spec 4.6 result highlighting). Done after sanitizing, on
+  /// the DOM, so no script is needed in the rendered page.
+  static void _highlightTerms(Element root, List<String> terms) {
+    final clean = terms.map((t) => t.trim()).where((t) => t.isNotEmpty).toSet().toList()..sort((a, b) => b.length.compareTo(a.length));
+    if (clean.isEmpty) return;
+    final re = RegExp(clean.map(RegExp.escape).join('|'), caseSensitive: true == false);
+    const skip = {'style', 'script', 'title', 'textarea', 'mark'};
+    final texts = <Text>[];
+    void walk(Node n) {
+      if (n is Element && skip.contains(n.localName)) return;
+      for (final c in n.nodes) {
+        if (c is Text) {
+          texts.add(c);
+        } else {
+          walk(c);
+        }
+      }
+    }
+    walk(root);
+    for (final t in texts) {
+      final value = t.text;
+      if (!re.hasMatch(value)) continue;
+      final parent = t.parentNode;
+      if (parent == null) continue;
+      final pieces = <Node>[];
+      var last = 0;
+      for (final m in re.allMatches(value)) {
+        if (m.start > last) pieces.add(Text(value.substring(last, m.start)));
+        final mark = Element.tag('mark')
+          ..classes.add('cm-hl')
+          ..append(Text(m.group(0)!));
+        pieces.add(mark);
+        last = m.end;
+      }
+      if (last < value.length) pieces.add(Text(value.substring(last)));
+      for (final piece in pieces) {
+        parent.insertBefore(piece, t);
+      }
+      t.remove();
     }
   }
 
@@ -203,6 +248,7 @@ class HtmlSanitizer {
   pre{white-space:pre-wrap}
   blockquote{border-left:3px solid #c7c5d0;margin:8px 0;padding-left:12px;color:#46464f}
   a{color:#4653d0}
+  mark.cm-hl{background:#ffe08a;color:inherit;border-radius:3px;padding:0 1px}
 </style>
 </head><body>$bodyInner</body></html>''';
   }

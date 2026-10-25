@@ -9,6 +9,7 @@ import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
 import '../sync/attachment_service.dart';
 import '../sync/sync_controller.dart';
+import 'search_state.dart';
 import 'settings.dart';
 
 /// Message ids currently expanded inline in the conversation (spec 4.3).
@@ -84,7 +85,8 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   if (inline.any((a) => a.localPath == null)) {
     unawaited(ref.read(attachmentServiceProvider).downloadInline(messageId));
   }
-  final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid));
+  final highlight = ref.watch(conversationHighlightProvider);
+  final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid), highlight: highlight);
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
   return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain);
 });

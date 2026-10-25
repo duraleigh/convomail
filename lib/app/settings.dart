@@ -10,6 +10,7 @@ class AppSettings {
     this.dynamicColor = false,
     this.middlePaneWidth = 340,
     this.blockRemoteImages = true,
+    this.searchIncludeFeeds = false,
   });
 
   final ThemeMode themeMode;
@@ -20,11 +21,15 @@ class AppSettings {
   /// blocking off entirely.
   final bool blockRemoteImages;
 
-  AppSettings copyWith({ThemeMode? themeMode, bool? dynamicColor, double? middlePaneWidth, bool? blockRemoteImages}) => AppSettings(
+  /// Spec 4.6: search results come from People rows only unless this is on.
+  final bool searchIncludeFeeds;
+
+  AppSettings copyWith({ThemeMode? themeMode, bool? dynamicColor, double? middlePaneWidth, bool? blockRemoteImages, bool? searchIncludeFeeds}) => AppSettings(
         themeMode: themeMode ?? this.themeMode,
         dynamicColor: dynamicColor ?? this.dynamicColor,
         middlePaneWidth: middlePaneWidth ?? this.middlePaneWidth,
         blockRemoteImages: blockRemoteImages ?? this.blockRemoteImages,
+        searchIncludeFeeds: searchIncludeFeeds ?? this.searchIncludeFeeds,
       );
 }
 
@@ -35,6 +40,7 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _kDynamic = 'appearance.dynamicColor';
   static const _kPane = 'layout.middlePaneWidth';
   static const _kBlockImages = 'privacy.blockRemoteImages';
+  static const _kIncludeFeeds = 'search.includeFeeds';
 
   @override
   AppSettings build() {
@@ -49,12 +55,19 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final dynamic = await _db.getSetting(_kDynamic);
     final pane = await _db.getSetting(_kPane);
     final block = await _db.getSetting(_kBlockImages);
+    final feeds = await _db.getSetting(_kIncludeFeeds);
     state = AppSettings(
       themeMode: ThemeMode.values.firstWhere((m) => m.name == theme, orElse: () => ThemeMode.system),
       dynamicColor: dynamic == 'true',
       middlePaneWidth: double.tryParse(pane ?? '') ?? 340,
       blockRemoteImages: block != 'false',
+      searchIncludeFeeds: feeds == 'true',
     );
+  }
+
+  Future<void> setSearchIncludeFeeds(bool on) async {
+    state = state.copyWith(searchIncludeFeeds: on);
+    await _db.putSetting(_kIncludeFeeds, on.toString());
   }
 
   Future<void> setBlockRemoteImages(bool on) async {

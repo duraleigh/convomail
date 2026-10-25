@@ -16,8 +16,11 @@ class PeopleFilterNotifier extends Notifier<PeopleFilter> {
 final peopleSearchProvider = NotifierProvider<PeopleSearchNotifier, String>(PeopleSearchNotifier.new);
 
 class PeopleSearchNotifier extends Notifier<String> {
+  PeopleSearchNotifier({this.initial = ''});
+  final String initial;
+
   @override
-  String build() => '';
+  String build() => initial;
   void set(String s) => state = s;
 }
 

@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/people_state.dart';
+import '../../../app/search_state.dart';
 import '../../../store/database.dart';
 import '../../../store/thread_queries.dart';
 import '../../../sync/row_actions.dart';
@@ -14,6 +16,7 @@ import 'compose/reply_composer.dart';
 import 'files/files_panel.dart';
 import 'message_card.dart';
 import 'people_list_pane.dart';
+import 'search_results_view.dart' show markTerms, markedSpan;
 import 'thread_view_panel.dart';
 
 /// Right pane of Chats (spec 4.3, 5.3): the selected row's conversation,
@@ -32,6 +35,8 @@ class ConversationPane extends ConsumerWidget {
     final messages = ref.watch(selectedRowMessagesProvider);
     final openThread = ref.watch(openThreadProvider);
     final filesOpen = ref.watch(filesPanelOpenProvider);
+    final convSearch = ref.watch(conversationSearchProvider);
+    final matches = ref.watch(conversationMatchesProvider).value;
     if (ref.read(autoFilesProvider) && row != null && !_autoFilesOpened) {
       _autoFilesOpened = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(filesPanelOpenProvider.notifier).open());
@@ -40,6 +45,7 @@ class ConversationPane extends ConsumerWidget {
       if (prev != next) {
         ref.read(replyRequestProvider.notifier).close();
         ref.read(filesPanelOpenProvider.notifier).close();
+        ref.read(conversationSearchProvider.notifier).close();
       }
     });
 
@@ -76,7 +82,16 @@ class ConversationPane extends ConsumerWidget {
                               ),
                             ),
                             if (row != null) Text('${row.total} message${row.total == 1 ? '' : 's'}', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
-                            const IconButton(tooltip: 'Search in conversation (milestone 6)', onPressed: null, icon: Icon(Icons.search_rounded)),
+                            IconButton(
+                              key: const ValueKey('conversation-search-button'),
+                              tooltip: convSearch == null ? 'Search in conversation' : 'Close search',
+                              isSelected: convSearch != null,
+                              onPressed: () {
+                                final n = ref.read(conversationSearchProvider.notifier);
+                                convSearch == null ? n.open() : n.close();
+                              },
+                              icon: const Icon(Icons.search_rounded),
+                            ),
                             IconButton(
                               key: const ValueKey('files-button'),
                               tooltip: 'Files',
@@ -91,13 +106,19 @@ class ConversationPane extends ConsumerWidget {
                           ],
                         ),
                       ),
+                      if (convSearch != null) _ConversationSearchBar(query: convSearch, matchCount: matches?.length),
                       Expanded(
                         child: messages.when(
                           loading: () => const Center(child: CircularProgressIndicator()),
                           error: (e, _) => Center(child: Text('$e')),
-                          data: (list) => list.isEmpty
-                              ? const EmptyState(icon: Icons.mark_email_read_outlined, title: 'Nothing here', message: 'No messages in this conversation.')
-                              : _ThreadedList(messages: list),
+                          data: (list) {
+                            if (list.isEmpty) return const EmptyState(icon: Icons.mark_email_read_outlined, title: 'Nothing here', message: 'No messages in this conversation.');
+                            final visible = matches == null ? list : list.where((m) => matches.contains(m.id)).toList();
+                            if (visible.isEmpty) {
+                              return const EmptyState(icon: Icons.search_off_rounded, title: 'No matches here', message: 'Nothing in this conversation matches.');
+                            }
+                            return _ThreadedList(messages: visible, forceExpanded: matches != null);
+                          },
                         ),
                       ),
                       if (row != null) ReplyComposer(row: row, messages: messages.value ?? const []),
@@ -124,9 +145,71 @@ bool _autoExpanded = false;
 bool _autoFilesOpened = false;
 
 /// Groups the row's messages by day, then by thread key within a day.
+/// Inline search field under the conversation header (spec 4.6).
+class _ConversationSearchBar extends ConsumerStatefulWidget {
+  const _ConversationSearchBar({required this.query, required this.matchCount});
+  final String query;
+  final int? matchCount;
+
+  @override
+  ConsumerState<_ConversationSearchBar> createState() => _ConversationSearchBarState();
+}
+
+class _ConversationSearchBarState extends ConsumerState<_ConversationSearchBar> {
+  late final _controller = TextEditingController(text: widget.query);
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final count = widget.matchCount;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 12, 8),
+      child: CallbackShortcuts(
+        bindings: {const SingleActivator(LogicalKeyboardKey.escape): () => ref.read(conversationSearchProvider.notifier).close()},
+        child: Row(
+          children: [
+            Expanded(
+              child: SearchBar(
+                key: const ValueKey('conversation-search-field'),
+                controller: _controller,
+                autoFocus: true,
+                hintText: 'Search this conversation',
+                leading: const Icon(Icons.search_rounded, size: 20),
+                constraints: const BoxConstraints(minHeight: 40, maxHeight: 40),
+                onChanged: (v) => ref.read(conversationSearchProvider.notifier).set(v),
+                trailing: [
+                  if (widget.query.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Text(
+                        count == null ? '…' : '$count match${count == 1 ? '' : 'es'}',
+                        style: text.labelMedium!.copyWith(color: count == 0 ? scheme.error : scheme.onSurfaceVariant),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            IconButton(tooltip: 'Close (Esc)', onPressed: () => ref.read(conversationSearchProvider.notifier).close(), icon: const Icon(Icons.close_rounded)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ThreadedList extends ConsumerWidget {
-  const _ThreadedList({required this.messages});
+  const _ThreadedList({required this.messages, this.forceExpanded = false});
   final List<Message> messages;
+
+  /// In-conversation search: every (matching) card shows its messages.
+  final bool forceExpanded;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -135,6 +218,17 @@ class _ThreadedList extends ConsumerWidget {
     final keyArg = (messages.map((m) => m.threadKey ?? 'm:${m.id}').toSet().toList()..sort()).join('\n');
     final counts = ref.watch(_threadCountsProvider(keyArg)).value ?? const <String, int>{};
     final expanded = ref.watch(expandedMessagesProvider);
+    final highlight = ref.watch(conversationHighlightProvider);
+    final scrollTo = ref.watch(scrollToMessageProvider);
+    if (scrollTo != null && messages.any((m) => m.id == scrollTo)) {
+      final target = messages.firstWhere((m) => m.id == scrollTo);
+      final key = GlobalObjectKey('thread-${target.threadKey ?? 'm:${target.id}'}');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final ctx = key.currentContext;
+        if (ctx != null) Scrollable.ensureVisible(ctx, alignment: 0.1, duration: const Duration(milliseconds: 250));
+        ref.read(scrollToMessageProvider.notifier).clear();
+      });
+    }
     if (ref.read(autoOpenFirstProvider) && expanded.isEmpty && messages.isNotEmpty && !_autoExpanded) {
       _autoExpanded = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(expandedMessagesProvider.notifier).expand(messages.first.id));
@@ -162,11 +256,13 @@ class _ThreadedList extends ConsumerWidget {
       ));
       for (final e in sec.threads.entries) {
         final msgs = e.value;
-        final isExpanded = msgs.any((m) => expanded.contains(m.id));
+        final isExpanded = forceExpanded || msgs.any((m) => expanded.contains(m.id));
         items.add(Padding(
+          key: GlobalObjectKey('thread-${e.key}'),
           padding: const EdgeInsets.only(bottom: 8),
           child: _ThreadCard(
             threadKey: e.key,
+            highlight: highlight,
             messages: msgs,
             threadCount: counts[e.key] ?? msgs.length,
             expanded: isExpanded,
@@ -223,6 +319,7 @@ class _ThreadCard extends StatelessWidget {
     required this.expanded,
     required this.onToggle,
     required this.onViewThread,
+    this.highlight = const [],
   });
 
   final String threadKey;
@@ -231,6 +328,9 @@ class _ThreadCard extends StatelessWidget {
   final bool expanded;
   final VoidCallback onToggle;
   final VoidCallback onViewThread;
+
+  /// In-conversation search terms to mark in the subject and preview.
+  final List<String> highlight;
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +361,14 @@ class _ThreadCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(subject, style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w600), maxLines: expanded ? 3 : 1, overflow: TextOverflow.ellipsis),
+                          if (highlight.isEmpty)
+                            Text(subject, style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w600), maxLines: expanded ? 3 : 1, overflow: TextOverflow.ellipsis)
+                          else
+                            RichText(
+                              maxLines: expanded ? 3 : 1,
+                              overflow: TextOverflow.ellipsis,
+                              text: markedSpan(markTerms(subject, highlight), text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w600, color: scheme.onSurface), TextStyle(backgroundColor: scheme.tertiaryContainer, color: scheme.onTertiaryContainer, fontWeight: FontWeight.w700)),
+                            ),
                           if (!expanded) ...[
                             const SizedBox(height: 2),
                             Text(

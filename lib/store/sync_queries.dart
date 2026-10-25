@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../domain/filing.dart';
 import '../domain/identity.dart';
 import '../mail/models.dart';
+import '../mail/outgoing.dart';
 import 'database.dart';
 import 'people_queries.dart';
 import 'thread_queries.dart';
@@ -316,9 +317,12 @@ extension SyncQueries on AppDatabase {
 
   Future<void> storeBody(int messageDbId, RemoteMessageBody body) async {
     await transaction(() async {
-      final snippet = _snippetFrom(body.text ?? _stripTags(body.html ?? ''));
+      // HTML-only mail gets a derived text body so search can index it;
+      // the renderer still prefers bodyHtml when present.
+      final text = body.text ?? (body.html == null ? null : MimeFactory.htmlToPlainText(body.html!));
+      final snippet = _snippetFrom(text ?? '');
       await (update(messages)..where((m) => m.id.equals(messageDbId))).write(MessagesCompanion(
-        bodyText: Value(body.text),
+        bodyText: Value(text),
         bodyHtml: Value(body.html),
         bodyFetchedAt: Value(DateTime.now()),
         snippet: snippet.isEmpty ? const Value.absent() : Value(snippet),
@@ -345,7 +349,6 @@ extension SyncQueries on AppDatabase {
     return collapsed.length <= 160 ? collapsed : '${collapsed.substring(0, 157)}…';
   }
 
-  static String _stripTags(String html) => html.replaceAll(RegExp(r'<[^>]*>'), ' ');
 
   Future<Message?> messageById(int id) => (select(messages)..where((m) => m.id.equals(id))).getSingleOrNull();
 
