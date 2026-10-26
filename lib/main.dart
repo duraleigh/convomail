@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'app/bench.dart';
@@ -12,6 +13,9 @@ import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
 import 'platform/mailto_registration.dart';
+import 'platform/single_instance.dart';
+import 'platform/windows_integration.dart';
+import 'sync/notification_center.dart';
 import 'sync/schedule_service.dart';
 import 'sync/sync_controller.dart';
 import 'ui/shell/app_shell.dart';
@@ -39,6 +43,9 @@ class StartupArgs {
   static bool _compose = false;
   static bool _reply = false;
   static bool _files = false;
+
+  /// `--minimized`: start hidden in the tray (launch at login uses it).
+  static bool minimized = false;
 
   /// `--search=<text>` starts in search-results mode (screenshots).
   static String? _search;
@@ -72,6 +79,8 @@ class StartupArgs {
         _openFirst = true;
       } else if (a.startsWith('--search=')) {
         _search = a.substring('--search='.length);
+      } else if (a == '--minimized') {
+        minimized = true;
       } else if (a.toLowerCase().startsWith('mailto:')) {
         _mailto = MailtoLink.parse(a);
         destination = Destination.chats;
@@ -107,6 +116,27 @@ Future<void> main(List<String> args) async {
     exit(0);
   }
   final startup = StartupArgs.parse(args);
+
+  // Single instance: hand our arguments (a mailto: link, usually) to the
+  // running app and exit; otherwise become the primary and listen.
+  SingleInstance? instance;
+  if (Platform.isWindows) {
+    instance = SingleInstance(await getApplicationSupportDirectory());
+    if (await instance.forwardToRunning(args)) exit(0);
+  }
+
+  final integration = Platform.isWindows
+      ? WindowsIntegration(
+          onOpen: () => _showWindow(),
+          onCompose: () => _requestCompose(),
+          onQuit: () async {
+            await instance?.close();
+            await windowManager.destroy();
+            exit(0);
+          },
+        )
+      : null;
+
   if (Platform.isWindows) {
     await windowManager.ensureInitialized();
     const options = WindowOptions(
@@ -117,11 +147,45 @@ Future<void> main(List<String> args) async {
       titleBarStyle: TitleBarStyle.normal,
     );
     await windowManager.waitUntilReadyToShow(options, () async {
-      await windowManager.show();
-      await windowManager.focus();
+      if (!StartupArgs.minimized) {
+        await windowManager.show();
+        await windowManager.focus();
+      }
     });
   }
-  runApp(ProviderScope(overrides: startup.overrides, child: const ConvoMailApp()));
+  final container = ProviderContainer(overrides: [
+    ...startup.overrides,
+    if (integration != null) windowsIntegrationProvider.overrideWith((ref) => integration),
+    if (Platform.isWindows) notificationSinkProvider.overrideWith((ref) => WindowsNotificationSink(ref)),
+  ]);
+  _container = container;
+  if (instance != null) {
+    await instance.becomePrimary((forwarded) {
+      final link = forwarded.where((a) => a.toLowerCase().startsWith('mailto:')).map(MailtoLink.parse).whereType<MailtoLink>().firstOrNull;
+      if (link != null) {
+        container.read(composeProvider.notifier).open(ComposeRequest.newMessage(to: [...link.to, ...link.cc], subject: link.subject, body: link.body));
+        container.read(destinationProvider.notifier).select(Destination.chats);
+      }
+      _showWindow();
+    });
+  }
+  runApp(UncontrolledProviderScope(container: container, child: const ConvoMailApp()));
+}
+
+ProviderContainer? _container;
+
+Future<void> _showWindow() async {
+  if (!Platform.isWindows) return;
+  await windowManager.show();
+  await windowManager.focus();
+}
+
+void _requestCompose() {
+  final c = _container;
+  if (c == null) return;
+  c.read(destinationProvider.notifier).select(Destination.chats);
+  c.read(composeProvider.notifier).open();
+  _showWindow();
 }
 
 class ConvoMailApp extends ConsumerStatefulWidget {

@@ -32,6 +32,7 @@ class _PersonRowState extends State<PersonRow> {
         const PopupMenuItem(value: RowAction.trash, child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Delete…'), dense: true)),
         const PopupMenuItem(value: RowAction.markRead, child: ListTile(leading: Icon(Icons.mark_email_read_outlined), title: Text('Mark all as read'), dense: true)),
         PopupMenuItem(value: RowAction.snooze, child: ListTile(leading: const Icon(Icons.snooze_outlined), title: Text(widget.row.isSnoozed ? 'Snoozed… (change)' : 'Snooze…'), dense: true)),
+        PopupMenuItem(value: RowAction.mute, child: ListTile(leading: Icon(widget.row.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined), title: Text(widget.row.muted ? 'Unmute notifications' : 'Mute notifications'), dense: true)),
         PopupMenuItem(
           value: RowAction.pin,
           child: ListTile(
@@ -94,6 +95,10 @@ class _PersonRowState extends State<PersonRow> {
                       children: [
                         if (row.pinned) ...[
                           Icon(Icons.push_pin, size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                        ],
+                        if (row.muted) ...[
+                          Tooltip(message: 'Notifications muted', child: Icon(Icons.notifications_off_outlined, size: 14, color: scheme.onSurfaceVariant)),
                           const SizedBox(width: 4),
                         ],
                         if (row.isSnoozed) ...[

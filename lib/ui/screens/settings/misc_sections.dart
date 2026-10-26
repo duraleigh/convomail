@@ -4,6 +4,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/settings.dart';
 import '../../../platform/mailto_registration.dart';
+import '../../../platform/windows_integration.dart';
+import '../../../sync/notification_center.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/grouped_list.dart';
 import 'accounts_section.dart' show accountsStreamProvider;
@@ -61,8 +63,46 @@ class NotificationsDetail extends ConsumerWidget {
             ],
           ),
         ],
-        const SizedBox(height: AppSpace.lg),
-        Text('Delivery of toasts, the taskbar badge, and tray icon arrive in milestone 10.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: AppSpace.xl),
+        Text('Windows', style: text.labelSmall!.copyWith(letterSpacing: 1)),
+        const SizedBox(height: AppSpace.sm),
+        GroupedList(
+          children: [
+            SwitchListTile(
+              key: const ValueKey('show-badge'),
+              secondary: Icon(Icons.filter_9_plus_outlined, color: scheme.primary),
+              title: const Text('Unread count on the taskbar icon'),
+              subtitle: const Text('Off hides the badge entirely.'),
+              value: settings.showBadge,
+              onChanged: n.setShowBadge,
+            ),
+            SwitchListTile(
+              key: const ValueKey('close-to-tray'),
+              secondary: Icon(Icons.minimize_rounded, color: scheme.primary),
+              title: const Text('Keep running in the tray when the window is closed'),
+              subtitle: const Text('Mail keeps syncing and notifications keep arriving. Quit from the tray icon.'),
+              value: settings.closeToTray,
+              onChanged: n.setCloseToTray,
+            ),
+            SwitchListTile(
+              key: const ValueKey('launch-at-login'),
+              secondary: Icon(Icons.power_settings_new_rounded, color: scheme.primary),
+              title: const Text('Start with Windows'),
+              subtitle: const Text('Starts minimized to the tray when you sign in.'),
+              value: settings.launchAtLogin,
+              onChanged: n.setLaunchAtLogin,
+            ),
+            ListTile(
+              leading: Icon(Icons.notification_add_outlined, color: scheme.primary),
+              title: const Text('Send a test notification'),
+              onTap: () => ref.read(notificationSinkProvider).show(OutgoingNotification(id: 'test:${DateTime.now().millisecondsSinceEpoch}', title: 'ConvoMail', body: 'Notifications are working.')),
+            ),
+          ],
+        ),
+        if (ref.watch(windowsIntegrationProvider) == null) ...[
+          const SizedBox(height: AppSpace.sm),
+          Text('Tray, badge, and toasts are active in the Windows build.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+        ],
       ],
     );
   }

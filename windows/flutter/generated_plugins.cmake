@@ -5,11 +5,13 @@
 list(APPEND FLUTTER_PLUGIN_LIST
   desktop_drop
   file_selector_windows
+  local_notifier
   pasteboard
   screen_retriever_windows
   url_launcher_windows
   webview_windows
   window_manager
+  windows_taskbar
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

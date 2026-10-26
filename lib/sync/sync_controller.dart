@@ -11,6 +11,7 @@ import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
 import 'classification_service.dart';
+import 'notification_center.dart';
 import 'sync_engine.dart';
 
 /// Live sync status per account id.
@@ -88,6 +89,7 @@ class SyncController {
         return MailCredentials(username: account.username, password: pw);
       },
       onStatus: (s) => _ref.read(syncStatusProvider.notifier).put(s),
+      onNewMessages: (ids) => unawaited(_ref.read(notificationCenterProvider).onNewMessages(ids)),
     );
     _syncers[account.id] = syncer;
     _runs[account.id] = syncer.run();

@@ -14,6 +14,9 @@ class AppSettings {
     this.notificationsEnabled = true,
     this.badgeIncludeFeeds = false,
     this.mutedAccounts = const {},
+    this.closeToTray = true,
+    this.launchAtLogin = false,
+    this.showBadge = true,
   });
 
   final ThemeMode themeMode;
@@ -33,6 +36,11 @@ class AppSettings {
   final bool badgeIncludeFeeds;
   final Set<int> mutedAccounts;
 
+  /// Windows integration (spec 4.17, plan M10).
+  final bool closeToTray;
+  final bool launchAtLogin;
+  final bool showBadge;
+
   AppSettings copyWith({
     ThemeMode? themeMode,
     bool? dynamicColor,
@@ -42,6 +50,9 @@ class AppSettings {
     bool? notificationsEnabled,
     bool? badgeIncludeFeeds,
     Set<int>? mutedAccounts,
+    bool? closeToTray,
+    bool? launchAtLogin,
+    bool? showBadge,
   }) =>
       AppSettings(
         themeMode: themeMode ?? this.themeMode,
@@ -52,6 +63,9 @@ class AppSettings {
         notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
         badgeIncludeFeeds: badgeIncludeFeeds ?? this.badgeIncludeFeeds,
         mutedAccounts: mutedAccounts ?? this.mutedAccounts,
+        closeToTray: closeToTray ?? this.closeToTray,
+        launchAtLogin: launchAtLogin ?? this.launchAtLogin,
+        showBadge: showBadge ?? this.showBadge,
       );
 }
 
@@ -66,6 +80,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _kNotify = 'notifications.enabled';
   static const _kBadgeFeeds = 'notifications.badgeIncludeFeeds';
   static const _kMuted = 'notifications.mutedAccounts';
+  static const _kCloseToTray = 'windows.closeToTray';
+  static const _kLaunchAtLogin = 'windows.launchAtLogin';
+  static const _kShowBadge = 'windows.showBadge';
 
   @override
   AppSettings build() {
@@ -84,6 +101,9 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final notify = await _db.getSetting(_kNotify);
     final badgeFeeds = await _db.getSetting(_kBadgeFeeds);
     final muted = await _db.getSetting(_kMuted);
+    final tray = await _db.getSetting(_kCloseToTray);
+    final login = await _db.getSetting(_kLaunchAtLogin);
+    final badge = await _db.getSetting(_kShowBadge);
     state = AppSettings(
       themeMode: ThemeMode.values.firstWhere((m) => m.name == theme, orElse: () => ThemeMode.system),
       dynamicColor: dynamic == 'true',
@@ -93,7 +113,29 @@ class SettingsNotifier extends Notifier<AppSettings> {
       notificationsEnabled: notify != 'false',
       badgeIncludeFeeds: badgeFeeds == 'true',
       mutedAccounts: {for (final s in (muted ?? '').split(',')) if (int.tryParse(s) != null) int.parse(s)},
+      closeToTray: tray != 'false',
+      launchAtLogin: login == 'true',
+      showBadge: badge != 'false',
     );
+    loaded = true;
+  }
+
+  /// True once the stored values have been read (the first state is defaults).
+  bool loaded = false;
+
+  Future<void> setCloseToTray(bool on) async {
+    state = state.copyWith(closeToTray: on);
+    await _db.putSetting(_kCloseToTray, on.toString());
+  }
+
+  Future<void> setLaunchAtLogin(bool on) async {
+    state = state.copyWith(launchAtLogin: on);
+    await _db.putSetting(_kLaunchAtLogin, on.toString());
+  }
+
+  Future<void> setShowBadge(bool on) async {
+    state = state.copyWith(showBadge: on);
+    await _db.putSetting(_kShowBadge, on.toString());
   }
 
   Future<void> setNotificationsEnabled(bool on) async {

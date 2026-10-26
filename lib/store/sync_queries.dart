@@ -181,7 +181,7 @@ extension SyncQueries on AppDatabase {
 
   /// Inserts or refreshes headers, participants, contacts and row
   /// assignments in one transaction. Returns the number of new messages.
-  Future<int> upsertHeaders(int accountId, int folderId, List<RemoteMessageHeader> headers, FilingRule filing) async {
+  Future<int> upsertHeaders(int accountId, int folderId, List<RemoteMessageHeader> headers, FilingRule filing, {List<int>? newIds}) async {
     if (headers.isEmpty) return 0;
     var inserted = 0;
     await transaction(() async {
@@ -221,6 +221,7 @@ extension SyncQueries on AppDatabase {
         if (existing == null) {
           messageDbId = await into(messages).insert(companion);
           inserted++;
+          newIds?.add(messageDbId);
         } else {
           messageDbId = existing.id;
           await (update(messages)..where((m) => m.id.equals(messageDbId))).write(companion);

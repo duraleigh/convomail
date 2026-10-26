@@ -1,10 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/compose_state.dart';
 import '../../app/destinations.dart';
 import '../../app/people_state.dart';
+import '../../app/settings.dart';
 import '../../app/shortcuts.dart';
+import '../../platform/windows_integration.dart';
+import '../../store/database.dart';
+import '../../sync/notification_center.dart';
 import '../../sync/schedule_service.dart';
 import '../screens/boards_screen.dart';
 import '../screens/chats_screen.dart';
@@ -15,15 +21,65 @@ import '../widgets/tonal_avatar.dart';
 
 /// The single-window desktop shell: navigation rail on the left, destination
 /// content on the right (spec 5.3). Nothing opens a second OS window.
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   static bool _autoComposed = false;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  StreamSubscription<void>? _badgeSub;
+
+  @override
+  void initState() {
+    super.initState();
+    final integration = ref.read(windowsIntegrationProvider);
+    if (integration != null) {
+      unawaited(integration.start());
+      ref.read(notificationCenterProvider).start();
+      // Badge: recompute whenever summaries change.
+      final db = ref.read(databaseProvider);
+      _badgeSub = db.select(db.rowSummaries).watch().listen((_) => _updateBadge());
+    }
+  }
+
+  Future<void> _updateBadge() async {
+    final integration = ref.read(windowsIntegrationProvider);
+    if (integration == null) return;
+    final settings = ref.read(settingsProvider);
+    final n = await ref.read(notificationCenterProvider).badgeCount();
+    await integration.setUnread(n, showBadge: settings.showBadge);
+  }
+
+  @override
+  void dispose() {
+    _badgeSub?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final destination = ref.watch(destinationProvider);
     final scheme = Theme.of(context).colorScheme;
+    // Settings that the Windows layer mirrors.
+    ref.listen(settingsProvider, (prev, next) {
+      final integration = ref.read(windowsIntegrationProvider);
+      if (integration == null) return;
+      integration.closeToTray = next.closeToTray;
+      if (prev?.showBadge != next.showBadge) unawaited(_updateBadge());
+      if (prev != null && prev.launchAtLogin != next.launchAtLogin) unawaited(integration.setLaunchAtLogin(next.launchAtLogin));
+    });
+    // A clicked toast opens its row.
+    ref.listen<OutgoingNotification?>(notificationClickProvider, (prev, next) {
+      if (next == null) return;
+      if (next.rowKey != null) ref.read(selectedRowProvider.notifier).select(next.rowKey);
+      ref.read(destinationProvider.notifier).select(Destination.chats);
+      ref.read(windowsIntegrationProvider)?.showWindow();
+      ref.read(notificationClickProvider.notifier).clear();
+    });
     // Snooze-ended and reminder notices surface as snackbars (M10 adds toasts).
     ref.listen<List<AppNotice>>(appNoticesProvider, (prev, next) {
       final seen = {for (final n in prev ?? const <AppNotice>[]) n.id};
@@ -46,8 +102,8 @@ class AppShell extends ConsumerWidget {
         ref.read(appNoticesProvider.notifier).remove(n.id);
       }
     });
-    if (ref.read(autoComposeProvider) && !_autoComposed) {
-      _autoComposed = true;
+    if (ref.read(autoComposeProvider) && !AppShell._autoComposed) {
+      AppShell._autoComposed = true;
       final request = ref.read(autoComposeRequestProvider);
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(composeProvider.notifier).open(request));
     }

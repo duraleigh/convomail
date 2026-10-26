@@ -69,12 +69,17 @@ class AccountSyncer {
     this.onStatus,
     ClassificationService? classification,
     PlannerService? planner,
+    this.onNewMessages,
   })  : classification = classification ?? ClassificationService(db),
         planner = planner ?? PlannerService(db),
         _status = SyncStatus(accountId: account.id, phase: SyncPhase.idle);
 
   final ClassificationService classification;
   final PlannerService planner;
+
+  /// New messages that arrived after the first sync of a folder (local
+  /// ids), for notifications. Not called for the initial download.
+  final void Function(List<int> messageIds)? onNewMessages;
 
   final AppDatabase db;
   final MailTransport transport;
@@ -205,12 +210,14 @@ class AccountSyncer {
       while (pageEnd > highWater && !_stopRequested) {
         final pageStart = math.max(highWater + 1, pageEnd - pageSize + 1);
         final headers = await transport.fetchHeaders(fromUid: pageStart, toUid: pageEnd);
-        fetched += await db.upsertHeaders(account.id, folderId, headers, filing);
+        final newIds = <int>[];
+        fetched += await db.upsertHeaders(account.id, folderId, headers, filing, newIds: newIds);
         await classification.classifySenders({for (final h in headers) filing.identity.resolve(h.from.address).contactKey});
         // Replies to mail the user sent are People messages even from a Feeds
         // sender; Sent syncs after INBOX, so re-check once the originals land.
         final mine = [for (final h in headers) if (h.messageId != null && filing.identity.resolve(h.from.address).isMe) h.messageId!];
         if (mine.isNotEmpty) await classification.reclassifyRepliesTo(mine);
+        if (highWater > 0 && newIds.isNotEmpty && _roleOf(folder) == FolderRole.inbox) onNewMessages?.call(newIds);
         // Record progress so an interrupted first sync resumes where it left
         // off; the high-water mark only advances once the top page is stored.
         newHighWater = math.max(newHighWater, pageEnd);

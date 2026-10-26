@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -108,6 +109,13 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         if (row.ref case ContactRow(:final contactKey)) {
           await ref.read(classificationServiceProvider).setCountsTowardUnread(contactKey, !row.countsTowardUnread);
         }
+      case RowAction.mute:
+        final db = ref.read(databaseProvider);
+        final pref = await db.rowPref(row.rowKey);
+        final muted = !(pref?.muted ?? false);
+        await db.into(db.rowPrefs).insertOnConflictUpdate(RowPrefsCompanion(rowKey: Value(row.rowKey), muted: Value(muted), updatedAt: Value(DateTime.now())));
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(content: Text(muted ? 'Notifications muted for ${row.title}' : 'Notifications on for ${row.title}'), behavior: SnackBarBehavior.floating, width: 420));
       case RowAction.snooze:
         final until = await showSnoozePicker(context, currentlySnoozedUntil: row.snoozedUntil);
         if (until == null || !mounted) return;
@@ -380,7 +388,7 @@ class _FeedsBanner extends ConsumerWidget {
 final feedsFiledThisWeekProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsFiledSince(DateTime.now().subtract(const Duration(days: 7))));
 
 /// Small helper so both the row and the pane agree on action names.
-enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze }
+enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze, mute }
 
 /// Relative timestamp per spec 4.2: time today, "Yesterday", weekday this
 /// week, date otherwise.

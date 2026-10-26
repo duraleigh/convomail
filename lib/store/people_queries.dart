@@ -32,6 +32,7 @@ class PeopleRow {
     this.peopleUnread = 0,
     this.feedsUnread = 0,
     this.snoozedUntil,
+    this.muted = false,
   });
 
   final RowRef ref;
@@ -71,6 +72,9 @@ class PeopleRow {
 
   /// Spec 4.9: hidden from the list until this time.
   final DateTime? snoozedUntil;
+
+  /// Spec 4.17: no notifications for this row.
+  final bool muted;
   bool get isSnoozed => snoozedUntil != null && snoozedUntil!.isAfter(DateTime.now());
   String get rowKey => ref.key;
   String get preview => previewSnippet.isNotEmpty ? previewSnippet : previewSubject;
@@ -212,7 +216,7 @@ extension PeopleQueries on AppDatabase {
            m.subject AS p_subject, m.snippet AS p_snippet, m.is_from_me AS p_from_me,
            mp.subject AS pp_subject, mp.snippet AS pp_snippet, mp.is_from_me AS pp_from_me,
            mf.subject AS pf_subject, mf.snippet AS pf_snippet, mf.is_from_me AS pf_from_me,
-           COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at,
+           COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at, COALESCE(p.muted, 0) AS muted,
            c.display_name AS c_name, COALESCE(c.in_address_book, 0) AS c_in_book,
            COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
            g.name AS g_name
@@ -325,6 +329,7 @@ extension PeopleQueries on AppDatabase {
         peopleUnread: peopleUnread,
         feedsUnread: feedsUnread,
         snoozedUntil: snoozedUntil,
+        muted: d['muted'] == 1,
       ));
     }
 
