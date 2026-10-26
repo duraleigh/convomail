@@ -15,6 +15,7 @@ import 'settings/accounts_section.dart';
 import 'settings/feeds_section.dart';
 import 'settings/misc_sections.dart';
 import 'settings/people_groups_section.dart';
+import 'settings/tags_section.dart';
 
 /// Settings destination: section list on the left, detail on the right
 /// (spec 5.3). Accounts, Appearance and Keyboard are live; the rest fill in
@@ -100,8 +101,8 @@ class _Detail extends ConsumerWidget {
         return const DefaultAppDetail();
       case SettingsSection.feeds:
         return const FeedsDetail();
-      default:
-        return _Placeholder(section);
+      case SettingsSection.tags:
+        return const TagsDetail();
     }
   }
 }
@@ -239,32 +240,6 @@ class _KeyboardDetail extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-class _Placeholder extends StatelessWidget {
-  const _Placeholder(this.section);
-  final SettingsSection section;
-
-  static const _milestone = {
-    SettingsSection.tags: 'milestone 9 (Kanban tags)',
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    return Align(
-      alignment: Alignment.topLeft,
-      child: Container(
-        padding: const EdgeInsets.all(AppSpace.lg),
-        decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(AppShapes.lg)),
-        child: Text(
-          '${section.label} settings arrive in ${_milestone[section]}.',
-          style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant),
-        ),
-      ),
     );
   }
 }

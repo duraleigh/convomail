@@ -13,6 +13,7 @@ import '../../../domain/filing.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
 import '../../../store/people_queries.dart';
+import '../../../store/planner_queries.dart';
 import '../../../sync/classification_service.dart';
 import '../../../sync/row_actions.dart';
 import '../../theme/tokens.dart';
@@ -20,6 +21,7 @@ import '../../widgets/connected_button_group.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
+import '../planner/event_dialogs.dart';
 import 'person_row.dart';
 import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
@@ -47,6 +49,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     PeopleFilter.sent: 'Sent',
     PeopleFilter.hasAttachments: 'Has attachments',
     PeopleFilter.fromContacts: 'From contacts',
+    PeopleFilter.snoozed: 'Snoozed',
   };
 
   @override
@@ -105,6 +108,18 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         if (row.ref case ContactRow(:final contactKey)) {
           await ref.read(classificationServiceProvider).setCountsTowardUnread(contactKey, !row.countsTowardUnread);
         }
+      case RowAction.snooze:
+        final until = await showSnoozePicker(context, currentlySnoozedUntil: row.snoozedUntil);
+        if (until == null || !mounted) return;
+        await ref.read(databaseProvider).snoozeRow(row.rowKey, until == SnoozeChoice.unsnooze ? null : until);
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(
+          content: Text(until == SnoozeChoice.unsnooze ? '${row.title} is back in the list' : '${row.title} snoozed until ${describeSnooze(until)}'),
+          behavior: SnackBarBehavior.floating,
+          width: 420,
+          action: until == SnoozeChoice.unsnooze ? null : SnackBarAction(label: 'Undo', onPressed: () => ref.read(databaseProvider).snoozeRow(row.rowKey, null)),
+        ));
+        if (ref.read(selectedRowProvider) == row.rowKey && until != SnoozeChoice.unsnooze) ref.read(selectedRowProvider.notifier).select(null);
       case RowAction.category:
         if (row.ref case ContactRow(:final contactKey)) {
           final names = await ref.read(databaseProvider).categoryNames();
@@ -262,6 +277,10 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                     _act(current, RowAction.pin);
                     return KeyEventResult.handled;
                   }
+                  if (key == LogicalKeyboardKey.keyS) {
+                    _act(current, RowAction.snooze);
+                    return KeyEventResult.handled;
+                  }
                   if (key == LogicalKeyboardKey.keyR) {
                     _reply(current, all: HardwareKeyboard.instance.isShiftPressed);
                     return KeyEventResult.handled;
@@ -361,7 +380,7 @@ class _FeedsBanner extends ConsumerWidget {
 final feedsFiledThisWeekProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsFiledSince(DateTime.now().subtract(const Duration(days: 7))));
 
 /// Small helper so both the row and the pane agree on action names.
-enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category }
+enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze }
 
 /// Relative timestamp per spec 4.2: time today, "Yesterday", weekday this
 /// week, date otherwise.

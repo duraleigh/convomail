@@ -67,11 +67,11 @@ void main() {
 
     await tester.tap(find.text('Boards'));
     await tester.pumpAndSettle();
-    expect(find.text('No boards yet'), findsOneWidget);
+    expect(find.text('No cards yet'), findsOneWidget);
 
     await tester.tap(find.text('Planner'));
     await tester.pumpAndSettle();
-    expect(find.text('Your week is clear'), findsOneWidget);
+    expect(find.byKey(const ValueKey('planner-today')), findsOneWidget);
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -91,7 +91,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
-    expect(find.text('No boards yet'), findsOneWidget);
+    expect(find.text('No cards yet'), findsOneWidget);
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.sendKeyEvent(LogicalKeyboardKey.digit1);

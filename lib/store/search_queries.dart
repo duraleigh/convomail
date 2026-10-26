@@ -101,6 +101,8 @@ extension SearchQueries on AppDatabase {
         where.add('m.has_attachments = 1');
       case PeopleFilter.fromContacts:
         where.add('EXISTS (SELECT 1 FROM contacts c WHERE c.key = m.from_contact_key AND c.in_address_book = 1)');
+      case PeopleFilter.snoozed:
+        where.add("EXISTS (SELECT 1 FROM row_prefs p JOIN message_row_assignments ra ON ra.row_key = p.row_key WHERE ra.message_id = m.id AND p.snoozed_until IS NOT NULL AND p.snoozed_until > strftime('%s','now'))");
     }
     vars.add(Variable.withInt(limit));
     final rows = await customSelect(

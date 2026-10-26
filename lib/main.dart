@@ -12,6 +12,7 @@ import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
 import 'platform/mailto_registration.dart';
+import 'sync/schedule_service.dart';
 import 'sync/sync_controller.dart';
 import 'ui/shell/app_shell.dart';
 import 'ui/theme/app_theme.dart';
@@ -138,7 +139,10 @@ class _ConvoMailAppState extends ConsumerState<ConvoMailApp> {
   @override
   void initState() {
     super.initState();
-    if (widget.startSync) ref.read(syncControllerProvider).start();
+    if (widget.startSync) {
+      ref.read(syncControllerProvider).start();
+      ref.read(scheduleServiceProvider).start();
+    }
   }
 
   @override

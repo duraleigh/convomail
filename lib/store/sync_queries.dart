@@ -331,6 +331,7 @@ extension SyncQueries on AppDatabase {
       final snippet = _snippetFrom(text ?? '');
       await (update(messages)..where((m) => m.id.equals(messageDbId))).write(MessagesCompanion(
         bodyText: Value(text),
+        icsText: Value(body.calendar),
         bodyHtml: Value(body.html),
         bodyFetchedAt: Value(DateTime.now()),
         snippet: snippet.isEmpty ? const Value.absent() : Value(snippet),

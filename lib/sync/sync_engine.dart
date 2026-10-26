@@ -8,6 +8,7 @@ import '../store/classification_queries.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
 import 'classification_service.dart';
+import 'planner_service.dart';
 
 enum SyncPhase { idle, connecting, listingFolders, syncingFolder, waitingForMail, backoff, error, stopped }
 
@@ -67,10 +68,13 @@ class AccountSyncer {
     this.sleep = _defaultSleep,
     this.onStatus,
     ClassificationService? classification,
+    PlannerService? planner,
   })  : classification = classification ?? ClassificationService(db),
+        planner = planner ?? PlannerService(db),
         _status = SyncStatus(accountId: account.id, phase: SyncPhase.idle);
 
   final ClassificationService classification;
+  final PlannerService planner;
 
   final AppDatabase db;
   final MailTransport transport;
@@ -134,6 +138,7 @@ class AccountSyncer {
         }
       }
       await _backfillSignals(targets);
+      if (!_stopRequested) await planner.recentPass(this);
       await db.setAccountSyncResult(account.id);
       _consecutiveFailures = 0;
       _emit(_status.copyWith(phase: SyncPhase.idle, folderDone: done, folderTotal: targets.length, folderPath: null));
@@ -247,6 +252,7 @@ class AccountSyncer {
     final body = await transport.fetchBody(m.uid);
     await db.storeBody(messageDbId, body);
     await classification.reclassifyMessage(messageDbId);
+    await planner.extractFromMessage(messageDbId);
     return body;
   }
 

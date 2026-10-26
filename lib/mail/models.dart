@@ -149,10 +149,13 @@ class RemoteAttachment {
 }
 
 class RemoteMessageBody {
-  const RemoteMessageBody({this.text, this.html, this.attachments = const []});
+  const RemoteMessageBody({this.text, this.html, this.attachments = const [], this.calendar});
   final String? text;
   final String? html;
   final List<RemoteAttachment> attachments;
+
+  /// Decoded `text/calendar` part (an invitation), when present.
+  final String? calendar;
 }
 
 /// A flag change observed on the server for an already-known message.

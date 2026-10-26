@@ -15,6 +15,7 @@ import 'files/attachment_ui.dart';
 import 'html_body_view.dart';
 import 'people_list_pane.dart';
 import 'rule_proposal_dialog.dart';
+import 'thread_actions.dart';
 
 /// One expanded message (spec 4.3): header with To/CC and time, privacy
 /// strip when remote content was blocked, the sanitized body, attachment
@@ -96,6 +97,7 @@ class MessageCard extends ConsumerWidget {
             ],
           ),
         ),
+        LinkedPlannerChips(messageId: message.id),
         if (attachments.isNotEmpty) ...[
           const SizedBox(height: AppSpace.md),
           Wrap(

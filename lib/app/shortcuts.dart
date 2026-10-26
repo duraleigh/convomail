@@ -38,7 +38,7 @@ abstract final class AppShortcuts {
     ('R / Shift+R / F', 'Reply / Reply all / Forward the selected conversation'),
     ('Ctrl+Enter', 'Send the message being composed'),
     ('Esc', 'Close the composer (the draft is kept)'),
-    ('E / Del / P', 'Archive / Delete / Pin the selected row'),
+    ('E / Del / P / S', 'Archive / Delete / Pin / Snooze the selected row'),
   ];
 }
 

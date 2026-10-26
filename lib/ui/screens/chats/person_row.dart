@@ -31,6 +31,7 @@ class _PersonRowState extends State<PersonRow> {
         const PopupMenuItem(value: RowAction.archive, child: ListTile(leading: Icon(Icons.archive_outlined), title: Text('Archive all'), dense: true)),
         const PopupMenuItem(value: RowAction.trash, child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Delete…'), dense: true)),
         const PopupMenuItem(value: RowAction.markRead, child: ListTile(leading: Icon(Icons.mark_email_read_outlined), title: Text('Mark all as read'), dense: true)),
+        PopupMenuItem(value: RowAction.snooze, child: ListTile(leading: const Icon(Icons.snooze_outlined), title: Text(widget.row.isSnoozed ? 'Snoozed… (change)' : 'Snooze…'), dense: true)),
         PopupMenuItem(
           value: RowAction.pin,
           child: ListTile(
@@ -93,6 +94,10 @@ class _PersonRowState extends State<PersonRow> {
                       children: [
                         if (row.pinned) ...[
                           Icon(Icons.push_pin, size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                        ],
+                        if (row.isSnoozed) ...[
+                          Tooltip(message: 'Snoozed', child: Icon(Icons.snooze_rounded, size: 14, color: scheme.tertiary)),
                           const SizedBox(width: 4),
                         ],
                         if (row.isFeeds && row.countsTowardUnread) ...[
@@ -182,6 +187,7 @@ class _HoverActions extends StatelessWidget {
           btn(Icons.archive_outlined, 'Archive all (E)', RowAction.archive),
           btn(Icons.delete_outline_rounded, 'Delete… (Del)', RowAction.trash),
           btn(Icons.mark_email_read_outlined, 'Mark all as read', RowAction.markRead),
+          btn(Icons.snooze_outlined, 'Snooze… (S)', RowAction.snooze),
           btn(row.pinned ? Icons.push_pin : Icons.push_pin_outlined, row.pinned ? 'Unpin (P)' : 'Pin (P)', RowAction.pin),
         ],
       ),

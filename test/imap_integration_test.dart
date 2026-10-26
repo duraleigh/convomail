@@ -5,7 +5,7 @@ import 'dart:io';
 
 import 'package:convomail/mail/imap_transport.dart';
 import 'package:convomail/mail/models.dart';
-import 'package:convomail/store/database.dart';
+import 'package:convomail/store/database.dart' hide Tags;
 import 'package:convomail/store/sync_queries.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:flutter_test/flutter_test.dart';

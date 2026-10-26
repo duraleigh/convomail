@@ -142,6 +142,12 @@ class Messages extends Table {
   /// Message-level category when it differs from the sender default.
   TextColumn get feedsCategory => text().nullable()();
 
+  /// The `text/calendar` part of an invitation, when the message has one.
+  TextColumn get icsText => text().nullable()();
+
+  /// When event extraction last ran on this message (spec 4.10).
+  DateTimeColumn get extractedAt => dateTime().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
         {folderId, uid},
@@ -234,6 +240,9 @@ class RowPrefs extends Table {
   BoolColumn get pinned => boolean().withDefault(const Constant(false))();
   BoolColumn get muted => boolean().withDefault(const Constant(false))();
   DateTimeColumn get snoozedUntil => dateTime().nullable()();
+
+  /// Set when a snooze ends: the row sorts as if newly received (spec 4.9).
+  DateTimeColumn get resurfacedAt => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
   @override
@@ -366,6 +375,82 @@ class Drafts extends Table {
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+/// Kanban tags (spec 4.8): unlimited nesting through [parentId]. Separate
+/// from Feeds categories.
+class Tags extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  IntColumn get parentId => integer().nullable()();
+  IntColumn get color => integer().nullable()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// Board columns, renameable; seeded with Next / In Progress / Done.
+class BoardColumns extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// A conversation (thread) placed on the board.
+class Cards extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get threadKey => text().unique()();
+  IntColumn get columnId => integer().references(BoardColumns, #id, onDelete: KeyAction.cascade)();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+class CardTags extends Table {
+  IntColumn get cardId => integer().references(Cards, #id, onDelete: KeyAction.cascade)();
+  IntColumn get tagId => integer().references(Tags, #id, onDelete: KeyAction.cascade)();
+
+  @override
+  Set<Column> get primaryKey => {cardId, tagId};
+}
+
+/// Reminders (spec 4.9): alert at a time without hiding anything.
+class Reminders extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get title => text()();
+  DateTimeColumn get dueAt => dateTime()();
+  IntColumn get messageId => integer().nullable()();
+  TextColumn get threadKey => text().nullable()();
+  TextColumn get rowKey => text().nullable()();
+  BoolColumn get done => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get firedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// Planner items (spec 4.10): events (manual, extracted from text, or
+/// from an invitation) and to-dos, each optionally linked to a message.
+class PlannerEvents extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get title => text()();
+  DateTimeColumn get startAt => dateTime().nullable()();
+  DateTimeColumn get endAt => dateTime().nullable()();
+  BoolColumn get allDay => boolean().withDefault(const Constant(false))();
+
+  /// `manual`, `extracted`, `invite`, or `todo`.
+  TextColumn get kind => text()();
+
+  /// Color key: `personal`, `work`, `travel`, `health`, `other`.
+  TextColumn get colorKey => text().withDefault(const Constant('other'))();
+  IntColumn get sourceMessageId => integer().nullable()();
+  TextColumn get threadKey => text().nullable()();
+  TextColumn get location => text().nullable()();
+  TextColumn get notes => text().withDefault(const Constant(''))();
+  BoolColumn get done => boolean().withDefault(const Constant(false))();
+  BoolColumn get dismissed => boolean().withDefault(const Constant(false))();
+  RealColumn get confidence => real().withDefault(const Constant(1.0))();
+  TextColumn get uid => text().nullable()();
+  TextColumn get evidence => text().withDefault(const Constant(''))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 // ---------------------------------------------------------------------------
 
 @DriftDatabase(tables: [
@@ -389,6 +474,12 @@ class Drafts extends Table {
   FeedsCategoryRows,
   ClassificationRules,
   ClassificationEvents,
+  Tags,
+  BoardColumns,
+  Cards,
+  CardTags,
+  Reminders,
+  PlannerEvents,
 ])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
@@ -397,7 +488,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -407,6 +498,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           await _createTriggers();
           await _createSearchIndex();
           await _seedFeedsCategories();
+          await _seedBoardColumns();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -480,6 +572,18 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             // classified by the backfill pass on the next sync.
             await customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) SELECT DISTINCT row_key FROM message_row_assignments');
           }
+          if (from < 9) {
+            await m.addColumn(messages, messages.icsText);
+            await m.addColumn(messages, messages.extractedAt);
+            await m.addColumn(rowPrefs, rowPrefs.resurfacedAt);
+            for (final t in <TableInfo<Table, dynamic>>[tags, boardColumns, cards, cardTags, reminders, plannerEvents]) {
+              await m.createTable(t);
+            }
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_events_start ON planner_events(start_at)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_events_source ON planner_events(source_message_id)');
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at)');
+            await _seedBoardColumns();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -507,6 +611,15 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
       CREATE TRIGGER IF NOT EXISTS trg_fts_del AFTER DELETE ON messages BEGIN
         DELETE FROM message_fts WHERE message_id = old.id;
       END''');
+  }
+
+  Future<void> _seedBoardColumns() async {
+    final n = (await customSelect('SELECT COUNT(*) AS n FROM board_columns').getSingle()).read<int>('n');
+    if (n > 0) return;
+    const defaults = ['Next', 'In Progress', 'Done'];
+    for (var i = 0; i < defaults.length; i++) {
+      await customStatement("INSERT INTO board_columns(name, sort_order) VALUES ('${defaults[i]}', $i)");
+    }
   }
 
   Future<void> _seedFeedsCategories() async {

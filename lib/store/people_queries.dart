@@ -4,7 +4,7 @@ import '../domain/filing.dart';
 import 'database.dart';
 
 /// Which subset of People rows to show (spec 4.7). Exactly one active.
-enum PeopleFilter { all, unread, starred, thisWeek, sent, hasAttachments, fromContacts }
+enum PeopleFilter { all, unread, starred, thisWeek, sent, hasAttachments, fromContacts, snoozed }
 
 /// Which tab of the middle pane a row query serves (spec 4.11).
 enum InboxTab { people, feeds }
@@ -31,6 +31,7 @@ class PeopleRow {
     this.countsTowardUnread = false,
     this.peopleUnread = 0,
     this.feedsUnread = 0,
+    this.snoozedUntil,
   });
 
   final RowRef ref;
@@ -67,6 +68,10 @@ class PeopleRow {
   final bool countsTowardUnread;
   final int peopleUnread;
   final int feedsUnread;
+
+  /// Spec 4.9: hidden from the list until this time.
+  final DateTime? snoozedUntil;
+  bool get isSnoozed => snoozedUntil != null && snoozedUntil!.isAfter(DateTime.now());
   String get rowKey => ref.key;
   String get preview => previewSnippet.isNotEmpty ? previewSnippet : previewSubject;
 }
@@ -207,7 +212,7 @@ extension PeopleQueries on AppDatabase {
            m.subject AS p_subject, m.snippet AS p_snippet, m.is_from_me AS p_from_me,
            mp.subject AS pp_subject, mp.snippet AS pp_snippet, mp.is_from_me AS pp_from_me,
            mf.subject AS pf_subject, mf.snippet AS pf_snippet, mf.is_from_me AS pf_from_me,
-           COALESCE(p.pinned, 0) AS pinned,
+           COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at,
            c.display_name AS c_name, COALESCE(c.in_address_book, 0) AS c_in_book,
            COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
            g.name AS g_name
@@ -262,8 +267,13 @@ extension PeopleQueries on AppDatabase {
       final hasSent = d['has_sent'] == 1;
       final inBook = d['c_in_book'] == 1;
 
+      final snoozedUntil = _dt(d['snoozed_until']);
+      final snoozed = snoozedUntil != null && snoozedUntil.isAfter(DateTime.now());
+      if (filter == PeopleFilter.snoozed ? !snoozed : snoozed) continue;
+      final resurfacedAt = _dt(d['resurfaced_at']);
       final passes = switch (filter) {
         PeopleFilter.all => true,
+        PeopleFilter.snoozed => true,
         PeopleFilter.unread => unread > 0,
         PeopleFilter.starred => hasStarred,
         PeopleFilter.thisWeek => lastAny != null && !lastAny.isBefore(weekAgo),
@@ -299,7 +309,7 @@ extension PeopleQueries on AppDatabase {
         ref: ref,
         title: title,
         identityKey: identityKey,
-        lastActivity: ref is GroupRow ? lastAny : (lastReceived ?? lastAny),
+        lastActivity: _later(ref is GroupRow ? lastAny : (lastReceived ?? lastAny), resurfacedAt),
         previewSubject: subject,
         previewSnippet: snippet,
         previewFromMe: (d['${previewPrefix}_from_me'] ?? d['p_from_me']) == 1,
@@ -314,6 +324,7 @@ extension PeopleQueries on AppDatabase {
         countsTowardUnread: d['c_counts'] == 1,
         peopleUnread: peopleUnread,
         feedsUnread: feedsUnread,
+        snoozedUntil: snoozedUntil,
       ));
     }
 
@@ -325,6 +336,8 @@ extension PeopleQueries on AppDatabase {
     });
     return out;
   }
+
+  static DateTime? _later(DateTime? a, DateTime? b) => a == null ? b : (b == null ? a : (b.isAfter(a) ? b : a));
 
   /// drift stores DateTime columns as Unix seconds.
   static DateTime? _dt(Object? v) => v == null ? null : DateTime.fromMillisecondsSinceEpoch((v as int) * 1000);

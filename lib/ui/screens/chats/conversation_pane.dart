@@ -17,6 +17,7 @@ import 'files/files_panel.dart';
 import 'message_card.dart';
 import 'people_list_pane.dart';
 import 'search_results_view.dart' show markTerms, markedSpan;
+import 'thread_actions.dart';
 import 'thread_view_panel.dart';
 
 /// Right pane of Chats (spec 4.3, 5.3): the selected row's conversation,
@@ -391,6 +392,7 @@ class _ThreadCard extends StatelessWidget {
                     if (unread && !expanded) ...[const SizedBox(width: 8), const CountBadge(1)],
                     const SizedBox(width: 8),
                     Text(relativeTime(newest.date ?? newest.internalDate), style: text.labelSmall!.copyWith(color: unread ? scheme.primary : scheme.onSurfaceVariant, letterSpacing: 0)),
+                    ThreadMenuButton(threadKey: threadKey, messages: messages),
                     Icon(expanded ? Icons.expand_less_rounded : Icons.expand_more_rounded, size: 20, color: scheme.onSurfaceVariant),
                   ],
                 ),

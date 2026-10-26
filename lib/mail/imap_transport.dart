@@ -299,7 +299,11 @@ class ImapTransport implements MailTransport {
         isInline: true,
       ));
     }
-    return RemoteMessageBody(text: m.decodeTextPlainPart(), html: m.decodeTextHtmlPart(), attachments: attachments);
+    String? calendar;
+    try {
+      calendar = m.getPartWithMediaSubtype(MediaSubtype.textCalendar)?.decodeContentText();
+    } catch (_) {}
+    return RemoteMessageBody(text: m.decodeTextPlainPart(), html: m.decodeTextHtmlPart(), attachments: attachments, calendar: calendar);
   }
 
   @override

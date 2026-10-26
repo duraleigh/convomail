@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/compose_state.dart';
 import '../../app/destinations.dart';
+import '../../app/people_state.dart';
 import '../../app/shortcuts.dart';
+import '../../sync/schedule_service.dart';
 import '../screens/boards_screen.dart';
 import '../screens/chats_screen.dart';
 import '../screens/planner_screen.dart';
@@ -22,6 +24,28 @@ class AppShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final destination = ref.watch(destinationProvider);
     final scheme = Theme.of(context).colorScheme;
+    // Snooze-ended and reminder notices surface as snackbars (M10 adds toasts).
+    ref.listen<List<AppNotice>>(appNoticesProvider, (prev, next) {
+      final seen = {for (final n in prev ?? const <AppNotice>[]) n.id};
+      for (final n in next.where((n) => !seen.contains(n.id))) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(n.body.isEmpty ? n.title : '${n.title}: ${n.body}'),
+          behavior: SnackBarBehavior.floating,
+          width: 440,
+          duration: const Duration(seconds: 8),
+          action: n.rowKey == null
+              ? null
+              : SnackBarAction(
+                  label: 'Open',
+                  onPressed: () {
+                    ref.read(selectedRowProvider.notifier).select(n.rowKey);
+                    ref.read(destinationProvider.notifier).select(Destination.chats);
+                  },
+                ),
+        ));
+        ref.read(appNoticesProvider.notifier).remove(n.id);
+      }
+    });
     if (ref.read(autoComposeProvider) && !_autoComposed) {
       _autoComposed = true;
       final request = ref.read(autoComposeRequestProvider);
