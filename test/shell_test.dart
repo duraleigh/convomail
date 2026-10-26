@@ -112,7 +112,7 @@ void main() {
     expect(find.text('No conversations yet'), findsOneWidget);
     await tester.tap(find.widgetWithText(InkWell, 'Feeds'));
     await tester.pumpAndSettle();
-    expect(find.text('Nothing filed to Feeds'), findsOneWidget);
+    expect(find.text('Nothing in Feeds'), findsOneWidget);
     await _teardown(tester);
   });
 

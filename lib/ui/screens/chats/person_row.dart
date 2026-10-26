@@ -39,6 +39,29 @@ class _PersonRowState extends State<PersonRow> {
             dense: true,
           ),
         ),
+        if (!widget.row.isGroup) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem(
+            value: widget.row.isFeeds ? RowAction.moveToPeople : RowAction.moveToFeeds,
+            child: ListTile(
+              leading: Icon(widget.row.isFeeds ? Icons.person_outline_rounded : Icons.rss_feed_rounded),
+              title: Text(widget.row.isFeeds ? 'Move to People' : 'Move to Feeds'),
+              subtitle: const Text('Permanent until you change it'),
+              dense: true,
+            ),
+          ),
+          if (widget.row.isFeeds) ...[
+            PopupMenuItem(
+              value: RowAction.toggleCounts,
+              child: ListTile(
+                leading: Icon(widget.row.countsTowardUnread ? Icons.notifications_active : Icons.notifications_none_rounded),
+                title: Text(widget.row.countsTowardUnread ? 'Stop counting toward unread' : 'Counts toward unread'),
+                dense: true,
+              ),
+            ),
+            const PopupMenuItem(value: RowAction.category, child: ListTile(leading: Icon(Icons.label_outline_rounded), title: Text('Category…'), dense: true)),
+          ],
+        ],
       ],
     );
     if (action != null) widget.onAction(action);
@@ -70,6 +93,10 @@ class _PersonRowState extends State<PersonRow> {
                       children: [
                         if (row.pinned) ...[
                           Icon(Icons.push_pin, size: 14, color: scheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                        ],
+                        if (row.isFeeds && row.countsTowardUnread) ...[
+                          Tooltip(message: 'Counts toward unread', child: Icon(Icons.notifications_active, size: 14, color: scheme.primary)),
                           const SizedBox(width: 4),
                         ],
                         Expanded(
@@ -104,6 +131,15 @@ class _PersonRowState extends State<PersonRow> {
                             style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant),
                           ),
                         ),
+                        if (row.isFeeds && row.category != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            key: ValueKey('category-pill-${row.rowKey}'),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                            decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
+                            child: Text(row.category!, style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, letterSpacing: 0)),
+                          ),
+                        ],
                         if (!_hover && unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
                       ],
                     ),

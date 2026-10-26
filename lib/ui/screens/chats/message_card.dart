@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
+import '../../../domain/classifier.dart';
+import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
 import '../../../sync/row_actions.dart';
 import '../../../sync/sync_controller.dart';
@@ -12,6 +14,7 @@ import '../../widgets/tonal_avatar.dart';
 import 'files/attachment_ui.dart';
 import 'html_body_view.dart';
 import 'people_list_pane.dart';
+import 'rule_proposal_dialog.dart';
 
 /// One expanded message (spec 4.3): header with To/CC and time, privacy
 /// strip when remote content was blocked, the sanitized body, attachment
@@ -46,7 +49,20 @@ class MessageCard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(senderName, style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700)),
+                  Row(
+                    children: [
+                      Flexible(child: Text(senderName, style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
+                      if (message.feedsCategory != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          key: ValueKey('message-category-${message.id}'),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                          decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
+                          child: Text(message.feedsCategory!, style: text.labelSmall!.copyWith(color: scheme.onTertiaryContainer, letterSpacing: 0)),
+                        ),
+                      ],
+                    ],
+                  ),
                   Text(
                     [if (to.isNotEmpty) 'To: $to', if (cc.isNotEmpty) 'CC: $cc', _fullTime(message.date ?? message.internalDate)].join(' · '),
                     style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
@@ -127,6 +143,17 @@ class MessageCard extends ConsumerWidget {
                     await actions.markMessageRead(message.id, seen: false);
                   case 'read':
                     await actions.markMessageRead(message.id, seen: true);
+                  case 'bucket':
+                    final target = message.classification == 'feeds' ? Bucket.people : Bucket.feeds;
+                    if (context.mounted) await correctClassification(context, ref, message: message, bucket: target, title: target == Bucket.people ? 'Move to People' : 'Move to Feeds');
+                  case 'category':
+                    final names = await ref.read(databaseProvider).categoryNames();
+                    if (!context.mounted) return;
+                    final picked = await showDialog<String?>(
+                      context: context,
+                      builder: (ctx) => SimpleDialog(title: const Text('Category for this message'), children: [for (final n in names) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, n), child: Text(n))]),
+                    );
+                    if (picked != null && context.mounted) await correctClassification(context, ref, message: message, category: picked, title: 'Tag as $picked');
                   case 'trash':
                     final pending = await actions.trashRow('c:${message.fromContactKey}', messageIds: [message.id], label: 'Moved to Trash');
                     if (pending != null && context.mounted) {
@@ -143,6 +170,11 @@ class MessageCard extends ConsumerWidget {
               itemBuilder: (_) => [
                 PopupMenuItem(value: message.isSeen ? 'unread' : 'read', child: Text(message.isSeen ? 'Mark unread' : 'Mark read')),
                 const PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
+                if (!message.isFromMe) ...[
+                  const PopupMenuDivider(),
+                  PopupMenuItem(value: 'bucket', child: Text(message.classification == 'feeds' ? 'This is personal → People…' : 'This is a feed → Feeds…')),
+                  if (message.classification == 'feeds') const PopupMenuItem(value: 'category', child: Text('Change category…')),
+                ],
               ],
             ),
           ],

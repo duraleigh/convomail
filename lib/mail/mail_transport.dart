@@ -41,6 +41,10 @@ abstract interface class MailTransport {
 
   Future<RemoteMessageBody> fetchBody(int uid);
 
+  /// Bulk-mail header signals for already-known messages (backfill after
+  /// the schema upgrade that introduced them). Missing uids are omitted.
+  Future<Map<int, BulkSignals>> fetchSignals(List<int> uids);
+
   /// Decoded bytes of the given MIME parts (attachment `partId`s from
   /// [fetchBody]) of a message in the selected folder. Parts that do not
   /// exist are left out of the result.

@@ -2,6 +2,10 @@
 /// only `imap_transport.dart` knows about enough_mail types.
 library;
 
+import '../domain/classifier.dart';
+
+export '../domain/classifier.dart' show BulkSignals;
+
 enum ConnectionSecurity { ssl, starttls, none }
 
 extension ConnectionSecurityName on ConnectionSecurity {
@@ -104,6 +108,7 @@ class RemoteMessageHeader {
     this.hasAttachments = false,
     this.snippet = '',
     this.providerThreadId,
+    this.signals = BulkSignals.none,
   });
 
   final int uid;
@@ -121,6 +126,9 @@ class RemoteMessageHeader {
   final bool hasAttachments;
   final String snippet;
   final String? providerThreadId;
+
+  /// Bulk-mail header evidence (spec 4.11).
+  final BulkSignals signals;
 }
 
 class RemoteAttachment {

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../store/database.dart';
 import '../store/people_queries.dart';
+import 'destinations.dart';
 
 /// Active filter chip on the People list (spec 4.7). Exactly one.
 final peopleFilterProvider = NotifierProvider<PeopleFilterNotifier, PeopleFilter>(PeopleFilterNotifier.new);
@@ -38,7 +39,8 @@ final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   final db = ref.watch(databaseProvider);
   final filter = ref.watch(peopleFilterProvider);
   final search = ref.watch(peopleSearchProvider);
-  return db.watchPeopleRows(filter: filter, search: search);
+  final mode = ref.watch(inboxModeProvider);
+  return db.watchPeopleRows(filter: filter, search: search, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people);
 });
 
 /// Dev/verification aid: when true, the list selects its first row and the

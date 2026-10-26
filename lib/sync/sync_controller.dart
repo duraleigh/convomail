@@ -10,6 +10,7 @@ import '../platform/credential_store.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
+import 'classification_service.dart';
 import 'sync_engine.dart';
 
 /// Live sync status per account id.
@@ -43,6 +44,7 @@ class SyncController {
   /// messages that predate the threading model (schema v5 migration).
   void start() {
     _sub ??= _db.watchAccounts().listen(_reconcile);
+    unawaited(ClassificationService(_db).classifyPending(limit: 500).catchError((Object e) => 0));
     unawaited(_db.rebuildMissingThreads(batch: 500).catchError((Object e) {
       // Threading backfill is best effort; new mail is threaded as it syncs.
       return 0;

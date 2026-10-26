@@ -8,8 +8,12 @@ import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../app/settings_navigation.dart';
 import '../../../app/shortcuts.dart';
+import '../../../domain/classifier.dart';
+import '../../../domain/filing.dart';
+import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
 import '../../../store/people_queries.dart';
+import '../../../sync/classification_service.dart';
 import '../../../sync/row_actions.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/connected_button_group.dart';
@@ -83,6 +87,47 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         await actions.markRowRead(row.rowKey);
       case RowAction.pin:
         await actions.togglePin(row.rowKey);
+      case RowAction.moveToFeeds:
+      case RowAction.moveToPeople:
+        // Spec 4.11: a manual move is permanent until changed.
+        if (row.ref case ContactRow(:final contactKey)) {
+          final target = action == RowAction.moveToFeeds ? Bucket.feeds : Bucket.people;
+          await ref.read(classificationServiceProvider).moveSender(contactKey, target);
+          messenger.hideCurrentSnackBar();
+          messenger.showSnackBar(SnackBar(
+            content: Text('${row.title} moved to ${target == Bucket.feeds ? 'Feeds' : 'People'}. Rules will not move it back.'),
+            behavior: SnackBarBehavior.floating,
+            width: 460,
+            action: SnackBarAction(label: 'Undo', onPressed: () => ref.read(classificationServiceProvider).moveSender(contactKey, null)),
+          ));
+        }
+      case RowAction.toggleCounts:
+        if (row.ref case ContactRow(:final contactKey)) {
+          await ref.read(classificationServiceProvider).setCountsTowardUnread(contactKey, !row.countsTowardUnread);
+        }
+      case RowAction.category:
+        if (row.ref case ContactRow(:final contactKey)) {
+          final names = await ref.read(databaseProvider).categoryNames();
+          if (!mounted) return;
+          final picked = await showDialog<String?>(
+            context: context,
+            builder: (ctx) => SimpleDialog(
+              title: Text('Category for ${row.title}'),
+              children: [
+                for (final n in names)
+                  SimpleDialogOption(
+                    onPressed: () => Navigator.pop(ctx, n),
+                    child: Row(children: [
+                      Icon(n == row.category ? Icons.radio_button_checked : Icons.radio_button_off, size: 18),
+                      const SizedBox(width: 10),
+                      Text(n),
+                    ]),
+                  ),
+              ],
+            ),
+          );
+          if (picked != null) await ref.read(classificationServiceProvider).setSenderCategory(contactKey, picked);
+        }
     }
     if (pending != null && mounted) {
       messenger.hideCurrentSnackBar();
@@ -173,8 +218,8 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e', style: text.bodyMedium!.copyWith(color: scheme.error))),
             data: (list) {
-              if (mode == InboxMode.feeds) {
-                return const EmptyState(icon: Icons.inbox_outlined, title: 'Nothing filed to Feeds', message: 'Feeds classification arrives in milestone 8.');
+              if (mode == InboxMode.feeds && list.isEmpty && !ref.watch(searchActiveProvider)) {
+                return const EmptyState(icon: Icons.rss_feed_rounded, title: 'Nothing in Feeds', message: 'Newsletters, receipts, and notifications land here automatically.');
               }
               if (ref.watch(searchActiveProvider)) {
                 return SearchResultsView(
@@ -229,13 +274,14 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                 },
                 child: ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                  itemCount: list.length,
+                  itemCount: list.length + 1,
                   itemBuilder: (context, i) {
-                    final row = list[i];
+                    if (i == 0) return mode == InboxMode.people ? const _FeedsBanner() : const SizedBox.shrink();
+                    final row = list[i - 1];
                     return Padding(
-                      padding: EdgeInsets.only(top: i == 0 ? 0 : 2),
+                      padding: EdgeInsets.only(top: i == 1 ? 0 : 2),
                       child: GroupedListItem(
-                        radius: GroupedList.radiusFor(i, list.length),
+                        radius: GroupedList.radiusFor(i - 1, list.length),
                         selected: row.rowKey == selected,
                         onTap: () {
                           ref.read(selectedRowProvider.notifier).select(row.rowKey);
@@ -275,8 +321,47 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   }
 }
 
+/// "N filed to Feeds this week" (spec 4.11): shows how much was sorted
+/// out of People, and jumps to the Feeds tab.
+class _FeedsBanner extends ConsumerWidget {
+  const _FeedsBanner();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(feedsFiledThisWeekProvider).value ?? 0;
+    if (n == 0) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        key: const ValueKey('feeds-banner'),
+        color: scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(AppShapes.md),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => ref.read(inboxModeProvider.notifier).select(InboxMode.feeds),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            child: Row(
+              children: [
+                Icon(Icons.rss_feed_rounded, size: 18, color: scheme.onTertiaryContainer),
+                const SizedBox(width: 8),
+                Expanded(child: Text('$n message${n == 1 ? '' : 's'} filed to Feeds this week', style: text.labelLarge!.copyWith(color: scheme.onTertiaryContainer))),
+                Icon(Icons.chevron_right_rounded, size: 20, color: scheme.onTertiaryContainer),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+final feedsFiledThisWeekProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsFiledSince(DateTime.now().subtract(const Duration(days: 7))));
+
 /// Small helper so both the row and the pane agree on action names.
-enum RowAction { archive, trash, markRead, pin }
+enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category }
 
 /// Relative timestamp per spec 4.2: time today, "Yesterday", weekday this
 /// week, date otherwise.

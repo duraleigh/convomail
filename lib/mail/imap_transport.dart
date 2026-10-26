@@ -19,7 +19,8 @@ class ImapTransport implements MailTransport {
   bool _condStore = false;
   Completer<MailboxEvent?>? _pendingIdle;
 
-  static const _headerFields = 'FROM TO CC BCC REPLY-TO SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES';
+  static const _signalFields = 'LIST-UNSUBSCRIBE LIST-ID LIST-POST FEEDBACK-ID PRECEDENCE AUTO-SUBMITTED';
+  static const _headerFields = 'FROM TO CC BCC REPLY-TO SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES $_signalFields';
   static const _headerCriteria = '(UID FLAGS INTERNALDATE RFC822.SIZE BODYSTRUCTURE BODY.PEEK[HEADER.FIELDS ($_headerFields)])';
 
   ImapClient get _c {
@@ -159,7 +160,32 @@ class ImapTransport implements MailTransport {
       flags: MessageFlagsState.fromImapFlags(m.flags ?? const []),
       size: m.size ?? 0,
       hasAttachments: _hasAttachments(m),
+      signals: signalsFromMime(m),
     );
+  }
+
+  static BulkSignals signalsFromMime(MimeMessage m) => BulkSignals.fromHeaders(
+        listUnsubscribe: m.getHeaderValue('list-unsubscribe'),
+        listId: m.getHeaderValue('list-id'),
+        listPost: m.getHeaderValue('list-post'),
+        feedbackId: m.getHeaderValue('feedback-id'),
+        precedence: m.getHeaderValue('precedence'),
+        autoSubmitted: m.getHeaderValue('auto-submitted'),
+      );
+
+  @override
+  Future<Map<int, BulkSignals>> fetchSignals(List<int> uids) async {
+    _requireSelected();
+    if (uids.isEmpty) return const {};
+    final seq = MessageSequence.fromIds(uids, isUid: true);
+    final result = await _c.uidFetchMessages(seq, '(UID BODY.PEEK[HEADER.FIELDS ($_signalFields)])');
+    final out = <int, BulkSignals>{};
+    for (final m in result.messages) {
+      final uid = m.uid;
+      if (uid == null) continue;
+      out[uid] = signalsFromMime(m);
+    }
+    return out;
   }
 
   static bool _hasAttachments(MimeMessage m) {

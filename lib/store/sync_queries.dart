@@ -214,6 +214,7 @@ extension SyncQueries on AppDatabase {
           hasAttachments: Value(h.hasAttachments),
           snippet: Value(h.snippet),
           providerThreadId: Value(h.providerThreadId),
+          bulkSignals: Value(h.signals.encode()),
         );
 
         int messageDbId;

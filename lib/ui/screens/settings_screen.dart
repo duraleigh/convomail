@@ -12,6 +12,7 @@ import '../widgets/grouped_list.dart';
 import 'chats/compose/compose_editor.dart';
 import 'destination_frame.dart';
 import 'settings/accounts_section.dart';
+import 'settings/feeds_section.dart';
 import 'settings/misc_sections.dart';
 import 'settings/people_groups_section.dart';
 
@@ -97,6 +98,8 @@ class _Detail extends ConsumerWidget {
         return const NotificationsDetail();
       case SettingsSection.defaultApp:
         return const DefaultAppDetail();
+      case SettingsSection.feeds:
+        return const FeedsDetail();
       default:
         return _Placeholder(section);
     }
@@ -245,7 +248,6 @@ class _Placeholder extends StatelessWidget {
   final SettingsSection section;
 
   static const _milestone = {
-    SettingsSection.feeds: 'milestone 8',
     SettingsSection.tags: 'milestone 9 (Kanban tags)',
   };
 

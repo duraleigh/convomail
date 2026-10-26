@@ -4,8 +4,10 @@ import 'dart:typed_data';
 
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
+import '../store/classification_queries.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
+import 'classification_service.dart';
 
 enum SyncPhase { idle, connecting, listingFolders, syncingFolder, waitingForMail, backoff, error, stopped }
 
@@ -64,7 +66,11 @@ class AccountSyncer {
     this.syncFolderRoles = const {FolderRole.inbox, FolderRole.sent, FolderRole.archive, FolderRole.other},
     this.sleep = _defaultSleep,
     this.onStatus,
-  }) : _status = SyncStatus(accountId: account.id, phase: SyncPhase.idle);
+    ClassificationService? classification,
+  })  : classification = classification ?? ClassificationService(db),
+        _status = SyncStatus(accountId: account.id, phase: SyncPhase.idle);
+
+  final ClassificationService classification;
 
   final AppDatabase db;
   final MailTransport transport;
@@ -127,6 +133,7 @@ class AccountSyncer {
           }
         }
       }
+      await _backfillSignals(targets);
       await db.setAccountSyncResult(account.id);
       _consecutiveFailures = 0;
       _emit(_status.copyWith(phase: SyncPhase.idle, folderDone: done, folderTotal: targets.length, folderPath: null));
@@ -136,6 +143,25 @@ class AccountSyncer {
       _emit(_status.copyWith(phase: SyncPhase.error, error: e.message));
       if (e.isAuthFailure) rethrow;
     }
+  }
+
+  /// Messages synced before list headers were part of the header fetch
+  /// have no bulk signals; fetch them in pages and classify their senders.
+  Future<void> _backfillSignals(List<Folder> folders) async {
+    for (final folder in folders) {
+      while (!_stopRequested) {
+        final uids = await db.uidsMissingSignals(folder.id, pageSize: pageSize);
+        if (uids.isEmpty) break;
+        _emit(_status.copyWith(message: 'reading list headers in ${folder.path}'));
+        await transport.selectFolder(folder.path);
+        final signals = await transport.fetchSignals(uids);
+        // Messages the server no longer has get empty signals so the loop ends.
+        final filled = {for (final u in uids) u: signals[u] ?? BulkSignals.none};
+        final senders = await db.storeSignals(folder.id, filled);
+        await classification.classifySenders(senders);
+      }
+    }
+    while (!_stopRequested && await classification.classifyPending() > 0) {}
   }
 
   static FolderRole _roleOf(Folder f) => FolderRole.values.firstWhere((r) => r.name == f.role, orElse: () => FolderRole.other);
@@ -175,6 +201,11 @@ class AccountSyncer {
         final pageStart = math.max(highWater + 1, pageEnd - pageSize + 1);
         final headers = await transport.fetchHeaders(fromUid: pageStart, toUid: pageEnd);
         fetched += await db.upsertHeaders(account.id, folderId, headers, filing);
+        await classification.classifySenders({for (final h in headers) filing.identity.resolve(h.from.address).contactKey});
+        // Replies to mail the user sent are People messages even from a Feeds
+        // sender; Sent syncs after INBOX, so re-check once the originals land.
+        final mine = [for (final h in headers) if (h.messageId != null && filing.identity.resolve(h.from.address).isMe) h.messageId!];
+        if (mine.isNotEmpty) await classification.reclassifyRepliesTo(mine);
         // Record progress so an interrupted first sync resumes where it left
         // off; the high-water mark only advances once the top page is stored.
         newHighWater = math.max(newHighWater, pageEnd);
@@ -215,6 +246,7 @@ class AccountSyncer {
     await transport.selectFolder(folder.path);
     final body = await transport.fetchBody(m.uid);
     await db.storeBody(messageDbId, body);
+    await classification.reclassifyMessage(messageDbId);
     return body;
   }
 

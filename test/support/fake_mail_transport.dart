@@ -37,6 +37,7 @@ class FakeFolder {
       flags: h.flags,
       size: h.size,
       hasAttachments: h.hasAttachments,
+      signals: h.signals,
     );
     messages[uid] = withUid;
     if (body != null) bodies[uid] = body;
@@ -167,6 +168,13 @@ class FakeMailTransport implements MailTransport {
   Future<RemoteMessageBody> fetchBody(int uid) async {
     _requireConnected();
     return _sel.bodies[uid] ?? const RemoteMessageBody(text: '');
+  }
+
+  @override
+  Future<Map<int, BulkSignals>> fetchSignals(List<int> uids) async {
+    _requireConnected();
+    log.add('signals ${uids.length}');
+    return {for (final u in uids) if (_sel.messages.containsKey(u)) u: _sel.messages[u]!.signals};
   }
 
   @override

@@ -2901,6 +2901,40 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _bulkSignalsMeta = const VerificationMeta(
+    'bulkSignals',
+  );
+  @override
+  late final GeneratedColumn<String> bulkSignals = GeneratedColumn<String>(
+    'bulk_signals',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _classificationMeta = const VerificationMeta(
+    'classification',
+  );
+  @override
+  late final GeneratedColumn<String> classification = GeneratedColumn<String>(
+    'classification',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('people'),
+  );
+  static const VerificationMeta _feedsCategoryMeta = const VerificationMeta(
+    'feedsCategory',
+  );
+  @override
+  late final GeneratedColumn<String> feedsCategory = GeneratedColumn<String>(
+    'feeds_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -2931,6 +2965,9 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     providerThreadId,
     threadKey,
     imagesAllowed,
+    bulkSignals,
+    classification,
+    feedsCategory,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3139,6 +3176,33 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('bulk_signals')) {
+      context.handle(
+        _bulkSignalsMeta,
+        bulkSignals.isAcceptableOrUnknown(
+          data['bulk_signals']!,
+          _bulkSignalsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('classification')) {
+      context.handle(
+        _classificationMeta,
+        classification.isAcceptableOrUnknown(
+          data['classification']!,
+          _classificationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('feeds_category')) {
+      context.handle(
+        _feedsCategoryMeta,
+        feedsCategory.isAcceptableOrUnknown(
+          data['feeds_category']!,
+          _feedsCategoryMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -3264,6 +3328,18 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.bool,
         data['${effectivePrefix}images_allowed'],
       )!,
+      bulkSignals: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bulk_signals'],
+      ),
+      classification: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}classification'],
+      )!,
+      feedsCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}feeds_category'],
+      ),
     );
   }
 
@@ -3315,6 +3391,16 @@ class Message extends DataClass implements Insertable<Message> {
 
   /// The user chose "Load images" for this message (spec 4.13).
   final bool imagesAllowed;
+
+  /// Encoded [BulkSignals]; null until the list headers were fetched.
+  final String? bulkSignals;
+
+  /// `people` or `feeds` for this message (sender bucket with per-message
+  /// exceptions, spec 4.11).
+  final String classification;
+
+  /// Message-level category when it differs from the sender default.
+  final String? feedsCategory;
   const Message({
     required this.id,
     required this.accountId,
@@ -3344,6 +3430,9 @@ class Message extends DataClass implements Insertable<Message> {
     this.providerThreadId,
     this.threadKey,
     required this.imagesAllowed,
+    this.bulkSignals,
+    required this.classification,
+    this.feedsCategory,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3396,6 +3485,13 @@ class Message extends DataClass implements Insertable<Message> {
       map['thread_key'] = Variable<String>(threadKey);
     }
     map['images_allowed'] = Variable<bool>(imagesAllowed);
+    if (!nullToAbsent || bulkSignals != null) {
+      map['bulk_signals'] = Variable<String>(bulkSignals);
+    }
+    map['classification'] = Variable<String>(classification);
+    if (!nullToAbsent || feedsCategory != null) {
+      map['feeds_category'] = Variable<String>(feedsCategory);
+    }
     return map;
   }
 
@@ -3447,6 +3543,13 @@ class Message extends DataClass implements Insertable<Message> {
           ? const Value.absent()
           : Value(threadKey),
       imagesAllowed: Value(imagesAllowed),
+      bulkSignals: bulkSignals == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bulkSignals),
+      classification: Value(classification),
+      feedsCategory: feedsCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(feedsCategory),
     );
   }
 
@@ -3484,6 +3587,9 @@ class Message extends DataClass implements Insertable<Message> {
       providerThreadId: serializer.fromJson<String?>(json['providerThreadId']),
       threadKey: serializer.fromJson<String?>(json['threadKey']),
       imagesAllowed: serializer.fromJson<bool>(json['imagesAllowed']),
+      bulkSignals: serializer.fromJson<String?>(json['bulkSignals']),
+      classification: serializer.fromJson<String>(json['classification']),
+      feedsCategory: serializer.fromJson<String?>(json['feedsCategory']),
     );
   }
   @override
@@ -3518,6 +3624,9 @@ class Message extends DataClass implements Insertable<Message> {
       'providerThreadId': serializer.toJson<String?>(providerThreadId),
       'threadKey': serializer.toJson<String?>(threadKey),
       'imagesAllowed': serializer.toJson<bool>(imagesAllowed),
+      'bulkSignals': serializer.toJson<String?>(bulkSignals),
+      'classification': serializer.toJson<String>(classification),
+      'feedsCategory': serializer.toJson<String?>(feedsCategory),
     };
   }
 
@@ -3550,6 +3659,9 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> providerThreadId = const Value.absent(),
     Value<String?> threadKey = const Value.absent(),
     bool? imagesAllowed,
+    Value<String?> bulkSignals = const Value.absent(),
+    String? classification,
+    Value<String?> feedsCategory = const Value.absent(),
   }) => Message(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -3585,6 +3697,11 @@ class Message extends DataClass implements Insertable<Message> {
         : this.providerThreadId,
     threadKey: threadKey.present ? threadKey.value : this.threadKey,
     imagesAllowed: imagesAllowed ?? this.imagesAllowed,
+    bulkSignals: bulkSignals.present ? bulkSignals.value : this.bulkSignals,
+    classification: classification ?? this.classification,
+    feedsCategory: feedsCategory.present
+        ? feedsCategory.value
+        : this.feedsCategory,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -3634,6 +3751,15 @@ class Message extends DataClass implements Insertable<Message> {
       imagesAllowed: data.imagesAllowed.present
           ? data.imagesAllowed.value
           : this.imagesAllowed,
+      bulkSignals: data.bulkSignals.present
+          ? data.bulkSignals.value
+          : this.bulkSignals,
+      classification: data.classification.present
+          ? data.classification.value
+          : this.classification,
+      feedsCategory: data.feedsCategory.present
+          ? data.feedsCategory.value
+          : this.feedsCategory,
     );
   }
 
@@ -3667,7 +3793,10 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('bodyFetchedAt: $bodyFetchedAt, ')
           ..write('providerThreadId: $providerThreadId, ')
           ..write('threadKey: $threadKey, ')
-          ..write('imagesAllowed: $imagesAllowed')
+          ..write('imagesAllowed: $imagesAllowed, ')
+          ..write('bulkSignals: $bulkSignals, ')
+          ..write('classification: $classification, ')
+          ..write('feedsCategory: $feedsCategory')
           ..write(')'))
         .toString();
   }
@@ -3702,6 +3831,9 @@ class Message extends DataClass implements Insertable<Message> {
     providerThreadId,
     threadKey,
     imagesAllowed,
+    bulkSignals,
+    classification,
+    feedsCategory,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -3734,7 +3866,10 @@ class Message extends DataClass implements Insertable<Message> {
           other.bodyFetchedAt == this.bodyFetchedAt &&
           other.providerThreadId == this.providerThreadId &&
           other.threadKey == this.threadKey &&
-          other.imagesAllowed == this.imagesAllowed);
+          other.imagesAllowed == this.imagesAllowed &&
+          other.bulkSignals == this.bulkSignals &&
+          other.classification == this.classification &&
+          other.feedsCategory == this.feedsCategory);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -3766,6 +3901,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> providerThreadId;
   final Value<String?> threadKey;
   final Value<bool> imagesAllowed;
+  final Value<String?> bulkSignals;
+  final Value<String> classification;
+  final Value<String?> feedsCategory;
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -3795,6 +3933,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.providerThreadId = const Value.absent(),
     this.threadKey = const Value.absent(),
     this.imagesAllowed = const Value.absent(),
+    this.bulkSignals = const Value.absent(),
+    this.classification = const Value.absent(),
+    this.feedsCategory = const Value.absent(),
   });
   MessagesCompanion.insert({
     this.id = const Value.absent(),
@@ -3825,6 +3966,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.providerThreadId = const Value.absent(),
     this.threadKey = const Value.absent(),
     this.imagesAllowed = const Value.absent(),
+    this.bulkSignals = const Value.absent(),
+    this.classification = const Value.absent(),
+    this.feedsCategory = const Value.absent(),
   }) : accountId = Value(accountId),
        folderId = Value(folderId),
        uid = Value(uid);
@@ -3857,6 +4001,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? providerThreadId,
     Expression<String>? threadKey,
     Expression<bool>? imagesAllowed,
+    Expression<String>? bulkSignals,
+    Expression<String>? classification,
+    Expression<String>? feedsCategory,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -3887,6 +4034,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (providerThreadId != null) 'provider_thread_id': providerThreadId,
       if (threadKey != null) 'thread_key': threadKey,
       if (imagesAllowed != null) 'images_allowed': imagesAllowed,
+      if (bulkSignals != null) 'bulk_signals': bulkSignals,
+      if (classification != null) 'classification': classification,
+      if (feedsCategory != null) 'feeds_category': feedsCategory,
     });
   }
 
@@ -3919,6 +4069,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? providerThreadId,
     Value<String?>? threadKey,
     Value<bool>? imagesAllowed,
+    Value<String?>? bulkSignals,
+    Value<String>? classification,
+    Value<String?>? feedsCategory,
   }) {
     return MessagesCompanion(
       id: id ?? this.id,
@@ -3949,6 +4102,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       providerThreadId: providerThreadId ?? this.providerThreadId,
       threadKey: threadKey ?? this.threadKey,
       imagesAllowed: imagesAllowed ?? this.imagesAllowed,
+      bulkSignals: bulkSignals ?? this.bulkSignals,
+      classification: classification ?? this.classification,
+      feedsCategory: feedsCategory ?? this.feedsCategory,
     );
   }
 
@@ -4039,6 +4195,15 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (imagesAllowed.present) {
       map['images_allowed'] = Variable<bool>(imagesAllowed.value);
     }
+    if (bulkSignals.present) {
+      map['bulk_signals'] = Variable<String>(bulkSignals.value);
+    }
+    if (classification.present) {
+      map['classification'] = Variable<String>(classification.value);
+    }
+    if (feedsCategory.present) {
+      map['feeds_category'] = Variable<String>(feedsCategory.value);
+    }
     return map;
   }
 
@@ -4072,7 +4237,10 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('bodyFetchedAt: $bodyFetchedAt, ')
           ..write('providerThreadId: $providerThreadId, ')
           ..write('threadKey: $threadKey, ')
-          ..write('imagesAllowed: $imagesAllowed')
+          ..write('imagesAllowed: $imagesAllowed, ')
+          ..write('bulkSignals: $bulkSignals, ')
+          ..write('classification: $classification, ')
+          ..write('feedsCategory: $feedsCategory')
           ..write(')'))
         .toString();
   }
@@ -4591,6 +4759,67 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _classificationMeta = const VerificationMeta(
+    'classification',
+  );
+  @override
+  late final GeneratedColumn<String> classification = GeneratedColumn<String>(
+    'classification',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('people'),
+  );
+  static const VerificationMeta _classificationSourceMeta =
+      const VerificationMeta('classificationSource');
+  @override
+  late final GeneratedColumn<String> classificationSource =
+      GeneratedColumn<String>(
+        'classification_source',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('auto'),
+      );
+  static const VerificationMeta _feedsCategoryMeta = const VerificationMeta(
+    'feedsCategory',
+  );
+  @override
+  late final GeneratedColumn<String> feedsCategory = GeneratedColumn<String>(
+    'feeds_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _countsTowardUnreadMeta =
+      const VerificationMeta('countsTowardUnread');
+  @override
+  late final GeneratedColumn<bool> countsTowardUnread = GeneratedColumn<bool>(
+    'counts_toward_unread',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("counts_toward_unread" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _classReasonsMeta = const VerificationMeta(
+    'classReasons',
+  );
+  @override
+  late final GeneratedColumn<String> classReasons = GeneratedColumn<String>(
+    'class_reasons',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _firstSeenAtMeta = const VerificationMeta(
     'firstSeenAt',
   );
@@ -4622,6 +4851,11 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     photoPath,
     isMe,
     inAddressBook,
+    classification,
+    classificationSource,
+    feedsCategory,
+    countsTowardUnread,
+    classReasons,
     firstSeenAt,
     lastSeenAt,
   ];
@@ -4675,6 +4909,51 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
         ),
       );
     }
+    if (data.containsKey('classification')) {
+      context.handle(
+        _classificationMeta,
+        classification.isAcceptableOrUnknown(
+          data['classification']!,
+          _classificationMeta,
+        ),
+      );
+    }
+    if (data.containsKey('classification_source')) {
+      context.handle(
+        _classificationSourceMeta,
+        classificationSource.isAcceptableOrUnknown(
+          data['classification_source']!,
+          _classificationSourceMeta,
+        ),
+      );
+    }
+    if (data.containsKey('feeds_category')) {
+      context.handle(
+        _feedsCategoryMeta,
+        feedsCategory.isAcceptableOrUnknown(
+          data['feeds_category']!,
+          _feedsCategoryMeta,
+        ),
+      );
+    }
+    if (data.containsKey('counts_toward_unread')) {
+      context.handle(
+        _countsTowardUnreadMeta,
+        countsTowardUnread.isAcceptableOrUnknown(
+          data['counts_toward_unread']!,
+          _countsTowardUnreadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('class_reasons')) {
+      context.handle(
+        _classReasonsMeta,
+        classReasons.isAcceptableOrUnknown(
+          data['class_reasons']!,
+          _classReasonsMeta,
+        ),
+      );
+    }
     if (data.containsKey('first_seen_at')) {
       context.handle(
         _firstSeenAtMeta,
@@ -4722,6 +5001,26 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
         DriftSqlType.bool,
         data['${effectivePrefix}in_address_book'],
       )!,
+      classification: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}classification'],
+      )!,
+      classificationSource: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}classification_source'],
+      )!,
+      feedsCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}feeds_category'],
+      ),
+      countsTowardUnread: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}counts_toward_unread'],
+      )!,
+      classReasons: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}class_reasons'],
+      )!,
       firstSeenAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}first_seen_at'],
@@ -4745,6 +5044,18 @@ class Contact extends DataClass implements Insertable<Contact> {
   final String? photoPath;
   final bool isMe;
   final bool inAddressBook;
+
+  /// Effective bucket (`people` | `feeds`) and how it was decided
+  /// (`auto` | `override` | `rule` | `people-signal`).
+  final String classification;
+  final String classificationSource;
+
+  /// Sender-default Feeds category.
+  final String? feedsCategory;
+
+  /// Spec 4.11: a Feeds sender whose unread mail still counts.
+  final bool countsTowardUnread;
+  final String classReasons;
   final DateTime firstSeenAt;
   final DateTime lastSeenAt;
   const Contact({
@@ -4753,6 +5064,11 @@ class Contact extends DataClass implements Insertable<Contact> {
     this.photoPath,
     required this.isMe,
     required this.inAddressBook,
+    required this.classification,
+    required this.classificationSource,
+    this.feedsCategory,
+    required this.countsTowardUnread,
+    required this.classReasons,
     required this.firstSeenAt,
     required this.lastSeenAt,
   });
@@ -4766,6 +5082,13 @@ class Contact extends DataClass implements Insertable<Contact> {
     }
     map['is_me'] = Variable<bool>(isMe);
     map['in_address_book'] = Variable<bool>(inAddressBook);
+    map['classification'] = Variable<String>(classification);
+    map['classification_source'] = Variable<String>(classificationSource);
+    if (!nullToAbsent || feedsCategory != null) {
+      map['feeds_category'] = Variable<String>(feedsCategory);
+    }
+    map['counts_toward_unread'] = Variable<bool>(countsTowardUnread);
+    map['class_reasons'] = Variable<String>(classReasons);
     map['first_seen_at'] = Variable<DateTime>(firstSeenAt);
     map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
     return map;
@@ -4780,6 +5103,13 @@ class Contact extends DataClass implements Insertable<Contact> {
           : Value(photoPath),
       isMe: Value(isMe),
       inAddressBook: Value(inAddressBook),
+      classification: Value(classification),
+      classificationSource: Value(classificationSource),
+      feedsCategory: feedsCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(feedsCategory),
+      countsTowardUnread: Value(countsTowardUnread),
+      classReasons: Value(classReasons),
       firstSeenAt: Value(firstSeenAt),
       lastSeenAt: Value(lastSeenAt),
     );
@@ -4796,6 +5126,13 @@ class Contact extends DataClass implements Insertable<Contact> {
       photoPath: serializer.fromJson<String?>(json['photoPath']),
       isMe: serializer.fromJson<bool>(json['isMe']),
       inAddressBook: serializer.fromJson<bool>(json['inAddressBook']),
+      classification: serializer.fromJson<String>(json['classification']),
+      classificationSource: serializer.fromJson<String>(
+        json['classificationSource'],
+      ),
+      feedsCategory: serializer.fromJson<String?>(json['feedsCategory']),
+      countsTowardUnread: serializer.fromJson<bool>(json['countsTowardUnread']),
+      classReasons: serializer.fromJson<String>(json['classReasons']),
       firstSeenAt: serializer.fromJson<DateTime>(json['firstSeenAt']),
       lastSeenAt: serializer.fromJson<DateTime>(json['lastSeenAt']),
     );
@@ -4809,6 +5146,11 @@ class Contact extends DataClass implements Insertable<Contact> {
       'photoPath': serializer.toJson<String?>(photoPath),
       'isMe': serializer.toJson<bool>(isMe),
       'inAddressBook': serializer.toJson<bool>(inAddressBook),
+      'classification': serializer.toJson<String>(classification),
+      'classificationSource': serializer.toJson<String>(classificationSource),
+      'feedsCategory': serializer.toJson<String?>(feedsCategory),
+      'countsTowardUnread': serializer.toJson<bool>(countsTowardUnread),
+      'classReasons': serializer.toJson<String>(classReasons),
       'firstSeenAt': serializer.toJson<DateTime>(firstSeenAt),
       'lastSeenAt': serializer.toJson<DateTime>(lastSeenAt),
     };
@@ -4820,6 +5162,11 @@ class Contact extends DataClass implements Insertable<Contact> {
     Value<String?> photoPath = const Value.absent(),
     bool? isMe,
     bool? inAddressBook,
+    String? classification,
+    String? classificationSource,
+    Value<String?> feedsCategory = const Value.absent(),
+    bool? countsTowardUnread,
+    String? classReasons,
     DateTime? firstSeenAt,
     DateTime? lastSeenAt,
   }) => Contact(
@@ -4828,6 +5175,13 @@ class Contact extends DataClass implements Insertable<Contact> {
     photoPath: photoPath.present ? photoPath.value : this.photoPath,
     isMe: isMe ?? this.isMe,
     inAddressBook: inAddressBook ?? this.inAddressBook,
+    classification: classification ?? this.classification,
+    classificationSource: classificationSource ?? this.classificationSource,
+    feedsCategory: feedsCategory.present
+        ? feedsCategory.value
+        : this.feedsCategory,
+    countsTowardUnread: countsTowardUnread ?? this.countsTowardUnread,
+    classReasons: classReasons ?? this.classReasons,
     firstSeenAt: firstSeenAt ?? this.firstSeenAt,
     lastSeenAt: lastSeenAt ?? this.lastSeenAt,
   );
@@ -4842,6 +5196,21 @@ class Contact extends DataClass implements Insertable<Contact> {
       inAddressBook: data.inAddressBook.present
           ? data.inAddressBook.value
           : this.inAddressBook,
+      classification: data.classification.present
+          ? data.classification.value
+          : this.classification,
+      classificationSource: data.classificationSource.present
+          ? data.classificationSource.value
+          : this.classificationSource,
+      feedsCategory: data.feedsCategory.present
+          ? data.feedsCategory.value
+          : this.feedsCategory,
+      countsTowardUnread: data.countsTowardUnread.present
+          ? data.countsTowardUnread.value
+          : this.countsTowardUnread,
+      classReasons: data.classReasons.present
+          ? data.classReasons.value
+          : this.classReasons,
       firstSeenAt: data.firstSeenAt.present
           ? data.firstSeenAt.value
           : this.firstSeenAt,
@@ -4859,6 +5228,11 @@ class Contact extends DataClass implements Insertable<Contact> {
           ..write('photoPath: $photoPath, ')
           ..write('isMe: $isMe, ')
           ..write('inAddressBook: $inAddressBook, ')
+          ..write('classification: $classification, ')
+          ..write('classificationSource: $classificationSource, ')
+          ..write('feedsCategory: $feedsCategory, ')
+          ..write('countsTowardUnread: $countsTowardUnread, ')
+          ..write('classReasons: $classReasons, ')
           ..write('firstSeenAt: $firstSeenAt, ')
           ..write('lastSeenAt: $lastSeenAt')
           ..write(')'))
@@ -4872,6 +5246,11 @@ class Contact extends DataClass implements Insertable<Contact> {
     photoPath,
     isMe,
     inAddressBook,
+    classification,
+    classificationSource,
+    feedsCategory,
+    countsTowardUnread,
+    classReasons,
     firstSeenAt,
     lastSeenAt,
   );
@@ -4884,6 +5263,11 @@ class Contact extends DataClass implements Insertable<Contact> {
           other.photoPath == this.photoPath &&
           other.isMe == this.isMe &&
           other.inAddressBook == this.inAddressBook &&
+          other.classification == this.classification &&
+          other.classificationSource == this.classificationSource &&
+          other.feedsCategory == this.feedsCategory &&
+          other.countsTowardUnread == this.countsTowardUnread &&
+          other.classReasons == this.classReasons &&
           other.firstSeenAt == this.firstSeenAt &&
           other.lastSeenAt == this.lastSeenAt);
 }
@@ -4894,6 +5278,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   final Value<String?> photoPath;
   final Value<bool> isMe;
   final Value<bool> inAddressBook;
+  final Value<String> classification;
+  final Value<String> classificationSource;
+  final Value<String?> feedsCategory;
+  final Value<bool> countsTowardUnread;
+  final Value<String> classReasons;
   final Value<DateTime> firstSeenAt;
   final Value<DateTime> lastSeenAt;
   final Value<int> rowid;
@@ -4903,6 +5292,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     this.photoPath = const Value.absent(),
     this.isMe = const Value.absent(),
     this.inAddressBook = const Value.absent(),
+    this.classification = const Value.absent(),
+    this.classificationSource = const Value.absent(),
+    this.feedsCategory = const Value.absent(),
+    this.countsTowardUnread = const Value.absent(),
+    this.classReasons = const Value.absent(),
     this.firstSeenAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4913,6 +5307,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     this.photoPath = const Value.absent(),
     this.isMe = const Value.absent(),
     this.inAddressBook = const Value.absent(),
+    this.classification = const Value.absent(),
+    this.classificationSource = const Value.absent(),
+    this.feedsCategory = const Value.absent(),
+    this.countsTowardUnread = const Value.absent(),
+    this.classReasons = const Value.absent(),
     this.firstSeenAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4923,6 +5322,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     Expression<String>? photoPath,
     Expression<bool>? isMe,
     Expression<bool>? inAddressBook,
+    Expression<String>? classification,
+    Expression<String>? classificationSource,
+    Expression<String>? feedsCategory,
+    Expression<bool>? countsTowardUnread,
+    Expression<String>? classReasons,
     Expression<DateTime>? firstSeenAt,
     Expression<DateTime>? lastSeenAt,
     Expression<int>? rowid,
@@ -4933,6 +5337,13 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
       if (photoPath != null) 'photo_path': photoPath,
       if (isMe != null) 'is_me': isMe,
       if (inAddressBook != null) 'in_address_book': inAddressBook,
+      if (classification != null) 'classification': classification,
+      if (classificationSource != null)
+        'classification_source': classificationSource,
+      if (feedsCategory != null) 'feeds_category': feedsCategory,
+      if (countsTowardUnread != null)
+        'counts_toward_unread': countsTowardUnread,
+      if (classReasons != null) 'class_reasons': classReasons,
       if (firstSeenAt != null) 'first_seen_at': firstSeenAt,
       if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
       if (rowid != null) 'rowid': rowid,
@@ -4945,6 +5356,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     Value<String?>? photoPath,
     Value<bool>? isMe,
     Value<bool>? inAddressBook,
+    Value<String>? classification,
+    Value<String>? classificationSource,
+    Value<String?>? feedsCategory,
+    Value<bool>? countsTowardUnread,
+    Value<String>? classReasons,
     Value<DateTime>? firstSeenAt,
     Value<DateTime>? lastSeenAt,
     Value<int>? rowid,
@@ -4955,6 +5371,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
       photoPath: photoPath ?? this.photoPath,
       isMe: isMe ?? this.isMe,
       inAddressBook: inAddressBook ?? this.inAddressBook,
+      classification: classification ?? this.classification,
+      classificationSource: classificationSource ?? this.classificationSource,
+      feedsCategory: feedsCategory ?? this.feedsCategory,
+      countsTowardUnread: countsTowardUnread ?? this.countsTowardUnread,
+      classReasons: classReasons ?? this.classReasons,
       firstSeenAt: firstSeenAt ?? this.firstSeenAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
       rowid: rowid ?? this.rowid,
@@ -4979,6 +5400,23 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     if (inAddressBook.present) {
       map['in_address_book'] = Variable<bool>(inAddressBook.value);
     }
+    if (classification.present) {
+      map['classification'] = Variable<String>(classification.value);
+    }
+    if (classificationSource.present) {
+      map['classification_source'] = Variable<String>(
+        classificationSource.value,
+      );
+    }
+    if (feedsCategory.present) {
+      map['feeds_category'] = Variable<String>(feedsCategory.value);
+    }
+    if (countsTowardUnread.present) {
+      map['counts_toward_unread'] = Variable<bool>(countsTowardUnread.value);
+    }
+    if (classReasons.present) {
+      map['class_reasons'] = Variable<String>(classReasons.value);
+    }
     if (firstSeenAt.present) {
       map['first_seen_at'] = Variable<DateTime>(firstSeenAt.value);
     }
@@ -4999,6 +5437,11 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
           ..write('photoPath: $photoPath, ')
           ..write('isMe: $isMe, ')
           ..write('inAddressBook: $inAddressBook, ')
+          ..write('classification: $classification, ')
+          ..write('classificationSource: $classificationSource, ')
+          ..write('feedsCategory: $feedsCategory, ')
+          ..write('countsTowardUnread: $countsTowardUnread, ')
+          ..write('classReasons: $classReasons, ')
           ..write('firstSeenAt: $firstSeenAt, ')
           ..write('lastSeenAt: $lastSeenAt, ')
           ..write('rowid: $rowid')
@@ -7003,6 +7446,98 @@ class $RowSummariesTable extends RowSummaries
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
+  static const VerificationMeta _peopleTotalMeta = const VerificationMeta(
+    'peopleTotal',
+  );
+  @override
+  late final GeneratedColumn<int> peopleTotal = GeneratedColumn<int>(
+    'people_total',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _peopleUnreadMeta = const VerificationMeta(
+    'peopleUnread',
+  );
+  @override
+  late final GeneratedColumn<int> peopleUnread = GeneratedColumn<int>(
+    'people_unread',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _feedsTotalMeta = const VerificationMeta(
+    'feedsTotal',
+  );
+  @override
+  late final GeneratedColumn<int> feedsTotal = GeneratedColumn<int>(
+    'feeds_total',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _feedsUnreadMeta = const VerificationMeta(
+    'feedsUnread',
+  );
+  @override
+  late final GeneratedColumn<int> feedsUnread = GeneratedColumn<int>(
+    'feeds_unread',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _lastPeopleMeta = const VerificationMeta(
+    'lastPeople',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPeople = GeneratedColumn<DateTime>(
+    'last_people',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _lastFeedsMeta = const VerificationMeta(
+    'lastFeeds',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastFeeds = GeneratedColumn<DateTime>(
+    'last_feeds',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _newestPeopleIdMeta = const VerificationMeta(
+    'newestPeopleId',
+  );
+  @override
+  late final GeneratedColumn<int> newestPeopleId = GeneratedColumn<int>(
+    'newest_people_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _newestFeedsIdMeta = const VerificationMeta(
+    'newestFeedsId',
+  );
+  @override
+  late final GeneratedColumn<int> newestFeedsId = GeneratedColumn<int>(
+    'newest_feeds_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     rowKey,
@@ -7015,6 +7550,14 @@ class $RowSummariesTable extends RowSummaries
     hasSent,
     newestMessageId,
     updatedAt,
+    peopleTotal,
+    peopleUnread,
+    feedsTotal,
+    feedsUnread,
+    lastPeople,
+    lastFeeds,
+    newestPeopleId,
+    newestFeedsId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -7109,6 +7652,69 @@ class $RowSummariesTable extends RowSummaries
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
     }
+    if (data.containsKey('people_total')) {
+      context.handle(
+        _peopleTotalMeta,
+        peopleTotal.isAcceptableOrUnknown(
+          data['people_total']!,
+          _peopleTotalMeta,
+        ),
+      );
+    }
+    if (data.containsKey('people_unread')) {
+      context.handle(
+        _peopleUnreadMeta,
+        peopleUnread.isAcceptableOrUnknown(
+          data['people_unread']!,
+          _peopleUnreadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('feeds_total')) {
+      context.handle(
+        _feedsTotalMeta,
+        feedsTotal.isAcceptableOrUnknown(data['feeds_total']!, _feedsTotalMeta),
+      );
+    }
+    if (data.containsKey('feeds_unread')) {
+      context.handle(
+        _feedsUnreadMeta,
+        feedsUnread.isAcceptableOrUnknown(
+          data['feeds_unread']!,
+          _feedsUnreadMeta,
+        ),
+      );
+    }
+    if (data.containsKey('last_people')) {
+      context.handle(
+        _lastPeopleMeta,
+        lastPeople.isAcceptableOrUnknown(data['last_people']!, _lastPeopleMeta),
+      );
+    }
+    if (data.containsKey('last_feeds')) {
+      context.handle(
+        _lastFeedsMeta,
+        lastFeeds.isAcceptableOrUnknown(data['last_feeds']!, _lastFeedsMeta),
+      );
+    }
+    if (data.containsKey('newest_people_id')) {
+      context.handle(
+        _newestPeopleIdMeta,
+        newestPeopleId.isAcceptableOrUnknown(
+          data['newest_people_id']!,
+          _newestPeopleIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('newest_feeds_id')) {
+      context.handle(
+        _newestFeedsIdMeta,
+        newestFeedsId.isAcceptableOrUnknown(
+          data['newest_feeds_id']!,
+          _newestFeedsIdMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -7158,6 +7764,38 @@ class $RowSummariesTable extends RowSummaries
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       )!,
+      peopleTotal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}people_total'],
+      )!,
+      peopleUnread: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}people_unread'],
+      )!,
+      feedsTotal: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}feeds_total'],
+      )!,
+      feedsUnread: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}feeds_unread'],
+      )!,
+      lastPeople: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_people'],
+      ),
+      lastFeeds: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_feeds'],
+      ),
+      newestPeopleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}newest_people_id'],
+      ),
+      newestFeedsId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}newest_feeds_id'],
+      ),
     );
   }
 
@@ -7182,6 +7820,17 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
   final bool hasSent;
   final int? newestMessageId;
   final DateTime updatedAt;
+
+  /// Per-bucket figures (spec 4.11): a row shows in People when it has
+  /// People messages and in Feeds when it has Feeds messages.
+  final int peopleTotal;
+  final int peopleUnread;
+  final int feedsTotal;
+  final int feedsUnread;
+  final DateTime? lastPeople;
+  final DateTime? lastFeeds;
+  final int? newestPeopleId;
+  final int? newestFeedsId;
   const RowSummary({
     required this.rowKey,
     required this.total,
@@ -7193,6 +7842,14 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
     required this.hasSent,
     this.newestMessageId,
     required this.updatedAt,
+    required this.peopleTotal,
+    required this.peopleUnread,
+    required this.feedsTotal,
+    required this.feedsUnread,
+    this.lastPeople,
+    this.lastFeeds,
+    this.newestPeopleId,
+    this.newestFeedsId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -7213,6 +7870,22 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
       map['newest_message_id'] = Variable<int>(newestMessageId);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['people_total'] = Variable<int>(peopleTotal);
+    map['people_unread'] = Variable<int>(peopleUnread);
+    map['feeds_total'] = Variable<int>(feedsTotal);
+    map['feeds_unread'] = Variable<int>(feedsUnread);
+    if (!nullToAbsent || lastPeople != null) {
+      map['last_people'] = Variable<DateTime>(lastPeople);
+    }
+    if (!nullToAbsent || lastFeeds != null) {
+      map['last_feeds'] = Variable<DateTime>(lastFeeds);
+    }
+    if (!nullToAbsent || newestPeopleId != null) {
+      map['newest_people_id'] = Variable<int>(newestPeopleId);
+    }
+    if (!nullToAbsent || newestFeedsId != null) {
+      map['newest_feeds_id'] = Variable<int>(newestFeedsId);
+    }
     return map;
   }
 
@@ -7234,6 +7907,22 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
           ? const Value.absent()
           : Value(newestMessageId),
       updatedAt: Value(updatedAt),
+      peopleTotal: Value(peopleTotal),
+      peopleUnread: Value(peopleUnread),
+      feedsTotal: Value(feedsTotal),
+      feedsUnread: Value(feedsUnread),
+      lastPeople: lastPeople == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPeople),
+      lastFeeds: lastFeeds == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastFeeds),
+      newestPeopleId: newestPeopleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(newestPeopleId),
+      newestFeedsId: newestFeedsId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(newestFeedsId),
     );
   }
 
@@ -7253,6 +7942,14 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
       hasSent: serializer.fromJson<bool>(json['hasSent']),
       newestMessageId: serializer.fromJson<int?>(json['newestMessageId']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      peopleTotal: serializer.fromJson<int>(json['peopleTotal']),
+      peopleUnread: serializer.fromJson<int>(json['peopleUnread']),
+      feedsTotal: serializer.fromJson<int>(json['feedsTotal']),
+      feedsUnread: serializer.fromJson<int>(json['feedsUnread']),
+      lastPeople: serializer.fromJson<DateTime?>(json['lastPeople']),
+      lastFeeds: serializer.fromJson<DateTime?>(json['lastFeeds']),
+      newestPeopleId: serializer.fromJson<int?>(json['newestPeopleId']),
+      newestFeedsId: serializer.fromJson<int?>(json['newestFeedsId']),
     );
   }
   @override
@@ -7269,6 +7966,14 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
       'hasSent': serializer.toJson<bool>(hasSent),
       'newestMessageId': serializer.toJson<int?>(newestMessageId),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'peopleTotal': serializer.toJson<int>(peopleTotal),
+      'peopleUnread': serializer.toJson<int>(peopleUnread),
+      'feedsTotal': serializer.toJson<int>(feedsTotal),
+      'feedsUnread': serializer.toJson<int>(feedsUnread),
+      'lastPeople': serializer.toJson<DateTime?>(lastPeople),
+      'lastFeeds': serializer.toJson<DateTime?>(lastFeeds),
+      'newestPeopleId': serializer.toJson<int?>(newestPeopleId),
+      'newestFeedsId': serializer.toJson<int?>(newestFeedsId),
     };
   }
 
@@ -7283,6 +7988,14 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
     bool? hasSent,
     Value<int?> newestMessageId = const Value.absent(),
     DateTime? updatedAt,
+    int? peopleTotal,
+    int? peopleUnread,
+    int? feedsTotal,
+    int? feedsUnread,
+    Value<DateTime?> lastPeople = const Value.absent(),
+    Value<DateTime?> lastFeeds = const Value.absent(),
+    Value<int?> newestPeopleId = const Value.absent(),
+    Value<int?> newestFeedsId = const Value.absent(),
   }) => RowSummary(
     rowKey: rowKey ?? this.rowKey,
     total: total ?? this.total,
@@ -7296,6 +8009,18 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
         ? newestMessageId.value
         : this.newestMessageId,
     updatedAt: updatedAt ?? this.updatedAt,
+    peopleTotal: peopleTotal ?? this.peopleTotal,
+    peopleUnread: peopleUnread ?? this.peopleUnread,
+    feedsTotal: feedsTotal ?? this.feedsTotal,
+    feedsUnread: feedsUnread ?? this.feedsUnread,
+    lastPeople: lastPeople.present ? lastPeople.value : this.lastPeople,
+    lastFeeds: lastFeeds.present ? lastFeeds.value : this.lastFeeds,
+    newestPeopleId: newestPeopleId.present
+        ? newestPeopleId.value
+        : this.newestPeopleId,
+    newestFeedsId: newestFeedsId.present
+        ? newestFeedsId.value
+        : this.newestFeedsId,
   );
   RowSummary copyWithCompanion(RowSummariesCompanion data) {
     return RowSummary(
@@ -7317,6 +8042,28 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
           ? data.newestMessageId.value
           : this.newestMessageId,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      peopleTotal: data.peopleTotal.present
+          ? data.peopleTotal.value
+          : this.peopleTotal,
+      peopleUnread: data.peopleUnread.present
+          ? data.peopleUnread.value
+          : this.peopleUnread,
+      feedsTotal: data.feedsTotal.present
+          ? data.feedsTotal.value
+          : this.feedsTotal,
+      feedsUnread: data.feedsUnread.present
+          ? data.feedsUnread.value
+          : this.feedsUnread,
+      lastPeople: data.lastPeople.present
+          ? data.lastPeople.value
+          : this.lastPeople,
+      lastFeeds: data.lastFeeds.present ? data.lastFeeds.value : this.lastFeeds,
+      newestPeopleId: data.newestPeopleId.present
+          ? data.newestPeopleId.value
+          : this.newestPeopleId,
+      newestFeedsId: data.newestFeedsId.present
+          ? data.newestFeedsId.value
+          : this.newestFeedsId,
     );
   }
 
@@ -7332,7 +8079,15 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
           ..write('hasAttachments: $hasAttachments, ')
           ..write('hasSent: $hasSent, ')
           ..write('newestMessageId: $newestMessageId, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('peopleTotal: $peopleTotal, ')
+          ..write('peopleUnread: $peopleUnread, ')
+          ..write('feedsTotal: $feedsTotal, ')
+          ..write('feedsUnread: $feedsUnread, ')
+          ..write('lastPeople: $lastPeople, ')
+          ..write('lastFeeds: $lastFeeds, ')
+          ..write('newestPeopleId: $newestPeopleId, ')
+          ..write('newestFeedsId: $newestFeedsId')
           ..write(')'))
         .toString();
   }
@@ -7349,6 +8104,14 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
     hasSent,
     newestMessageId,
     updatedAt,
+    peopleTotal,
+    peopleUnread,
+    feedsTotal,
+    feedsUnread,
+    lastPeople,
+    lastFeeds,
+    newestPeopleId,
+    newestFeedsId,
   );
   @override
   bool operator ==(Object other) =>
@@ -7363,7 +8126,15 @@ class RowSummary extends DataClass implements Insertable<RowSummary> {
           other.hasAttachments == this.hasAttachments &&
           other.hasSent == this.hasSent &&
           other.newestMessageId == this.newestMessageId &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.peopleTotal == this.peopleTotal &&
+          other.peopleUnread == this.peopleUnread &&
+          other.feedsTotal == this.feedsTotal &&
+          other.feedsUnread == this.feedsUnread &&
+          other.lastPeople == this.lastPeople &&
+          other.lastFeeds == this.lastFeeds &&
+          other.newestPeopleId == this.newestPeopleId &&
+          other.newestFeedsId == this.newestFeedsId);
 }
 
 class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
@@ -7377,6 +8148,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
   final Value<bool> hasSent;
   final Value<int?> newestMessageId;
   final Value<DateTime> updatedAt;
+  final Value<int> peopleTotal;
+  final Value<int> peopleUnread;
+  final Value<int> feedsTotal;
+  final Value<int> feedsUnread;
+  final Value<DateTime?> lastPeople;
+  final Value<DateTime?> lastFeeds;
+  final Value<int?> newestPeopleId;
+  final Value<int?> newestFeedsId;
   final Value<int> rowid;
   const RowSummariesCompanion({
     this.rowKey = const Value.absent(),
@@ -7389,6 +8168,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
     this.hasSent = const Value.absent(),
     this.newestMessageId = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.peopleTotal = const Value.absent(),
+    this.peopleUnread = const Value.absent(),
+    this.feedsTotal = const Value.absent(),
+    this.feedsUnread = const Value.absent(),
+    this.lastPeople = const Value.absent(),
+    this.lastFeeds = const Value.absent(),
+    this.newestPeopleId = const Value.absent(),
+    this.newestFeedsId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RowSummariesCompanion.insert({
@@ -7402,6 +8189,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
     required bool hasSent,
     this.newestMessageId = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.peopleTotal = const Value.absent(),
+    this.peopleUnread = const Value.absent(),
+    this.feedsTotal = const Value.absent(),
+    this.feedsUnread = const Value.absent(),
+    this.lastPeople = const Value.absent(),
+    this.lastFeeds = const Value.absent(),
+    this.newestPeopleId = const Value.absent(),
+    this.newestFeedsId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : rowKey = Value(rowKey),
        total = Value(total),
@@ -7420,6 +8215,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
     Expression<bool>? hasSent,
     Expression<int>? newestMessageId,
     Expression<DateTime>? updatedAt,
+    Expression<int>? peopleTotal,
+    Expression<int>? peopleUnread,
+    Expression<int>? feedsTotal,
+    Expression<int>? feedsUnread,
+    Expression<DateTime>? lastPeople,
+    Expression<DateTime>? lastFeeds,
+    Expression<int>? newestPeopleId,
+    Expression<int>? newestFeedsId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -7433,6 +8236,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
       if (hasSent != null) 'has_sent': hasSent,
       if (newestMessageId != null) 'newest_message_id': newestMessageId,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (peopleTotal != null) 'people_total': peopleTotal,
+      if (peopleUnread != null) 'people_unread': peopleUnread,
+      if (feedsTotal != null) 'feeds_total': feedsTotal,
+      if (feedsUnread != null) 'feeds_unread': feedsUnread,
+      if (lastPeople != null) 'last_people': lastPeople,
+      if (lastFeeds != null) 'last_feeds': lastFeeds,
+      if (newestPeopleId != null) 'newest_people_id': newestPeopleId,
+      if (newestFeedsId != null) 'newest_feeds_id': newestFeedsId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -7448,6 +8259,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
     Value<bool>? hasSent,
     Value<int?>? newestMessageId,
     Value<DateTime>? updatedAt,
+    Value<int>? peopleTotal,
+    Value<int>? peopleUnread,
+    Value<int>? feedsTotal,
+    Value<int>? feedsUnread,
+    Value<DateTime?>? lastPeople,
+    Value<DateTime?>? lastFeeds,
+    Value<int?>? newestPeopleId,
+    Value<int?>? newestFeedsId,
     Value<int>? rowid,
   }) {
     return RowSummariesCompanion(
@@ -7461,6 +8280,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
       hasSent: hasSent ?? this.hasSent,
       newestMessageId: newestMessageId ?? this.newestMessageId,
       updatedAt: updatedAt ?? this.updatedAt,
+      peopleTotal: peopleTotal ?? this.peopleTotal,
+      peopleUnread: peopleUnread ?? this.peopleUnread,
+      feedsTotal: feedsTotal ?? this.feedsTotal,
+      feedsUnread: feedsUnread ?? this.feedsUnread,
+      lastPeople: lastPeople ?? this.lastPeople,
+      lastFeeds: lastFeeds ?? this.lastFeeds,
+      newestPeopleId: newestPeopleId ?? this.newestPeopleId,
+      newestFeedsId: newestFeedsId ?? this.newestFeedsId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -7498,6 +8325,30 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (peopleTotal.present) {
+      map['people_total'] = Variable<int>(peopleTotal.value);
+    }
+    if (peopleUnread.present) {
+      map['people_unread'] = Variable<int>(peopleUnread.value);
+    }
+    if (feedsTotal.present) {
+      map['feeds_total'] = Variable<int>(feedsTotal.value);
+    }
+    if (feedsUnread.present) {
+      map['feeds_unread'] = Variable<int>(feedsUnread.value);
+    }
+    if (lastPeople.present) {
+      map['last_people'] = Variable<DateTime>(lastPeople.value);
+    }
+    if (lastFeeds.present) {
+      map['last_feeds'] = Variable<DateTime>(lastFeeds.value);
+    }
+    if (newestPeopleId.present) {
+      map['newest_people_id'] = Variable<int>(newestPeopleId.value);
+    }
+    if (newestFeedsId.present) {
+      map['newest_feeds_id'] = Variable<int>(newestFeedsId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -7517,6 +8368,14 @@ class RowSummariesCompanion extends UpdateCompanion<RowSummary> {
           ..write('hasSent: $hasSent, ')
           ..write('newestMessageId: $newestMessageId, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('peopleTotal: $peopleTotal, ')
+          ..write('peopleUnread: $peopleUnread, ')
+          ..write('feedsTotal: $feedsTotal, ')
+          ..write('feedsUnread: $feedsUnread, ')
+          ..write('lastPeople: $lastPeople, ')
+          ..write('lastFeeds: $lastFeeds, ')
+          ..write('newestPeopleId: $newestPeopleId, ')
+          ..write('newestFeedsId: $newestFeedsId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -8945,6 +9804,1199 @@ class DraftsCompanion extends UpdateCompanion<Draft> {
   }
 }
 
+class $FeedsCategoryRowsTable extends FeedsCategoryRows
+    with TableInfo<$FeedsCategoryRowsTable, FeedsCategoryRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $FeedsCategoryRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _builtinMeta = const VerificationMeta(
+    'builtin',
+  );
+  @override
+  late final GeneratedColumn<bool> builtin = GeneratedColumn<bool>(
+    'builtin',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("builtin" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, builtin, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'feeds_categories';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<FeedsCategoryRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('builtin')) {
+      context.handle(
+        _builtinMeta,
+        builtin.isAcceptableOrUnknown(data['builtin']!, _builtinMeta),
+      );
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  FeedsCategoryRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return FeedsCategoryRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      builtin: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}builtin'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $FeedsCategoryRowsTable createAlias(String alias) {
+    return $FeedsCategoryRowsTable(attachedDatabase, alias);
+  }
+}
+
+class FeedsCategoryRow extends DataClass
+    implements Insertable<FeedsCategoryRow> {
+  final int id;
+  final String name;
+  final bool builtin;
+  final int sortOrder;
+  const FeedsCategoryRow({
+    required this.id,
+    required this.name,
+    required this.builtin,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['builtin'] = Variable<bool>(builtin);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  FeedsCategoryRowsCompanion toCompanion(bool nullToAbsent) {
+    return FeedsCategoryRowsCompanion(
+      id: Value(id),
+      name: Value(name),
+      builtin: Value(builtin),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory FeedsCategoryRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return FeedsCategoryRow(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      builtin: serializer.fromJson<bool>(json['builtin']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'builtin': serializer.toJson<bool>(builtin),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  FeedsCategoryRow copyWith({
+    int? id,
+    String? name,
+    bool? builtin,
+    int? sortOrder,
+  }) => FeedsCategoryRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    builtin: builtin ?? this.builtin,
+    sortOrder: sortOrder ?? this.sortOrder,
+  );
+  FeedsCategoryRow copyWithCompanion(FeedsCategoryRowsCompanion data) {
+    return FeedsCategoryRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      builtin: data.builtin.present ? data.builtin.value : this.builtin,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FeedsCategoryRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('builtin: $builtin, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, builtin, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is FeedsCategoryRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.builtin == this.builtin &&
+          other.sortOrder == this.sortOrder);
+}
+
+class FeedsCategoryRowsCompanion extends UpdateCompanion<FeedsCategoryRow> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<bool> builtin;
+  final Value<int> sortOrder;
+  const FeedsCategoryRowsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.builtin = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  });
+  FeedsCategoryRowsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    this.builtin = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  }) : name = Value(name);
+  static Insertable<FeedsCategoryRow> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<bool>? builtin,
+    Expression<int>? sortOrder,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (builtin != null) 'builtin': builtin,
+      if (sortOrder != null) 'sort_order': sortOrder,
+    });
+  }
+
+  FeedsCategoryRowsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<bool>? builtin,
+    Value<int>? sortOrder,
+  }) {
+    return FeedsCategoryRowsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      builtin: builtin ?? this.builtin,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (builtin.present) {
+      map['builtin'] = Variable<bool>(builtin.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('FeedsCategoryRowsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('builtin: $builtin, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ClassificationRulesTable extends ClassificationRules
+    with TableInfo<$ClassificationRulesTable, ClassificationRule> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ClassificationRulesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _fieldMeta = const VerificationMeta('field');
+  @override
+  late final GeneratedColumn<String> field = GeneratedColumn<String>(
+    'field',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _patternMeta = const VerificationMeta(
+    'pattern',
+  );
+  @override
+  late final GeneratedColumn<String> pattern = GeneratedColumn<String>(
+    'pattern',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bucketMeta = const VerificationMeta('bucket');
+  @override
+  late final GeneratedColumn<String> bucket = GeneratedColumn<String>(
+    'bucket',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    field,
+    pattern,
+    bucket,
+    category,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'classification_rules';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ClassificationRule> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('field')) {
+      context.handle(
+        _fieldMeta,
+        field.isAcceptableOrUnknown(data['field']!, _fieldMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_fieldMeta);
+    }
+    if (data.containsKey('pattern')) {
+      context.handle(
+        _patternMeta,
+        pattern.isAcceptableOrUnknown(data['pattern']!, _patternMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_patternMeta);
+    }
+    if (data.containsKey('bucket')) {
+      context.handle(
+        _bucketMeta,
+        bucket.isAcceptableOrUnknown(data['bucket']!, _bucketMeta),
+      );
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ClassificationRule map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ClassificationRule(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      field: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}field'],
+      )!,
+      pattern: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pattern'],
+      )!,
+      bucket: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}bucket'],
+      ),
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ClassificationRulesTable createAlias(String alias) {
+    return $ClassificationRulesTable(attachedDatabase, alias);
+  }
+}
+
+class ClassificationRule extends DataClass
+    implements Insertable<ClassificationRule> {
+  final int id;
+  final String field;
+  final String pattern;
+  final String? bucket;
+  final String? category;
+  final DateTime createdAt;
+  const ClassificationRule({
+    required this.id,
+    required this.field,
+    required this.pattern,
+    this.bucket,
+    this.category,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['field'] = Variable<String>(field);
+    map['pattern'] = Variable<String>(pattern);
+    if (!nullToAbsent || bucket != null) {
+      map['bucket'] = Variable<String>(bucket);
+    }
+    if (!nullToAbsent || category != null) {
+      map['category'] = Variable<String>(category);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ClassificationRulesCompanion toCompanion(bool nullToAbsent) {
+    return ClassificationRulesCompanion(
+      id: Value(id),
+      field: Value(field),
+      pattern: Value(pattern),
+      bucket: bucket == null && nullToAbsent
+          ? const Value.absent()
+          : Value(bucket),
+      category: category == null && nullToAbsent
+          ? const Value.absent()
+          : Value(category),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ClassificationRule.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ClassificationRule(
+      id: serializer.fromJson<int>(json['id']),
+      field: serializer.fromJson<String>(json['field']),
+      pattern: serializer.fromJson<String>(json['pattern']),
+      bucket: serializer.fromJson<String?>(json['bucket']),
+      category: serializer.fromJson<String?>(json['category']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'field': serializer.toJson<String>(field),
+      'pattern': serializer.toJson<String>(pattern),
+      'bucket': serializer.toJson<String?>(bucket),
+      'category': serializer.toJson<String?>(category),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ClassificationRule copyWith({
+    int? id,
+    String? field,
+    String? pattern,
+    Value<String?> bucket = const Value.absent(),
+    Value<String?> category = const Value.absent(),
+    DateTime? createdAt,
+  }) => ClassificationRule(
+    id: id ?? this.id,
+    field: field ?? this.field,
+    pattern: pattern ?? this.pattern,
+    bucket: bucket.present ? bucket.value : this.bucket,
+    category: category.present ? category.value : this.category,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  ClassificationRule copyWithCompanion(ClassificationRulesCompanion data) {
+    return ClassificationRule(
+      id: data.id.present ? data.id.value : this.id,
+      field: data.field.present ? data.field.value : this.field,
+      pattern: data.pattern.present ? data.pattern.value : this.pattern,
+      bucket: data.bucket.present ? data.bucket.value : this.bucket,
+      category: data.category.present ? data.category.value : this.category,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClassificationRule(')
+          ..write('id: $id, ')
+          ..write('field: $field, ')
+          ..write('pattern: $pattern, ')
+          ..write('bucket: $bucket, ')
+          ..write('category: $category, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, field, pattern, bucket, category, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ClassificationRule &&
+          other.id == this.id &&
+          other.field == this.field &&
+          other.pattern == this.pattern &&
+          other.bucket == this.bucket &&
+          other.category == this.category &&
+          other.createdAt == this.createdAt);
+}
+
+class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
+  final Value<int> id;
+  final Value<String> field;
+  final Value<String> pattern;
+  final Value<String?> bucket;
+  final Value<String?> category;
+  final Value<DateTime> createdAt;
+  const ClassificationRulesCompanion({
+    this.id = const Value.absent(),
+    this.field = const Value.absent(),
+    this.pattern = const Value.absent(),
+    this.bucket = const Value.absent(),
+    this.category = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  ClassificationRulesCompanion.insert({
+    this.id = const Value.absent(),
+    required String field,
+    required String pattern,
+    this.bucket = const Value.absent(),
+    this.category = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  }) : field = Value(field),
+       pattern = Value(pattern);
+  static Insertable<ClassificationRule> custom({
+    Expression<int>? id,
+    Expression<String>? field,
+    Expression<String>? pattern,
+    Expression<String>? bucket,
+    Expression<String>? category,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (field != null) 'field': field,
+      if (pattern != null) 'pattern': pattern,
+      if (bucket != null) 'bucket': bucket,
+      if (category != null) 'category': category,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  ClassificationRulesCompanion copyWith({
+    Value<int>? id,
+    Value<String>? field,
+    Value<String>? pattern,
+    Value<String?>? bucket,
+    Value<String?>? category,
+    Value<DateTime>? createdAt,
+  }) {
+    return ClassificationRulesCompanion(
+      id: id ?? this.id,
+      field: field ?? this.field,
+      pattern: pattern ?? this.pattern,
+      bucket: bucket ?? this.bucket,
+      category: category ?? this.category,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (field.present) {
+      map['field'] = Variable<String>(field.value);
+    }
+    if (pattern.present) {
+      map['pattern'] = Variable<String>(pattern.value);
+    }
+    if (bucket.present) {
+      map['bucket'] = Variable<String>(bucket.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClassificationRulesCompanion(')
+          ..write('id: $id, ')
+          ..write('field: $field, ')
+          ..write('pattern: $pattern, ')
+          ..write('bucket: $bucket, ')
+          ..write('category: $category, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ClassificationEventsTable extends ClassificationEvents
+    with TableInfo<$ClassificationEventsTable, ClassificationEvent> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ClassificationEventsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<int> messageId = GeneratedColumn<int>(
+    'message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contactKeyMeta = const VerificationMeta(
+    'contactKey',
+  );
+  @override
+  late final GeneratedColumn<String> contactKey = GeneratedColumn<String>(
+    'contact_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _decisionMeta = const VerificationMeta(
+    'decision',
+  );
+  @override
+  late final GeneratedColumn<String> decision = GeneratedColumn<String>(
+    'decision',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _categoryMeta = const VerificationMeta(
+    'category',
+  );
+  @override
+  late final GeneratedColumn<String> category = GeneratedColumn<String>(
+    'category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reasonsMeta = const VerificationMeta(
+    'reasons',
+  );
+  @override
+  late final GeneratedColumn<String> reasons = GeneratedColumn<String>(
+    'reasons',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _atMeta = const VerificationMeta('at');
+  @override
+  late final GeneratedColumn<DateTime> at = GeneratedColumn<DateTime>(
+    'at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    messageId,
+    contactKey,
+    decision,
+    category,
+    reasons,
+    source,
+    at,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'classification_events';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ClassificationEvent> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    }
+    if (data.containsKey('contact_key')) {
+      context.handle(
+        _contactKeyMeta,
+        contactKey.isAcceptableOrUnknown(data['contact_key']!, _contactKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_contactKeyMeta);
+    }
+    if (data.containsKey('decision')) {
+      context.handle(
+        _decisionMeta,
+        decision.isAcceptableOrUnknown(data['decision']!, _decisionMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_decisionMeta);
+    }
+    if (data.containsKey('category')) {
+      context.handle(
+        _categoryMeta,
+        category.isAcceptableOrUnknown(data['category']!, _categoryMeta),
+      );
+    }
+    if (data.containsKey('reasons')) {
+      context.handle(
+        _reasonsMeta,
+        reasons.isAcceptableOrUnknown(data['reasons']!, _reasonsMeta),
+      );
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceMeta);
+    }
+    if (data.containsKey('at')) {
+      context.handle(_atMeta, at.isAcceptableOrUnknown(data['at']!, _atMeta));
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ClassificationEvent map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ClassificationEvent(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}message_id'],
+      ),
+      contactKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contact_key'],
+      )!,
+      decision: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}decision'],
+      )!,
+      category: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}category'],
+      ),
+      reasons: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reasons'],
+      )!,
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      at: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}at'],
+      )!,
+    );
+  }
+
+  @override
+  $ClassificationEventsTable createAlias(String alias) {
+    return $ClassificationEventsTable(attachedDatabase, alias);
+  }
+}
+
+class ClassificationEvent extends DataClass
+    implements Insertable<ClassificationEvent> {
+  final int id;
+  final int? messageId;
+  final String contactKey;
+  final String decision;
+  final String? category;
+  final String reasons;
+  final String source;
+  final DateTime at;
+  const ClassificationEvent({
+    required this.id,
+    this.messageId,
+    required this.contactKey,
+    required this.decision,
+    this.category,
+    required this.reasons,
+    required this.source,
+    required this.at,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || messageId != null) {
+      map['message_id'] = Variable<int>(messageId);
+    }
+    map['contact_key'] = Variable<String>(contactKey);
+    map['decision'] = Variable<String>(decision);
+    if (!nullToAbsent || category != null) {
+      map['category'] = Variable<String>(category);
+    }
+    map['reasons'] = Variable<String>(reasons);
+    map['source'] = Variable<String>(source);
+    map['at'] = Variable<DateTime>(at);
+    return map;
+  }
+
+  ClassificationEventsCompanion toCompanion(bool nullToAbsent) {
+    return ClassificationEventsCompanion(
+      id: Value(id),
+      messageId: messageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(messageId),
+      contactKey: Value(contactKey),
+      decision: Value(decision),
+      category: category == null && nullToAbsent
+          ? const Value.absent()
+          : Value(category),
+      reasons: Value(reasons),
+      source: Value(source),
+      at: Value(at),
+    );
+  }
+
+  factory ClassificationEvent.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ClassificationEvent(
+      id: serializer.fromJson<int>(json['id']),
+      messageId: serializer.fromJson<int?>(json['messageId']),
+      contactKey: serializer.fromJson<String>(json['contactKey']),
+      decision: serializer.fromJson<String>(json['decision']),
+      category: serializer.fromJson<String?>(json['category']),
+      reasons: serializer.fromJson<String>(json['reasons']),
+      source: serializer.fromJson<String>(json['source']),
+      at: serializer.fromJson<DateTime>(json['at']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'messageId': serializer.toJson<int?>(messageId),
+      'contactKey': serializer.toJson<String>(contactKey),
+      'decision': serializer.toJson<String>(decision),
+      'category': serializer.toJson<String?>(category),
+      'reasons': serializer.toJson<String>(reasons),
+      'source': serializer.toJson<String>(source),
+      'at': serializer.toJson<DateTime>(at),
+    };
+  }
+
+  ClassificationEvent copyWith({
+    int? id,
+    Value<int?> messageId = const Value.absent(),
+    String? contactKey,
+    String? decision,
+    Value<String?> category = const Value.absent(),
+    String? reasons,
+    String? source,
+    DateTime? at,
+  }) => ClassificationEvent(
+    id: id ?? this.id,
+    messageId: messageId.present ? messageId.value : this.messageId,
+    contactKey: contactKey ?? this.contactKey,
+    decision: decision ?? this.decision,
+    category: category.present ? category.value : this.category,
+    reasons: reasons ?? this.reasons,
+    source: source ?? this.source,
+    at: at ?? this.at,
+  );
+  ClassificationEvent copyWithCompanion(ClassificationEventsCompanion data) {
+    return ClassificationEvent(
+      id: data.id.present ? data.id.value : this.id,
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      contactKey: data.contactKey.present
+          ? data.contactKey.value
+          : this.contactKey,
+      decision: data.decision.present ? data.decision.value : this.decision,
+      category: data.category.present ? data.category.value : this.category,
+      reasons: data.reasons.present ? data.reasons.value : this.reasons,
+      source: data.source.present ? data.source.value : this.source,
+      at: data.at.present ? data.at.value : this.at,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClassificationEvent(')
+          ..write('id: $id, ')
+          ..write('messageId: $messageId, ')
+          ..write('contactKey: $contactKey, ')
+          ..write('decision: $decision, ')
+          ..write('category: $category, ')
+          ..write('reasons: $reasons, ')
+          ..write('source: $source, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    messageId,
+    contactKey,
+    decision,
+    category,
+    reasons,
+    source,
+    at,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ClassificationEvent &&
+          other.id == this.id &&
+          other.messageId == this.messageId &&
+          other.contactKey == this.contactKey &&
+          other.decision == this.decision &&
+          other.category == this.category &&
+          other.reasons == this.reasons &&
+          other.source == this.source &&
+          other.at == this.at);
+}
+
+class ClassificationEventsCompanion
+    extends UpdateCompanion<ClassificationEvent> {
+  final Value<int> id;
+  final Value<int?> messageId;
+  final Value<String> contactKey;
+  final Value<String> decision;
+  final Value<String?> category;
+  final Value<String> reasons;
+  final Value<String> source;
+  final Value<DateTime> at;
+  const ClassificationEventsCompanion({
+    this.id = const Value.absent(),
+    this.messageId = const Value.absent(),
+    this.contactKey = const Value.absent(),
+    this.decision = const Value.absent(),
+    this.category = const Value.absent(),
+    this.reasons = const Value.absent(),
+    this.source = const Value.absent(),
+    this.at = const Value.absent(),
+  });
+  ClassificationEventsCompanion.insert({
+    this.id = const Value.absent(),
+    this.messageId = const Value.absent(),
+    required String contactKey,
+    required String decision,
+    this.category = const Value.absent(),
+    this.reasons = const Value.absent(),
+    required String source,
+    this.at = const Value.absent(),
+  }) : contactKey = Value(contactKey),
+       decision = Value(decision),
+       source = Value(source);
+  static Insertable<ClassificationEvent> custom({
+    Expression<int>? id,
+    Expression<int>? messageId,
+    Expression<String>? contactKey,
+    Expression<String>? decision,
+    Expression<String>? category,
+    Expression<String>? reasons,
+    Expression<String>? source,
+    Expression<DateTime>? at,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (messageId != null) 'message_id': messageId,
+      if (contactKey != null) 'contact_key': contactKey,
+      if (decision != null) 'decision': decision,
+      if (category != null) 'category': category,
+      if (reasons != null) 'reasons': reasons,
+      if (source != null) 'source': source,
+      if (at != null) 'at': at,
+    });
+  }
+
+  ClassificationEventsCompanion copyWith({
+    Value<int>? id,
+    Value<int?>? messageId,
+    Value<String>? contactKey,
+    Value<String>? decision,
+    Value<String?>? category,
+    Value<String>? reasons,
+    Value<String>? source,
+    Value<DateTime>? at,
+  }) {
+    return ClassificationEventsCompanion(
+      id: id ?? this.id,
+      messageId: messageId ?? this.messageId,
+      contactKey: contactKey ?? this.contactKey,
+      decision: decision ?? this.decision,
+      category: category ?? this.category,
+      reasons: reasons ?? this.reasons,
+      source: source ?? this.source,
+      at: at ?? this.at,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (messageId.present) {
+      map['message_id'] = Variable<int>(messageId.value);
+    }
+    if (contactKey.present) {
+      map['contact_key'] = Variable<String>(contactKey.value);
+    }
+    if (decision.present) {
+      map['decision'] = Variable<String>(decision.value);
+    }
+    if (category.present) {
+      map['category'] = Variable<String>(category.value);
+    }
+    if (reasons.present) {
+      map['reasons'] = Variable<String>(reasons.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (at.present) {
+      map['at'] = Variable<DateTime>(at.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ClassificationEventsCompanion(')
+          ..write('id: $id, ')
+          ..write('messageId: $messageId, ')
+          ..write('contactKey: $contactKey, ')
+          ..write('decision: $decision, ')
+          ..write('category: $category, ')
+          ..write('reasons: $reasons, ')
+          ..write('source: $source, ')
+          ..write('at: $at')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8969,6 +11021,12 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $DirtyRowsTable dirtyRows = $DirtyRowsTable(this);
   late final $TrackerEventsTable trackerEvents = $TrackerEventsTable(this);
   late final $DraftsTable drafts = $DraftsTable(this);
+  late final $FeedsCategoryRowsTable feedsCategoryRows =
+      $FeedsCategoryRowsTable(this);
+  late final $ClassificationRulesTable classificationRules =
+      $ClassificationRulesTable(this);
+  late final $ClassificationEventsTable classificationEvents =
+      $ClassificationEventsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8991,6 +11049,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     dirtyRows,
     trackerEvents,
     drafts,
+    feedsCategoryRows,
+    classificationRules,
+    classificationEvents,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -11031,6 +13092,9 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> providerThreadId,
   Value<String?> threadKey,
   Value<bool> imagesAllowed,
+  Value<String?> bulkSignals,
+  Value<String> classification,
+  Value<String?> feedsCategory,
 });
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
@@ -11061,6 +13125,9 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> providerThreadId,
   Value<String?> threadKey,
   Value<bool> imagesAllowed,
+  Value<String?> bulkSignals,
+  Value<String> classification,
+  Value<String?> feedsCategory,
 });
 
 final class $$MessagesTableReferences
@@ -11323,6 +13390,21 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<bool> get imagesAllowed => $composableBuilder(
     column: $table.imagesAllowed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bulkSignals => $composableBuilder(
+    column: $table.bulkSignals,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get classification => $composableBuilder(
+    column: $table.classification,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get feedsCategory => $composableBuilder(
+    column: $table.feedsCategory,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11613,6 +13695,21 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get bulkSignals => $composableBuilder(
+    column: $table.bulkSignals,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get classification => $composableBuilder(
+    column: $table.classification,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get feedsCategory => $composableBuilder(
+    column: $table.feedsCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$AccountsTableOrderingComposer get accountId {
     final $$AccountsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -11762,6 +13859,21 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<bool> get imagesAllowed => $composableBuilder(
     column: $table.imagesAllowed,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get bulkSignals => $composableBuilder(
+    column: $table.bulkSignals,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get classification => $composableBuilder(
+    column: $table.classification,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get feedsCategory => $composableBuilder(
+    column: $table.feedsCategory,
     builder: (column) => column,
   );
 
@@ -11977,6 +14089,9 @@ class $$MessagesTableTableManager
                 Value<String?> providerThreadId = const Value.absent(),
                 Value<String?> threadKey = const Value.absent(),
                 Value<bool> imagesAllowed = const Value.absent(),
+                Value<String?> bulkSignals = const Value.absent(),
+                Value<String> classification = const Value.absent(),
+                Value<String?> feedsCategory = const Value.absent(),
               }) => MessagesCompanion(
                 id: id,
                 accountId: accountId,
@@ -12006,6 +14121,9 @@ class $$MessagesTableTableManager
                 providerThreadId: providerThreadId,
                 threadKey: threadKey,
                 imagesAllowed: imagesAllowed,
+                bulkSignals: bulkSignals,
+                classification: classification,
+                feedsCategory: feedsCategory,
               ),
           createCompanionCallback:
               ({
@@ -12037,6 +14155,9 @@ class $$MessagesTableTableManager
                 Value<String?> providerThreadId = const Value.absent(),
                 Value<String?> threadKey = const Value.absent(),
                 Value<bool> imagesAllowed = const Value.absent(),
+                Value<String?> bulkSignals = const Value.absent(),
+                Value<String> classification = const Value.absent(),
+                Value<String?> feedsCategory = const Value.absent(),
               }) => MessagesCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -12066,6 +14187,9 @@ class $$MessagesTableTableManager
                 providerThreadId: providerThreadId,
                 threadKey: threadKey,
                 imagesAllowed: imagesAllowed,
+                bulkSignals: bulkSignals,
+                classification: classification,
+                feedsCategory: feedsCategory,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -12622,6 +14746,11 @@ typedef $$ContactsTableCreateCompanionBuilder = ContactsCompanion Function({
   Value<String?> photoPath,
   Value<bool> isMe,
   Value<bool> inAddressBook,
+  Value<String> classification,
+  Value<String> classificationSource,
+  Value<String?> feedsCategory,
+  Value<bool> countsTowardUnread,
+  Value<String> classReasons,
   Value<DateTime> firstSeenAt,
   Value<DateTime> lastSeenAt,
   Value<int> rowid,
@@ -12632,6 +14761,11 @@ typedef $$ContactsTableUpdateCompanionBuilder = ContactsCompanion Function({
   Value<String?> photoPath,
   Value<bool> isMe,
   Value<bool> inAddressBook,
+  Value<String> classification,
+  Value<String> classificationSource,
+  Value<String?> feedsCategory,
+  Value<bool> countsTowardUnread,
+  Value<String> classReasons,
   Value<DateTime> firstSeenAt,
   Value<DateTime> lastSeenAt,
   Value<int> rowid,
@@ -12693,6 +14827,31 @@ class $$ContactsTableFilterComposer
 
   ColumnFilters<bool> get inAddressBook => $composableBuilder(
     column: $table.inAddressBook,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get classification => $composableBuilder(
+    column: $table.classification,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get classificationSource => $composableBuilder(
+    column: $table.classificationSource,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get feedsCategory => $composableBuilder(
+    column: $table.feedsCategory,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get countsTowardUnread => $composableBuilder(
+    column: $table.countsTowardUnread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get classReasons => $composableBuilder(
+    column: $table.classReasons,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12766,6 +14925,31 @@ class $$ContactsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get classification => $composableBuilder(
+    column: $table.classification,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get classificationSource => $composableBuilder(
+    column: $table.classificationSource,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get feedsCategory => $composableBuilder(
+    column: $table.feedsCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get countsTowardUnread => $composableBuilder(
+    column: $table.countsTowardUnread,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get classReasons => $composableBuilder(
+    column: $table.classReasons,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get firstSeenAt => $composableBuilder(
     column: $table.firstSeenAt,
     builder: (column) => ColumnOrderings(column),
@@ -12802,6 +14986,31 @@ class $$ContactsTableAnnotationComposer
 
   GeneratedColumn<bool> get inAddressBook => $composableBuilder(
     column: $table.inAddressBook,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get classification => $composableBuilder(
+    column: $table.classification,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get classificationSource => $composableBuilder(
+    column: $table.classificationSource,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get feedsCategory => $composableBuilder(
+    column: $table.feedsCategory,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get countsTowardUnread => $composableBuilder(
+    column: $table.countsTowardUnread,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get classReasons => $composableBuilder(
+    column: $table.classReasons,
     builder: (column) => column,
   );
 
@@ -12874,6 +15083,11 @@ class $$ContactsTableTableManager
                 Value<String?> photoPath = const Value.absent(),
                 Value<bool> isMe = const Value.absent(),
                 Value<bool> inAddressBook = const Value.absent(),
+                Value<String> classification = const Value.absent(),
+                Value<String> classificationSource = const Value.absent(),
+                Value<String?> feedsCategory = const Value.absent(),
+                Value<bool> countsTowardUnread = const Value.absent(),
+                Value<String> classReasons = const Value.absent(),
                 Value<DateTime> firstSeenAt = const Value.absent(),
                 Value<DateTime> lastSeenAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -12883,6 +15097,11 @@ class $$ContactsTableTableManager
                 photoPath: photoPath,
                 isMe: isMe,
                 inAddressBook: inAddressBook,
+                classification: classification,
+                classificationSource: classificationSource,
+                feedsCategory: feedsCategory,
+                countsTowardUnread: countsTowardUnread,
+                classReasons: classReasons,
                 firstSeenAt: firstSeenAt,
                 lastSeenAt: lastSeenAt,
                 rowid: rowid,
@@ -12894,6 +15113,11 @@ class $$ContactsTableTableManager
                 Value<String?> photoPath = const Value.absent(),
                 Value<bool> isMe = const Value.absent(),
                 Value<bool> inAddressBook = const Value.absent(),
+                Value<String> classification = const Value.absent(),
+                Value<String> classificationSource = const Value.absent(),
+                Value<String?> feedsCategory = const Value.absent(),
+                Value<bool> countsTowardUnread = const Value.absent(),
+                Value<String> classReasons = const Value.absent(),
                 Value<DateTime> firstSeenAt = const Value.absent(),
                 Value<DateTime> lastSeenAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -12903,6 +15127,11 @@ class $$ContactsTableTableManager
                 photoPath: photoPath,
                 isMe: isMe,
                 inAddressBook: inAddressBook,
+                classification: classification,
+                classificationSource: classificationSource,
+                feedsCategory: feedsCategory,
+                countsTowardUnread: countsTowardUnread,
+                classReasons: classReasons,
                 firstSeenAt: firstSeenAt,
                 lastSeenAt: lastSeenAt,
                 rowid: rowid,
@@ -14649,6 +16878,14 @@ typedef $$RowSummariesTableCreateCompanionBuilder =
       required bool hasSent,
       Value<int?> newestMessageId,
       Value<DateTime> updatedAt,
+      Value<int> peopleTotal,
+      Value<int> peopleUnread,
+      Value<int> feedsTotal,
+      Value<int> feedsUnread,
+      Value<DateTime?> lastPeople,
+      Value<DateTime?> lastFeeds,
+      Value<int?> newestPeopleId,
+      Value<int?> newestFeedsId,
       Value<int> rowid,
     });
 typedef $$RowSummariesTableUpdateCompanionBuilder =
@@ -14663,6 +16900,14 @@ typedef $$RowSummariesTableUpdateCompanionBuilder =
       Value<bool> hasSent,
       Value<int?> newestMessageId,
       Value<DateTime> updatedAt,
+      Value<int> peopleTotal,
+      Value<int> peopleUnread,
+      Value<int> feedsTotal,
+      Value<int> feedsUnread,
+      Value<DateTime?> lastPeople,
+      Value<DateTime?> lastFeeds,
+      Value<int?> newestPeopleId,
+      Value<int?> newestFeedsId,
       Value<int> rowid,
     });
 
@@ -14722,6 +16967,46 @@ class $$RowSummariesTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get peopleTotal => $composableBuilder(
+    column: $table.peopleTotal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get peopleUnread => $composableBuilder(
+    column: $table.peopleUnread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get feedsTotal => $composableBuilder(
+    column: $table.feedsTotal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get feedsUnread => $composableBuilder(
+    column: $table.feedsUnread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPeople => $composableBuilder(
+    column: $table.lastPeople,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastFeeds => $composableBuilder(
+    column: $table.lastFeeds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get newestPeopleId => $composableBuilder(
+    column: $table.newestPeopleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get newestFeedsId => $composableBuilder(
+    column: $table.newestFeedsId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -14784,6 +17069,46 @@ class $$RowSummariesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get peopleTotal => $composableBuilder(
+    column: $table.peopleTotal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get peopleUnread => $composableBuilder(
+    column: $table.peopleUnread,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get feedsTotal => $composableBuilder(
+    column: $table.feedsTotal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get feedsUnread => $composableBuilder(
+    column: $table.feedsUnread,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastPeople => $composableBuilder(
+    column: $table.lastPeople,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastFeeds => $composableBuilder(
+    column: $table.lastFeeds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newestPeopleId => $composableBuilder(
+    column: $table.newestPeopleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get newestFeedsId => $composableBuilder(
+    column: $table.newestFeedsId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$RowSummariesTableAnnotationComposer
@@ -14832,6 +17157,44 @@ class $$RowSummariesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get peopleTotal => $composableBuilder(
+    column: $table.peopleTotal,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get peopleUnread => $composableBuilder(
+    column: $table.peopleUnread,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get feedsTotal => $composableBuilder(
+    column: $table.feedsTotal,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get feedsUnread => $composableBuilder(
+    column: $table.feedsUnread,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastPeople => $composableBuilder(
+    column: $table.lastPeople,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get lastFeeds =>
+      $composableBuilder(column: $table.lastFeeds, builder: (column) => column);
+
+  GeneratedColumn<int> get newestPeopleId => $composableBuilder(
+    column: $table.newestPeopleId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get newestFeedsId => $composableBuilder(
+    column: $table.newestFeedsId,
+    builder: (column) => column,
+  );
 }
 
 class $$RowSummariesTableTableManager
@@ -14875,6 +17238,14 @@ class $$RowSummariesTableTableManager
                 Value<bool> hasSent = const Value.absent(),
                 Value<int?> newestMessageId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> peopleTotal = const Value.absent(),
+                Value<int> peopleUnread = const Value.absent(),
+                Value<int> feedsTotal = const Value.absent(),
+                Value<int> feedsUnread = const Value.absent(),
+                Value<DateTime?> lastPeople = const Value.absent(),
+                Value<DateTime?> lastFeeds = const Value.absent(),
+                Value<int?> newestPeopleId = const Value.absent(),
+                Value<int?> newestFeedsId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RowSummariesCompanion(
                 rowKey: rowKey,
@@ -14887,6 +17258,14 @@ class $$RowSummariesTableTableManager
                 hasSent: hasSent,
                 newestMessageId: newestMessageId,
                 updatedAt: updatedAt,
+                peopleTotal: peopleTotal,
+                peopleUnread: peopleUnread,
+                feedsTotal: feedsTotal,
+                feedsUnread: feedsUnread,
+                lastPeople: lastPeople,
+                lastFeeds: lastFeeds,
+                newestPeopleId: newestPeopleId,
+                newestFeedsId: newestFeedsId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -14901,6 +17280,14 @@ class $$RowSummariesTableTableManager
                 required bool hasSent,
                 Value<int?> newestMessageId = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> peopleTotal = const Value.absent(),
+                Value<int> peopleUnread = const Value.absent(),
+                Value<int> feedsTotal = const Value.absent(),
+                Value<int> feedsUnread = const Value.absent(),
+                Value<DateTime?> lastPeople = const Value.absent(),
+                Value<DateTime?> lastFeeds = const Value.absent(),
+                Value<int?> newestPeopleId = const Value.absent(),
+                Value<int?> newestFeedsId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RowSummariesCompanion.insert(
                 rowKey: rowKey,
@@ -14913,6 +17300,14 @@ class $$RowSummariesTableTableManager
                 hasSent: hasSent,
                 newestMessageId: newestMessageId,
                 updatedAt: updatedAt,
+                peopleTotal: peopleTotal,
+                peopleUnread: peopleUnread,
+                feedsTotal: feedsTotal,
+                feedsUnread: feedsUnread,
+                lastPeople: lastPeople,
+                lastFeeds: lastFeeds,
+                newestPeopleId: newestPeopleId,
+                newestFeedsId: newestFeedsId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -15909,6 +18304,723 @@ typedef $$DraftsTableProcessedTableManager =
       Draft,
       PrefetchHooks Function({bool accountId})
     >;
+typedef $$FeedsCategoryRowsTableCreateCompanionBuilder =
+    FeedsCategoryRowsCompanion Function({
+      Value<int> id,
+      required String name,
+      Value<bool> builtin,
+      Value<int> sortOrder,
+    });
+typedef $$FeedsCategoryRowsTableUpdateCompanionBuilder =
+    FeedsCategoryRowsCompanion Function({
+      Value<int> id,
+      Value<String> name,
+      Value<bool> builtin,
+      Value<int> sortOrder,
+    });
+
+class $$FeedsCategoryRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $FeedsCategoryRowsTable> {
+  $$FeedsCategoryRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get builtin => $composableBuilder(
+    column: $table.builtin,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$FeedsCategoryRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $FeedsCategoryRowsTable> {
+  $$FeedsCategoryRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get builtin => $composableBuilder(
+    column: $table.builtin,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sortOrder => $composableBuilder(
+    column: $table.sortOrder,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$FeedsCategoryRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $FeedsCategoryRowsTable> {
+  $$FeedsCategoryRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<bool> get builtin =>
+      $composableBuilder(column: $table.builtin, builder: (column) => column);
+
+  GeneratedColumn<int> get sortOrder =>
+      $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+}
+
+class $$FeedsCategoryRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $FeedsCategoryRowsTable,
+          FeedsCategoryRow,
+          $$FeedsCategoryRowsTableFilterComposer,
+          $$FeedsCategoryRowsTableOrderingComposer,
+          $$FeedsCategoryRowsTableAnnotationComposer,
+          $$FeedsCategoryRowsTableCreateCompanionBuilder,
+          $$FeedsCategoryRowsTableUpdateCompanionBuilder,
+          (
+            FeedsCategoryRow,
+            BaseReferences<
+              _$AppDatabase,
+              $FeedsCategoryRowsTable,
+              FeedsCategoryRow
+            >,
+          ),
+          FeedsCategoryRow,
+          PrefetchHooks Function()
+        > {
+  $$FeedsCategoryRowsTableTableManager(
+    _$AppDatabase db,
+    $FeedsCategoryRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$FeedsCategoryRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$FeedsCategoryRowsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$FeedsCategoryRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<bool> builtin = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+              }) => FeedsCategoryRowsCompanion(
+                id: id,
+                name: name,
+                builtin: builtin,
+                sortOrder: sortOrder,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String name,
+                Value<bool> builtin = const Value.absent(),
+                Value<int> sortOrder = const Value.absent(),
+              }) => FeedsCategoryRowsCompanion.insert(
+                id: id,
+                name: name,
+                builtin: builtin,
+                sortOrder: sortOrder,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$FeedsCategoryRowsTable, FeedsCategoryRow>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $FeedsCategoryRowsTable,
+                    FeedsCategoryRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$FeedsCategoryRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $FeedsCategoryRowsTable,
+      FeedsCategoryRow,
+      $$FeedsCategoryRowsTableFilterComposer,
+      $$FeedsCategoryRowsTableOrderingComposer,
+      $$FeedsCategoryRowsTableAnnotationComposer,
+      $$FeedsCategoryRowsTableCreateCompanionBuilder,
+      $$FeedsCategoryRowsTableUpdateCompanionBuilder,
+      (
+        FeedsCategoryRow,
+        BaseReferences<
+          _$AppDatabase,
+          $FeedsCategoryRowsTable,
+          FeedsCategoryRow
+        >,
+      ),
+      FeedsCategoryRow,
+      PrefetchHooks Function()
+    >;
+typedef $$ClassificationRulesTableCreateCompanionBuilder =
+    ClassificationRulesCompanion Function({
+      Value<int> id,
+      required String field,
+      required String pattern,
+      Value<String?> bucket,
+      Value<String?> category,
+      Value<DateTime> createdAt,
+    });
+typedef $$ClassificationRulesTableUpdateCompanionBuilder =
+    ClassificationRulesCompanion Function({
+      Value<int> id,
+      Value<String> field,
+      Value<String> pattern,
+      Value<String?> bucket,
+      Value<String?> category,
+      Value<DateTime> createdAt,
+    });
+
+class $$ClassificationRulesTableFilterComposer
+    extends Composer<_$AppDatabase, $ClassificationRulesTable> {
+  $$ClassificationRulesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get field => $composableBuilder(
+    column: $table.field,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pattern => $composableBuilder(
+    column: $table.pattern,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bucket => $composableBuilder(
+    column: $table.bucket,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ClassificationRulesTableOrderingComposer
+    extends Composer<_$AppDatabase, $ClassificationRulesTable> {
+  $$ClassificationRulesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get field => $composableBuilder(
+    column: $table.field,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pattern => $composableBuilder(
+    column: $table.pattern,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bucket => $composableBuilder(
+    column: $table.bucket,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ClassificationRulesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ClassificationRulesTable> {
+  $$ClassificationRulesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get field =>
+      $composableBuilder(column: $table.field, builder: (column) => column);
+
+  GeneratedColumn<String> get pattern =>
+      $composableBuilder(column: $table.pattern, builder: (column) => column);
+
+  GeneratedColumn<String> get bucket =>
+      $composableBuilder(column: $table.bucket, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$ClassificationRulesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ClassificationRulesTable,
+          ClassificationRule,
+          $$ClassificationRulesTableFilterComposer,
+          $$ClassificationRulesTableOrderingComposer,
+          $$ClassificationRulesTableAnnotationComposer,
+          $$ClassificationRulesTableCreateCompanionBuilder,
+          $$ClassificationRulesTableUpdateCompanionBuilder,
+          (
+            ClassificationRule,
+            BaseReferences<
+              _$AppDatabase,
+              $ClassificationRulesTable,
+              ClassificationRule
+            >,
+          ),
+          ClassificationRule,
+          PrefetchHooks Function()
+        > {
+  $$ClassificationRulesTableTableManager(
+    _$AppDatabase db,
+    $ClassificationRulesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ClassificationRulesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ClassificationRulesTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ClassificationRulesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> field = const Value.absent(),
+                Value<String> pattern = const Value.absent(),
+                Value<String?> bucket = const Value.absent(),
+                Value<String?> category = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ClassificationRulesCompanion(
+                id: id,
+                field: field,
+                pattern: pattern,
+                bucket: bucket,
+                category: category,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String field,
+                required String pattern,
+                Value<String?> bucket = const Value.absent(),
+                Value<String?> category = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => ClassificationRulesCompanion.insert(
+                id: id,
+                field: field,
+                pattern: pattern,
+                bucket: bucket,
+                category: category,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ClassificationRulesTable, ClassificationRule>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $ClassificationRulesTable,
+                    ClassificationRule
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ClassificationRulesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ClassificationRulesTable,
+      ClassificationRule,
+      $$ClassificationRulesTableFilterComposer,
+      $$ClassificationRulesTableOrderingComposer,
+      $$ClassificationRulesTableAnnotationComposer,
+      $$ClassificationRulesTableCreateCompanionBuilder,
+      $$ClassificationRulesTableUpdateCompanionBuilder,
+      (
+        ClassificationRule,
+        BaseReferences<
+          _$AppDatabase,
+          $ClassificationRulesTable,
+          ClassificationRule
+        >,
+      ),
+      ClassificationRule,
+      PrefetchHooks Function()
+    >;
+typedef $$ClassificationEventsTableCreateCompanionBuilder =
+    ClassificationEventsCompanion Function({
+      Value<int> id,
+      Value<int?> messageId,
+      required String contactKey,
+      required String decision,
+      Value<String?> category,
+      Value<String> reasons,
+      required String source,
+      Value<DateTime> at,
+    });
+typedef $$ClassificationEventsTableUpdateCompanionBuilder =
+    ClassificationEventsCompanion Function({
+      Value<int> id,
+      Value<int?> messageId,
+      Value<String> contactKey,
+      Value<String> decision,
+      Value<String?> category,
+      Value<String> reasons,
+      Value<String> source,
+      Value<DateTime> at,
+    });
+
+class $$ClassificationEventsTableFilterComposer
+    extends Composer<_$AppDatabase, $ClassificationEventsTable> {
+  $$ClassificationEventsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contactKey => $composableBuilder(
+    column: $table.contactKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get decision => $composableBuilder(
+    column: $table.decision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reasons => $composableBuilder(
+    column: $table.reasons,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$ClassificationEventsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ClassificationEventsTable> {
+  $$ClassificationEventsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contactKey => $composableBuilder(
+    column: $table.contactKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get decision => $composableBuilder(
+    column: $table.decision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get category => $composableBuilder(
+    column: $table.category,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reasons => $composableBuilder(
+    column: $table.reasons,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get at => $composableBuilder(
+    column: $table.at,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$ClassificationEventsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ClassificationEventsTable> {
+  $$ClassificationEventsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<String> get contactKey => $composableBuilder(
+    column: $table.contactKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get decision =>
+      $composableBuilder(column: $table.decision, builder: (column) => column);
+
+  GeneratedColumn<String> get category =>
+      $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get reasons =>
+      $composableBuilder(column: $table.reasons, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get at =>
+      $composableBuilder(column: $table.at, builder: (column) => column);
+}
+
+class $$ClassificationEventsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ClassificationEventsTable,
+          ClassificationEvent,
+          $$ClassificationEventsTableFilterComposer,
+          $$ClassificationEventsTableOrderingComposer,
+          $$ClassificationEventsTableAnnotationComposer,
+          $$ClassificationEventsTableCreateCompanionBuilder,
+          $$ClassificationEventsTableUpdateCompanionBuilder,
+          (
+            ClassificationEvent,
+            BaseReferences<
+              _$AppDatabase,
+              $ClassificationEventsTable,
+              ClassificationEvent
+            >,
+          ),
+          ClassificationEvent,
+          PrefetchHooks Function()
+        > {
+  $$ClassificationEventsTableTableManager(
+    _$AppDatabase db,
+    $ClassificationEventsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ClassificationEventsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ClassificationEventsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$ClassificationEventsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> messageId = const Value.absent(),
+                Value<String> contactKey = const Value.absent(),
+                Value<String> decision = const Value.absent(),
+                Value<String?> category = const Value.absent(),
+                Value<String> reasons = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<DateTime> at = const Value.absent(),
+              }) => ClassificationEventsCompanion(
+                id: id,
+                messageId: messageId,
+                contactKey: contactKey,
+                decision: decision,
+                category: category,
+                reasons: reasons,
+                source: source,
+                at: at,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> messageId = const Value.absent(),
+                required String contactKey,
+                required String decision,
+                Value<String?> category = const Value.absent(),
+                Value<String> reasons = const Value.absent(),
+                required String source,
+                Value<DateTime> at = const Value.absent(),
+              }) => ClassificationEventsCompanion.insert(
+                id: id,
+                messageId: messageId,
+                contactKey: contactKey,
+                decision: decision,
+                category: category,
+                reasons: reasons,
+                source: source,
+                at: at,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ClassificationEventsTable, ClassificationEvent>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $ClassificationEventsTable,
+                    ClassificationEvent
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$ClassificationEventsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ClassificationEventsTable,
+      ClassificationEvent,
+      $$ClassificationEventsTableFilterComposer,
+      $$ClassificationEventsTableOrderingComposer,
+      $$ClassificationEventsTableAnnotationComposer,
+      $$ClassificationEventsTableCreateCompanionBuilder,
+      $$ClassificationEventsTableUpdateCompanionBuilder,
+      (
+        ClassificationEvent,
+        BaseReferences<
+          _$AppDatabase,
+          $ClassificationEventsTable,
+          ClassificationEvent
+        >,
+      ),
+      ClassificationEvent,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -15947,4 +19059,10 @@ class $AppDatabaseManager {
       $$TrackerEventsTableTableManager(_db, _db.trackerEvents);
   $$DraftsTableTableManager get drafts =>
       $$DraftsTableTableManager(_db, _db.drafts);
+  $$FeedsCategoryRowsTableTableManager get feedsCategoryRows =>
+      $$FeedsCategoryRowsTableTableManager(_db, _db.feedsCategoryRows);
+  $$ClassificationRulesTableTableManager get classificationRules =>
+      $$ClassificationRulesTableTableManager(_db, _db.classificationRules);
+  $$ClassificationEventsTableTableManager get classificationEvents =>
+      $$ClassificationEventsTableTableManager(_db, _db.classificationEvents);
 }

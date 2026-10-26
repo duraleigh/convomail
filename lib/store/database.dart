@@ -132,6 +132,16 @@ class Messages extends Table {
   /// The user chose "Load images" for this message (spec 4.13).
   BoolColumn get imagesAllowed => boolean().withDefault(const Constant(false))();
 
+  /// Encoded [BulkSignals]; null until the list headers were fetched.
+  TextColumn get bulkSignals => text().nullable()();
+
+  /// `people` or `feeds` for this message (sender bucket with per-message
+  /// exceptions, spec 4.11).
+  TextColumn get classification => text().withDefault(const Constant('people'))();
+
+  /// Message-level category when it differs from the sender default.
+  TextColumn get feedsCategory => text().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
         {folderId, uid},
@@ -159,6 +169,18 @@ class Contacts extends Table {
   TextColumn get photoPath => text().nullable()();
   BoolColumn get isMe => boolean().withDefault(const Constant(false))();
   BoolColumn get inAddressBook => boolean().withDefault(const Constant(false))();
+
+  /// Effective bucket (`people` | `feeds`) and how it was decided
+  /// (`auto` | `override` | `rule` | `people-signal`).
+  TextColumn get classification => text().withDefault(const Constant('people'))();
+  TextColumn get classificationSource => text().withDefault(const Constant('auto'))();
+
+  /// Sender-default Feeds category.
+  TextColumn get feedsCategory => text().nullable()();
+
+  /// Spec 4.11: a Feeds sender whose unread mail still counts.
+  BoolColumn get countsTowardUnread => boolean().withDefault(const Constant(false))();
+  TextColumn get classReasons => text().withDefault(const Constant(''))();
   DateTimeColumn get firstSeenAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastSeenAt => dateTime().withDefault(currentDateAndTime)();
 
@@ -248,8 +270,52 @@ class RowSummaries extends Table {
   IntColumn get newestMessageId => integer().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 
+  /// Per-bucket figures (spec 4.11): a row shows in People when it has
+  /// People messages and in Feeds when it has Feeds messages.
+  IntColumn get peopleTotal => integer().withDefault(const Constant(0))();
+  IntColumn get peopleUnread => integer().withDefault(const Constant(0))();
+  IntColumn get feedsTotal => integer().withDefault(const Constant(0))();
+  IntColumn get feedsUnread => integer().withDefault(const Constant(0))();
+  DateTimeColumn get lastPeople => dateTime().nullable()();
+  DateTimeColumn get lastFeeds => dateTime().nullable()();
+  IntColumn get newestPeopleId => integer().nullable()();
+  IntColumn get newestFeedsId => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {rowKey};
+}
+
+/// Feeds categories (spec 4.11): five defaults plus the user's own.
+class FeedsCategoryRows extends Table {
+  @override
+  String get tableName => 'feeds_categories';
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().unique()();
+  BoolColumn get builtin => boolean().withDefault(const Constant(false))();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+}
+
+/// Rules the user accepted from the correction flow (spec 4.11).
+class ClassificationRules extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get field => text()();
+  TextColumn get pattern => text()();
+  TextColumn get bucket => text().nullable()();
+  TextColumn get category => text().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// Labeled decisions and corrections, kept as training data for a later
+/// on-device model (spec 4.11, 4.15).
+class ClassificationEvents extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  IntColumn get messageId => integer().nullable()();
+  TextColumn get contactKey => text()();
+  TextColumn get decision => text()();
+  TextColumn get category => text().nullable()();
+  TextColumn get reasons => text().withDefault(const Constant(''))();
+  TextColumn get source => text()();
+  DateTimeColumn get at => dateTime().withDefault(currentDateAndTime)();
 }
 
 /// Row keys whose summary is stale. Filled by triggers, drained by refresh.
@@ -320,6 +386,9 @@ class Drafts extends Table {
   DirtyRows,
   TrackerEvents,
   Drafts,
+  FeedsCategoryRows,
+  ClassificationRules,
+  ClassificationEvents,
 ])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
@@ -328,7 +397,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -337,6 +406,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           await _createIndexes();
           await _createTriggers();
           await _createSearchIndex();
+          await _seedFeedsCategories();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -387,6 +457,29 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
               "INSERT INTO message_fts(message_id, subject, sender, body) SELECT id, subject, from_name || ' ' || from_address, COALESCE(body_text, snippet) FROM messages",
             );
           }
+          if (from < 8) {
+            await m.addColumn(messages, messages.bulkSignals);
+            await m.addColumn(messages, messages.classification);
+            await m.addColumn(messages, messages.feedsCategory);
+            await m.addColumn(contacts, contacts.classification);
+            await m.addColumn(contacts, contacts.classificationSource);
+            await m.addColumn(contacts, contacts.feedsCategory);
+            await m.addColumn(contacts, contacts.countsTowardUnread);
+            await m.addColumn(contacts, contacts.classReasons);
+            for (final c in [rowSummaries.peopleTotal, rowSummaries.peopleUnread, rowSummaries.feedsTotal, rowSummaries.feedsUnread, rowSummaries.lastPeople, rowSummaries.lastFeeds, rowSummaries.newestPeopleId, rowSummaries.newestFeedsId]) {
+              await m.addColumn(rowSummaries, c);
+            }
+            await m.createTable(feedsCategoryRows);
+            await m.createTable(classificationRules);
+            await m.createTable(classificationEvents);
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_classification ON messages(classification)');
+            await customStatement('DROP TRIGGER IF EXISTS trg_msg_upd');
+            await _createTriggers();
+            await _seedFeedsCategories();
+            // Everything is re-summarized with per-bucket figures; senders are
+            // classified by the backfill pass on the next sync.
+            await customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) SELECT DISTINCT row_key FROM message_row_assignments');
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -416,6 +509,13 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
       END''');
   }
 
+  Future<void> _seedFeedsCategories() async {
+    const defaults = ['Newsletter', 'Receipt', 'Notification', 'Social', 'Promotion'];
+    for (var i = 0; i < defaults.length; i++) {
+      await customStatement("INSERT OR IGNORE INTO feeds_categories(name, builtin, sort_order) VALUES ('${defaults[i]}', 1, $i)");
+    }
+  }
+
   Future<void> _createIndexes() async {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_from_key ON messages(from_contact_key)');
@@ -438,7 +538,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
       CREATE TRIGGER IF NOT EXISTS trg_assign_del AFTER DELETE ON message_row_assignments
       BEGIN INSERT OR IGNORE INTO dirty_rows(row_key) VALUES (OLD.row_key); END''');
     await customStatement('''
-      CREATE TRIGGER IF NOT EXISTS trg_msg_upd AFTER UPDATE OF is_seen, is_flagged, is_deleted, has_attachments,
+      CREATE TRIGGER IF NOT EXISTS trg_msg_upd AFTER UPDATE OF is_seen, is_flagged, is_deleted, has_attachments, classification,
         snippet, subject, date, internal_date, is_from_me, folder_id ON messages
       BEGIN INSERT OR IGNORE INTO dirty_rows(row_key) SELECT row_key FROM message_row_assignments WHERE message_id = NEW.id; END''');
     await customStatement('''
