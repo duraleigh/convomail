@@ -44,7 +44,16 @@ class SyncController {
   /// messages that predate the threading model (schema v5 migration).
   void start() {
     _sub ??= _db.watchAccounts().listen(_reconcile);
-    unawaited(ClassificationService(_db).classifyPending(limit: 500).catchError((Object e) => 0));
+    // Senders not yet classified (first launch after the Feeds milestone,
+    // or an interrupted backfill) are worked through in batches.
+    unawaited(() async {
+      final service = ClassificationService(_db);
+      try {
+        while (await service.classifyPending(limit: 200) > 0) {}
+      } catch (_) {
+        // Best effort; the sync engine's backfill pass retries.
+      }
+    }());
     unawaited(_db.rebuildMissingThreads(batch: 500).catchError((Object e) {
       // Threading backfill is best effort; new mail is threaded as it syncs.
       return 0;
