@@ -67,7 +67,15 @@ The 200k unified list is the trigger-maintained `row_summaries` path. The per-ac
 
 ## Install
 
-`flutter build windows` produces a portable folder at `build\windows\x64\runner\Release\` (run `convomail.exe` from there). `dart run msix:create` wraps that folder into `build\msix\convomail.msix` using the `msix_config` block in `pubspec.yaml`. Because no code-signing certificate is available, the package is signed with the msix tool's test certificate: before double-clicking the `.msix`, install that certificate into **Local Machine → Trusted People** (right-click the `.msix` → Properties → Digital Signatures → Details → View Certificate → Install Certificate), or run `dart run msix:create --install-certificate true` once from an elevated prompt. A real certificate goes in `certificate_path` / `certificate_password` with `publisher` set to its subject. Updates: Settings → About & updates takes the https address of a JSON file `{"version","url","notes"}` and compares it with the running version on demand.
+`flutter build windows` produces a portable folder at `build\windows\x64\runner\Release\` (run `convomail.exe` from there). `dart run msix:create` wraps that folder into `build\msix\convomail.msix` using the `msix_config` block in `pubspec.yaml`. Because no code-signing certificate is available, the package is signed with the msix tool's test certificate: before double-clicking the `.msix`, install that certificate into **Local Machine → Trusted People** (right-click the `.msix` → Properties → Digital Signatures → Details → View Certificate → Install Certificate), or run `dart run msix:create --install-certificate true` once from an elevated prompt. A real certificate goes in `certificate_path` / `certificate_password` with `publisher` set to its subject.
+
+Without trusting any certificate, a PC with Developer Mode on can register the unpacked package in place (this is how the package was tested on the development PC): unzip `convomail.msix` into a folder (it is a zip; `Expand-Archive` refuses the extension, Python's `zipfile` or 7-Zip work), then
+
+```
+Add-AppxPackage -Register <folder>\AppxManifest.xml
+```
+
+That gives the Start menu entry, the `convomail` execution alias under `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the `mailto:` protocol registration, running from that folder (so do not delete it). The packaged app uses the same `%APPDATA%\com.convomail` data folder as the portable build. `Remove-AppxPackage com.convomail.app_<hash>` uninstalls it. Updates: Settings → About & updates takes the https address of a JSON file `{"version","url","notes"}` and compares it with the running version on demand.
 
 ## Build
 
