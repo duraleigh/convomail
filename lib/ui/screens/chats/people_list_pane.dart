@@ -29,7 +29,7 @@ import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
 
 /// The middle pane of the Chats destination (spec 5.3): headline, search,
-/// filter chips, People/Feeds group, and the grouped People list with
+/// filter menu behind the tune icon, People/Feeds group, and the grouped People list with
 /// hover actions, context menu, and keyboard navigation.
 class PeopleListPane extends ConsumerStatefulWidget {
   const PeopleListPane({super.key});
@@ -209,7 +209,30 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   );
                 }),
               ),
-              IconButton(tooltip: 'Filters', onPressed: () {}, icon: const Icon(Icons.tune_rounded)),
+              PopupMenuButton<PeopleFilter>(
+                key: const ValueKey('filter-menu'),
+                tooltip: 'Filters',
+                onSelected: (f) => ref.read(peopleFilterProvider.notifier).select(f),
+                icon: filter == PeopleFilter.all
+                    ? const Icon(Icons.tune_rounded)
+                    : Icon(Icons.filter_alt_rounded, color: scheme.primary),
+                itemBuilder: (context) => [
+                  for (final f in PeopleFilter.values)
+                    PopupMenuItem<PeopleFilter>(
+                      value: f,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            child: f == filter ? Icon(Icons.check_rounded, size: 20, color: scheme.primary) : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Text(_filterLabels[f]!),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
             ],
           ),
         ),
@@ -236,23 +259,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
           ),
         ),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final f in PeopleFilter.values)
-                FilterChip(
-                  label: Text(_filterLabels[f]!),
-                  selected: f == filter,
-                  onSelected: (_) => ref.read(peopleFilterProvider.notifier).select(f),
-                  visualDensity: VisualDensity.compact,
-                ),
-            ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: ConnectedButtonGroup<InboxMode>(
             selected: mode,
             onSelected: (m) => ref.read(inboxModeProvider.notifier).select(m),

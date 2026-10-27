@@ -128,12 +128,16 @@ void main() {
     await tester.pumpWidget(app());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(FilterChip, 'Unread'));
+    await tester.tap(find.byKey(const ValueKey('filter-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Unread').last);
     await tester.pumpAndSettle();
     expect(find.text('Sarah Chen'), findsOneWidget);
     expect(find.text('Tom Andersen'), findsNothing);
 
-    await tester.tap(find.widgetWithText(FilterChip, 'All'));
+    await tester.tap(find.byKey(const ValueKey('filter-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('All').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'tom');
     await tester.pump(const Duration(milliseconds: 300));

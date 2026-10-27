@@ -35,12 +35,13 @@ void main() {
     late AppDatabase db;
     late int accountId;
     late int folderId;
+    var nextUid = 0;
 
     Future<int> seed({required String from, String fromName = '', required String subject, String? text, DateTime? date, bool fromMe = false, bool seen = true, bool flagged = false, bool attachments = false}) async {
       final id = await db.into(db.messages).insert(MessagesCompanion.insert(
             accountId: accountId,
             folderId: folderId,
-            uid: DateTime.now().microsecondsSinceEpoch % 1000000000,
+            uid: ++nextUid,
             subject: Value(subject),
             fromAddress: Value(from),
             fromName: Value(fromName),
@@ -288,7 +289,9 @@ void main() {
 
     testWidgets('filter chip scopes search; Include Feeds switch persists', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.widgetWithText(FilterChip, 'Unread'));
+      await tester.tap(find.byKey(const ValueKey('filter-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Unread').last);
       await tester.pumpAndSettle();
       // Mark Sarah's Figma message read; the unread-scoped search then finds only Tom.
       final sarahFigma = (await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Figma access');

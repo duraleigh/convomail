@@ -253,7 +253,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('snoozed until'), findsOneWidget);
       expect(find.text('Tom Andersen'), findsNothing);
-      await tester.tap(find.widgetWithText(FilterChip, 'Snoozed'));
+      await tester.tap(find.byKey(const ValueKey('filter-menu')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Snoozed').last);
       await tester.pumpAndSettle();
       expect(find.text('Tom Andersen'), findsOneWidget);
       expect(find.byTooltip('Snoozed'), findsOneWidget);

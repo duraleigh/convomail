@@ -58,7 +58,7 @@ This is the main/home screen, equivalent to Unibox's contact sidebar and ChatInb
 - **Header**: a Material 3 flexible top app bar — a row of icon buttons (menu icon left for account switching; filter icon and account avatar right) above a large left-aligned headline ("Chats"). Compose is a floating action button (FAB) at the bottom right, not an app-bar icon.
 - **Bottom navigation bar** (Material 3 navigation bar) on every top-level screen with four destinations: Chats, Boards, Planner, Settings. The active destination shows a filled icon inside a pill-shaped indicator.
 - **Search bar**: persistent, placeholder text "Search people and mail," always visible at the top of the list.
-- **Filter chip row**: Material 3 filter chips — All, Unread, Starred, This Week, Sent, Has attachments, From contacts, and any user-created custom tags. On Windows the chips wrap to as many rows as the pane width needs; on Android (Phase 2) they scroll horizontally. Exactly one filter active at a time (or "All" by default); selected chip is visually highlighted (filled, contrasting color) versus unselected chips (outlined/muted).
+- **Filter menu**: the filter icon in the headline row opens a checked menu — All, Unread, Starred, This Week, Sent, Has attachments, From contacts, Snoozed. Exactly one filter active at a time ("All" by default); when a filter other than All is active the icon switches to a filled, primary-colored funnel. No chip row is shown in the list pane (changed Oct 26, 2026: the wrapped chip row took a third of the middle pane).
 - **No pinned-contacts strip.** The reference apps show a horizontal row of avatars above the list; this app does not. Pinning a contact (via swipe action) keeps that contact's row at the top of the main list instead, marked with a small pin icon.
 - **Main contact list**: vertically scrolling list, each row containing:
   - Circular avatar (contact photo if available via device contacts/synced address book, otherwise colored circle with the contact's initials — color assigned deterministically per contact so it's consistent across sessions)
@@ -109,7 +109,7 @@ Tapping a contact opens their dedicated conversation screen.
 
 - **Global search**: accessible from the main inbox screen, searches across all contacts and all message content/subjects across all connected accounts.
 - **In-conversation search**: scoped search within a single contact's message history.
-- **Filter combination**: search results respect active filter chips (e.g., searching while "Starred" is selected only searches starred items).
+- **Filter combination**: search results respect the active filter (e.g., searching while "Starred" is selected only searches starred items).
 - **Include Feeds switch**: the search results screen carries an "Include Feeds" toggle, **off by default**. Off: results come from People rows only. On: results also include Feeds senders and messages (see 4.11), each marked with its category tag.
 - Advanced/premium tier: more powerful query support (e.g., search by attachment type, date range) — flagged as a "premium" feature to design for, consistent with ChatInbox's tiering, but exact gating logic is a business decision to confirm before implementation, not something to assume.
 
@@ -295,7 +295,7 @@ The design system is **Material 3 Expressive** (Google, 2025). Use its official 
 
 The mobile screens below and the phone frames in the mockups file remain the reference for the Android build in Phase 2. They also define the content of each screen, which the Windows panes in 5.3 present in a three-pane arrangement.
 
-1. **Chats (Home) screen**: flexible top app bar (menu icon, filter icon, account avatar; large "Chats" headline) → pill search bar → horizontally scrollable filter chip row → grouped, vertically scrolling contact list (avatar, name, preview, timestamp, unread badge; group rows with stacked avatars) with swipe-to-reveal actions → compose FAB bottom-right → bottom navigation bar (Chats · Boards · Planner · Settings). No pinned-avatar strip.
+1. **Chats (Home) screen**: flexible top app bar (menu icon, filter icon, account avatar; large "Chats" headline) → pill search bar → grouped, vertically scrolling contact list (avatar, name, preview, timestamp, unread badge; group rows with stacked avatars) with swipe-to-reveal actions → compose FAB bottom-right → bottom navigation bar (Chats · Boards · Planner · Settings). No pinned-avatar strip.
 2. **Conversation screen**: top app bar with back/contact-name/search/overflow → date-grouped, collapsible message list → inline expand-to-read → inline reply composer anchored at the bottom of the screen.
 3. **Compose screen** (new message, not a reply): reachable via the pencil icon; recipient field with autocomplete from contacts, subject field, from/identity selector if applicable, block-based body editor, attachment chips, send button (with progress indicator on tap).
 4. **Attachments screen** (per contact): toggle between List and Grid view; featured/most-recent file card at top; full attachment list/grid below.
@@ -312,7 +312,7 @@ The Windows app is a single window with a Material 3 **navigation rail** on the 
 
 - **Navigation rail** (88 dp): compose FAB at top; Chats, Boards, Planner destinations with pill indicators; Settings and the account avatar at the bottom. The avatar opens the account switcher (unified view or a single account, per 4.14). At widths under 1100 dp the rail collapses to icons only.
 - **Chats destination — three panes**:
-  - *Middle pane* (300–360 dp, user-resizable): "Chats" headline with the filter icon; pill search bar; filter chip row (All, Unread, Starred, This Week, Sent, Has attachments, From contacts, custom tags); the **People / Feeds** button group; the "N filed to Feeds" banner when on People; then the grouped contact list from 4.2 (contact rows and user-defined group rows). Hovering a row reveals its action buttons; right-click opens the same actions as a context menu.
+  - *Middle pane* (300–360 dp, user-resizable): "Chats" headline with the filter icon (opens the filter menu: All, Unread, Starred, This Week, Sent, Has attachments, From contacts, Snoozed); pill search bar; the **People / Feeds** button group; the "N filed to Feeds" banner when on People; then the grouped contact list from 4.2 (contact rows and user-defined group rows). Hovering a row reveals its action buttons; right-click opens the same actions as a context menu.
   - *Right pane* (remaining width) inside a 28 dp surface container: the selected contact's conversation from 4.3 — contact header with name, To/CC-aware message cards, "View thread" control, inline reply field anchored at the bottom. The thread view (4.20) opens as an overlay panel sliding in from the right edge, not a new window.
   - *Compose* (new message) replaces the right pane's contents in place: From/To/Subject filled fields, the block editor, attachment chips, floating formatting toolbar, and a send button with the wavy progress indicator. Escape or the close icon returns to the conversation; drafts autosave.
   - *Attachments for a contact* opens from the conversation header's folder icon as a panel that replaces the right pane: List/Grid button group, featured file card, grouped file list, photo grid. Preview opens an in-app viewer overlay for images and PDFs.
@@ -341,9 +341,7 @@ These are exact-layout reference diagrams — not visual mockups (no color, imag
 │ ☰                          ⚙  (Y)   │  <- app bar icons: menu / filter / account avatar
 │ Chats                                │  <- large headline (flexible top app bar)
 ├─────────────────────────────────────┤
-│ ( 🔍  Search people and mail       ) │  <- pill search bar
-├─────────────────────────────────────┤
-│ (✓All) Unread Starred ThisWeek Sent… │  <- filter chips, "All" selected with check
+│ ( 🔍  Search people and mail       ) │  <- pill search bar (filters live behind the ⚙ icon)
 ├─────────────────────────────────────┤
 │ ○ James Kowalski        1:34 PM      │  <- grouped list: 2dp gaps, 20dp outer corners
 │   API Deployment Complete            │
