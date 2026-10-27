@@ -55,7 +55,15 @@ The integration tests need `pip install pymap`; on Windows they start it through
 
 ## Performance
 
-Release-binary benchmarks (`convomail.exe --bench-people [--bench-size=N]`, `--bench-search`; results land in `%TEMP%`). Filled in by the M12 soak run below.
+Release-binary benchmarks on the development PC, October 26, 2026 (`convomail.exe --bench-people [--bench-size=N]`, `--bench-search`; results land in `%TEMP%`).
+
+| Scenario | Result |
+|---|---|
+| People list, 50k messages / 5k senders | median 170 ms per list query (5 runs); full summary build 199 ms; incremental refresh after 500 changed messages 66 ms |
+| People list, 200k messages / 20k senders (soak) | median 676 ms per list query; full summary build 730 ms; incremental refresh 201 ms |
+| Full-text search, 50k messages | 12–21 ms per query with 100 hits; FTS seeding with triggers 3.1 s |
+
+The 200k unified list is the trigger-maintained `row_summaries` path. The per-account scoped list (M11) recomputes its summary per query and is slower on large mailboxes; it is meant for occasional use.
 
 ## Install
 
