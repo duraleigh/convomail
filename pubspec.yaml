@@ -91,6 +91,7 @@ flutter:
   assets:
     - assets/tray.ico
     - assets/badges/
+    - assets/logo.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -122,3 +123,21 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+
+# `dart run msix:create` (plan M12). Without certificate_path the tool signs
+# with its bundled test certificate, which the installing PC must trust
+# first (see README → Install). A real code-signing certificate goes in
+# certificate_path/certificate_password and publisher must match its CN.
+msix_config:
+  display_name: ConvoMail
+  publisher_display_name: ConvoMail
+  identity_name: com.convomail.app
+  msix_version: 1.0.0.0
+  logo_path: assets/logo.png
+  capabilities: internetClient
+  protocol_activation: mailto
+  execution_alias: convomail
+  install_certificate: false
+  output_path: build/msix
+  output_name: convomail
+  build_windows: false

@@ -77,7 +77,10 @@ Future<void> runSearchBench() async {
   await db.close();
 }
 
-Future<void> runPeopleBench() async {
+/// `--bench-size=N` changes the message count (default 50k; M12's soak
+/// run uses 200k). Senders are one tenth of the messages.
+Future<void> runPeopleBench({int count = 50000}) async {
+  final senders = count ~/ 10;
   final db = AppDatabase.memory();
   final accountId = await db.into(db.accounts).insert(AccountsCompanion.insert(
         email: 'bench@example.com',
@@ -92,8 +95,8 @@ Future<void> runPeopleBench() async {
   final folderId = await db.into(db.folders).insert(FoldersCompanion.insert(accountId: accountId, path: 'INBOX', name: 'INBOX', role: const Value('inbox')));
   final t0 = DateTime(2026, 1, 1);
   await db.batch((b) {
-    for (var i = 0; i < 50000; i++) {
-      final sender = 'p${i % 5000}@x.com';
+    for (var i = 0; i < count; i++) {
+      final sender = 'p${i % senders}@x.com';
       b.insert(
         db.messages,
         MessagesCompanion.insert(
@@ -116,7 +119,7 @@ Future<void> runPeopleBench() async {
     }
   });
 
-  // First refresh = full summary build after a first sync of 50k messages.
+  // First refresh = full summary build after a first sync of `count` messages.
   final refreshSw = Stopwatch()..start();
   await db.refreshDirtyRows();
   refreshSw.stop();
@@ -127,7 +130,7 @@ Future<void> runPeopleBench() async {
     final rows = await db.peopleRows();
     sw.stop();
     times.add(sw.elapsedMilliseconds);
-    assert(rows.length == 5000);
+    assert(rows.length == senders);
   }
 
   // Incremental refresh after touching 500 messages (one sync page).
@@ -140,7 +143,7 @@ Future<void> runPeopleBench() async {
   final out = File('${Directory.systemTemp.path}${Platform.pathSeparator}convomail-bench.txt');
   final median = (List.of(times)..sort())[times.length ~/ 2];
   await out.writeAsString(
-    'people rows over 50k messages / 5k senders (release): list runs=${times.join(',')} ms, median=$median ms; '
+    'people rows over $count messages / $senders senders (release): list runs=${times.join(',')} ms, median=$median ms; '
     'full summary build=${refreshSw.elapsedMilliseconds} ms; incremental refresh (500 msgs)=${incSw.elapsedMilliseconds} ms\n',
   );
 }

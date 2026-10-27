@@ -12,7 +12,8 @@ enum SettingsSection {
   feeds('Feeds', Icons.rss_feed_rounded),
   tags('Groups & Tags', Icons.label_outline_rounded),
   keyboard('Keyboard', Icons.keyboard_outlined),
-  defaultApp('Default mail app', Icons.mail_outline_rounded);
+  defaultApp('Default mail app', Icons.mail_outline_rounded),
+  about('About & updates', Icons.info_outline_rounded);
 
   const SettingsSection(this.label, this.icon);
   final String label;

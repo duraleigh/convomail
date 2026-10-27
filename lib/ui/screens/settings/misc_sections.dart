@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../app/app_log.dart';
 import '../../../app/settings.dart';
+import '../../../app/update_check.dart';
+import '../../../app/version.dart';
 import '../../../platform/mailto_registration.dart';
 import '../../../platform/windows_integration.dart';
 import '../../../sync/notification_center.dart';
@@ -166,5 +171,172 @@ class _DefaultAppDetailState extends ConsumerState<DefaultAppDetail> {
         Text('The registration is per user and writes only under HKEY_CURRENT_USER. Launching from a link while the app is already open is handled in milestone 10 (single instance).', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
       ],
     );
+  }
+}
+
+
+/// Settings → About & updates (plan M12): version, manual update check
+/// against a user-supplied feed, and the local diagnostics log.
+class AboutDetail extends ConsumerStatefulWidget {
+  const AboutDetail({super.key});
+
+  @override
+  ConsumerState<AboutDetail> createState() => _AboutDetailState();
+}
+
+class _AboutDetailState extends ConsumerState<AboutDetail> {
+  late final TextEditingController _feed;
+  UpdateResult? _result;
+  bool _checking = false;
+  int? _logBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    _feed = TextEditingController(text: ref.read(settingsProvider).updateFeedUrl);
+    _refreshLogSize();
+  }
+
+  @override
+  void dispose() {
+    _feed.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refreshLogSize() async {
+    final log = ref.read(appLogProvider);
+    final n = log == null ? 0 : await log.totalBytes();
+    if (mounted) setState(() => _logBytes = n);
+  }
+
+  Future<void> _check() async {
+    final url = _feed.text.trim();
+    await ref.read(settingsProvider.notifier).setUpdateFeedUrl(url);
+    final uri = Uri.tryParse(url);
+    if (url.isEmpty || uri == null || !uri.hasScheme) {
+      setState(() => _result = const UpdateCheckFailed('Enter the https address of an update feed first.'));
+      return;
+    }
+    setState(() => _checking = true);
+    final r = await ref.read(updateCheckerProvider).check(uri);
+    if (mounted) {
+      setState(() {
+        _checking = false;
+        _result = r;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final log = ref.watch(appLogProvider);
+    final result = _result;
+    return ListView(
+      children: [
+        GroupedList(
+          children: [
+            ListTile(
+              leading: Icon(Icons.forum_rounded, color: scheme.primary),
+              title: const Text('ConvoMail'),
+              subtitle: const Text('Version $appVersion (build $appBuild) · Windows'),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.xl),
+        Text('UPDATES', style: text.labelSmall!.copyWith(letterSpacing: 1)),
+        const SizedBox(height: AppSpace.sm),
+        GroupedList(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpace.lg, AppSpace.md, AppSpace.lg, AppSpace.sm),
+              child: TextField(
+                key: const ValueKey('update-feed'),
+                controller: _feed,
+                decoration: const InputDecoration(labelText: 'Update feed (https)', hintText: 'https://example.com/convomail/latest.json', border: OutlineInputBorder()),
+                onSubmitted: (_) => _check(),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpace.lg, 0, AppSpace.lg, AppSpace.md),
+              child: Row(
+                children: [
+                  FilledButton.tonalIcon(
+                    key: const ValueKey('check-updates'),
+                    onPressed: _checking ? null : _check,
+                    icon: _checking ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.system_update_alt_rounded),
+                    label: const Text('Check for updates'),
+                  ),
+                  const SizedBox(width: AppSpace.md),
+                  if (result != null)
+                    Expanded(
+                      child: switch (result) {
+                        UpToDate(:final current) => Text('You have the latest version ($current).', style: text.bodyMedium),
+                        UpdateCheckFailed(:final message) => Text(message, style: text.bodyMedium!.copyWith(color: scheme.error)),
+                        UpdateAvailable(:final info) => Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: AppSpace.sm,
+                            children: [
+                              Text('Version ${info.version} is available.', style: text.bodyMedium),
+                              TextButton(onPressed: () => launchUrl(Uri.parse(info.url)), child: const Text('Download')),
+                            ],
+                          ),
+                      },
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpace.sm),
+        Text('There is no automatic download or telemetry. The feed is a small JSON file with "version", "url" and optional "notes". Nothing is checked until you press the button.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+        const SizedBox(height: AppSpace.xl),
+        Text('DIAGNOSTICS', style: text.labelSmall!.copyWith(letterSpacing: 1)),
+        const SizedBox(height: AppSpace.sm),
+        GroupedList(
+          children: [
+            ListTile(
+              leading: Icon(Icons.bug_report_outlined, color: scheme.primary),
+              title: const Text('Local error log'),
+              subtitle: Text(log == null ? 'Not available in this build.' : '${log.dir.path}\n${_sizeLabel(_logBytes)} · kept ${log.keepDays} days · exceptions and stack traces only, never message content'),
+              isThreeLine: log != null,
+            ),
+            if (log != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(AppSpace.lg, 0, AppSpace.lg, AppSpace.md),
+                child: Row(
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        await log.dir.create(recursive: true);
+                        await Process.start('explorer.exe', [log.dir.path], mode: ProcessStartMode.detached);
+                      },
+                      icon: const Icon(Icons.folder_open_rounded),
+                      label: const Text('Open log folder'),
+                    ),
+                    const SizedBox(width: AppSpace.md),
+                    TextButton.icon(
+                      onPressed: () async {
+                        await log.clear();
+                        await _refreshLogSize();
+                      },
+                      icon: const Icon(Icons.delete_outline_rounded),
+                      label: const Text('Clear logs'),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static String _sizeLabel(int? bytes) {
+    if (bytes == null) return '…';
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 }

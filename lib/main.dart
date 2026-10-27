@@ -3,15 +3,19 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'app/app_log.dart';
 import 'app/bench.dart';
 import 'app/compose_state.dart';
 import 'app/destinations.dart';
+import 'app/onboarding.dart';
 import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
+import 'app/version.dart';
 import 'platform/mailto_registration.dart';
 import 'platform/single_instance.dart';
 import 'platform/windows_integration.dart';
@@ -108,7 +112,8 @@ class StartupArgs {
 Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   if (args.contains('--bench-people')) {
-    await runPeopleBench();
+    final sizeArg = args.where((a) => a.startsWith('--bench-size=')).map((a) => int.tryParse(a.substring('--bench-size='.length))).whereType<int>().firstOrNull;
+    await runPeopleBench(count: sizeArg ?? 50000);
     exit(0);
   }
   if (args.contains('--bench-search')) {
@@ -116,6 +121,16 @@ Future<void> main(List<String> args) async {
     exit(0);
   }
   final startup = StartupArgs.parse(args);
+
+  // Local-only diagnostics (plan M12): framework and uncaught errors go to
+  // <support>/logs, pruned to a week. Nothing leaves the machine.
+  AppLog? log;
+  if (Platform.isWindows) {
+    log = AppLog(Directory(p.join((await getApplicationSupportDirectory()).path, 'logs')));
+    await log.init();
+    AppLog.install(log);
+    log.info('start v$appVersion+$appBuild args=${args.length}');
+  }
 
   // Single instance: hand our arguments (a mailto: link, usually) to the
   // running app and exit; otherwise become the primary and listen.
@@ -157,6 +172,8 @@ Future<void> main(List<String> args) async {
     ...startup.overrides,
     if (integration != null) windowsIntegrationProvider.overrideWith((ref) => integration),
     if (Platform.isWindows) notificationSinkProvider.overrideWith((ref) => WindowsNotificationSink(ref)),
+    if (log != null) appLogProvider.overrideWith((ref) => log),
+    showOnboardingProvider.overrideWith((ref) => true),
   ]);
   _container = container;
   if (instance != null) {

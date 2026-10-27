@@ -1,6 +1,6 @@
 # Windows Desktop App — Phase 1 Development Plan
 
-**Status:** Draft for product-owner review. No code has been written. Per spec Section 9, implementation starts only after this plan is explicitly approved.
+**Status:** Approved September 29, 2026; all thirteen milestones M0–M12 implemented as of October 26, 2026 (per-milestone notes in `README.md`). Still unverified: a real SMTP send from the owner's account and its rendering in Gmail web / Outlook / Apple Mail (M4), the 24-hour tray soak (M10), toasts and tray on screen beyond widget tests (M10), an MSIX install on a second PC (M12). Microsoft OAuth (M11) is not implemented; the Outlook preset says so.
 **Companion documents:** `email-client-build-spec.md` (behavior and structure), `email-client-visual-mockups.html` (visual tokens and screens).
 **Date:** September 29, 2026
 

@@ -17,6 +17,8 @@ class AppSettings {
     this.closeToTray = true,
     this.launchAtLogin = false,
     this.showBadge = true,
+    this.updateFeedUrl = '',
+    this.onboardingDone = false,
   });
 
   final ThemeMode themeMode;
@@ -41,6 +43,11 @@ class AppSettings {
   final bool launchAtLogin;
   final bool showBadge;
 
+  /// Plan M12: manual update check against a static JSON feed (empty = off)
+  /// and whether the first-run screen has been dismissed.
+  final String updateFeedUrl;
+  final bool onboardingDone;
+
   AppSettings copyWith({
     ThemeMode? themeMode,
     bool? dynamicColor,
@@ -53,6 +60,8 @@ class AppSettings {
     bool? closeToTray,
     bool? launchAtLogin,
     bool? showBadge,
+    String? updateFeedUrl,
+    bool? onboardingDone,
   }) =>
       AppSettings(
         themeMode: themeMode ?? this.themeMode,
@@ -66,6 +75,8 @@ class AppSettings {
         closeToTray: closeToTray ?? this.closeToTray,
         launchAtLogin: launchAtLogin ?? this.launchAtLogin,
         showBadge: showBadge ?? this.showBadge,
+        updateFeedUrl: updateFeedUrl ?? this.updateFeedUrl,
+        onboardingDone: onboardingDone ?? this.onboardingDone,
       );
 }
 
@@ -83,6 +94,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
   static const _kCloseToTray = 'windows.closeToTray';
   static const _kLaunchAtLogin = 'windows.launchAtLogin';
   static const _kShowBadge = 'windows.showBadge';
+  static const _kUpdateFeed = 'updates.feedUrl';
+  static const _kOnboardingDone = 'onboarding.done';
 
   @override
   AppSettings build() {
@@ -104,6 +117,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
     final tray = await _db.getSetting(_kCloseToTray);
     final login = await _db.getSetting(_kLaunchAtLogin);
     final badge = await _db.getSetting(_kShowBadge);
+    final feed = await _db.getSetting(_kUpdateFeed);
+    final onboarded = await _db.getSetting(_kOnboardingDone);
     state = AppSettings(
       themeMode: ThemeMode.values.firstWhere((m) => m.name == theme, orElse: () => ThemeMode.system),
       dynamicColor: dynamic == 'true',
@@ -116,6 +131,8 @@ class SettingsNotifier extends Notifier<AppSettings> {
       closeToTray: tray != 'false',
       launchAtLogin: login == 'true',
       showBadge: badge != 'false',
+      updateFeedUrl: feed ?? '',
+      onboardingDone: onboarded == 'true',
     );
     loaded = true;
   }
@@ -131,6 +148,16 @@ class SettingsNotifier extends Notifier<AppSettings> {
   Future<void> setLaunchAtLogin(bool on) async {
     state = state.copyWith(launchAtLogin: on);
     await _db.putSetting(_kLaunchAtLogin, on.toString());
+  }
+
+  Future<void> setUpdateFeedUrl(String url) async {
+    state = state.copyWith(updateFeedUrl: url.trim());
+    await _db.putSetting(_kUpdateFeed, url.trim());
+  }
+
+  Future<void> setOnboardingDone(bool done) async {
+    state = state.copyWith(onboardingDone: done);
+    await _db.putSetting(_kOnboardingDone, done.toString());
   }
 
   Future<void> setShowBadge(bool on) async {

@@ -103,6 +103,8 @@ class _Detail extends ConsumerWidget {
         return const FeedsDetail();
       case SettingsSection.tags:
         return const TagsDetail();
+      case SettingsSection.about:
+        return const AboutDetail();
     }
   }
 }
@@ -198,6 +200,18 @@ class _PrivacyDetail extends ConsumerWidget {
             stat('${stats?.sendersWhoKnowYouRead ?? 0}', 'senders that know you read their mail', Icons.visibility_outlined),
             const SizedBox(width: AppSpace.md),
             stat('${stats?.imagesBlockedTotal ?? 0}', 'remote references blocked in total', Icons.image_not_supported_outlined),
+          ],
+        ),
+        const SizedBox(height: AppSpace.xl),
+        GroupedList(
+          children: [
+            ListTile(
+              leading: Icon(Icons.bug_report_outlined, color: scheme.primary),
+              title: const Text('Diagnostics stay on this PC'),
+              subtitle: const Text('Crash and error logs are written to a local logs folder for seven days and never sent anywhere. Manage them under About & updates.'),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => ref.read(settingsSectionProvider.notifier).select(SettingsSection.about),
+            ),
           ],
         ),
         const SizedBox(height: AppSpace.xl),
