@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../../app/account_scope.dart';
 import '../../../../app/compose_state.dart';
 import '../../../../mail/mail_transport.dart';
 import '../../../../mail/models.dart';
@@ -166,7 +167,8 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
         }
       } else {
         final accounts = await _db.allAccounts();
-        final account = accounts.where((a) => a.enabled).firstOrNull ?? accounts.firstOrNull;
+        final scope = ref.read(accountScopeProvider);
+        final account = accounts.where((a) => a.id == scope).firstOrNull ?? accounts.where((a) => a.enabled).firstOrNull ?? accounts.firstOrNull;
         _accountId = account?.id;
         if (account != null) {
           identity = (await _db.identitiesForAccount(account.id)).firstOrNull;

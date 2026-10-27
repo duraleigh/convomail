@@ -73,6 +73,7 @@ extension SearchQueries on AppDatabase {
     String? rowKey,
     bool includeFeeds = false,
     int limit = 100,
+    int? accountId,
   }) async {
     final match = ftsQuery(query);
     if (match == null) return const [];
@@ -84,6 +85,10 @@ extension SearchQueries on AppDatabase {
     if (rowKey != null) {
       where.add('EXISTS (SELECT 1 FROM message_row_assignments rr WHERE rr.message_id = m.id AND rr.row_key = ?)');
       vars.add(Variable.withString(rowKey));
+    }
+    if (accountId != null) {
+      where.add('m.account_id = ?');
+      vars.add(Variable.withInt(accountId));
     }
     switch (filter) {
       case PeopleFilter.all:

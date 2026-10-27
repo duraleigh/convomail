@@ -33,6 +33,7 @@ class PeopleRow {
     this.feedsUnread = 0,
     this.snoozedUntil,
     this.muted = false,
+    this.accountIds = const {},
   });
 
   final RowRef ref;
@@ -75,6 +76,9 @@ class PeopleRow {
 
   /// Spec 4.17: no notifications for this row.
   final bool muted;
+
+  /// Accounts whose mail is in this row (spec 4.14 account indicator).
+  final Set<int> accountIds;
   bool get isSnoozed => snoozedUntil != null && snoozedUntil!.isAfter(DateTime.now());
   String get rowKey => ref.key;
   String get preview => previewSnippet.isNotEmpty ? previewSnippet : previewSubject;
@@ -106,10 +110,11 @@ extension PeopleQueries on AppDatabase {
   /// Live People rows for [filter], pinned first, then by activity.
   /// Messages in junk/trash folders and locally deleted messages are
   /// excluded. `search` matches title, address, subject or snippet.
-  Stream<List<PeopleRow>> watchPeopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people}) {
+  Stream<List<PeopleRow>> watchPeopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId}) {
     final q = customSelect(
-      _listSql,
-      readsFrom: {rowSummaries, rowPrefs, contacts, peopleGroups, groupMembers, messages},
+      accountId == null ? _listSql : _scopedListSql,
+      variables: accountId == null ? const [] : [Variable.withInt(accountId)],
+      readsFrom: {rowSummaries, rowPrefs, contacts, peopleGroups, groupMembers, messages, messageRowAssignments},
     );
     return q.watch().asyncMap((rows) async {
       // Summaries may be stale right after a migration or a direct write;
@@ -119,9 +124,9 @@ extension PeopleQueries on AppDatabase {
     });
   }
 
-  Future<List<PeopleRow>> peopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people}) async {
+  Future<List<PeopleRow>> peopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId}) async {
     await refreshDirtyRows();
-    final rows = await customSelect(_listSql).get();
+    final rows = await customSelect(accountId == null ? _listSql : _scopedListSql, variables: accountId == null ? const [] : [Variable.withInt(accountId)]).get();
     return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab);
   }
 
@@ -134,10 +139,10 @@ extension PeopleQueries on AppDatabase {
 
   /// Messages belonging to a row, newest first. Used by the interim
   /// message list (M2) and the conversation view (M3).
-  Stream<List<Message>> watchMessagesForRow(String rowKey) {
+  Stream<List<Message>> watchMessagesForRow(String rowKey, {int? accountId}) {
     final q = customSelect(
-      _rowMessagesSql,
-      variables: [Variable.withString(rowKey)],
+      accountId == null ? _rowMessagesSql : _rowMessagesSql.replaceFirst('WHERE r.row_key = ?', 'WHERE r.row_key = ? AND m.account_id = ?'),
+      variables: [Variable.withString(rowKey), if (accountId != null) Variable.withInt(accountId)],
       readsFrom: {messages, messageRowAssignments, folders},
     );
     return q.watch().map((rows) => rows.map((r) => messages.map(r.data)).toList());
@@ -219,7 +224,8 @@ extension PeopleQueries on AppDatabase {
            COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at, COALESCE(p.muted, 0) AS muted,
            c.display_name AS c_name, COALESCE(c.in_address_book, 0) AS c_in_book,
            COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
-           g.name AS g_name
+           g.name AS g_name,
+           (SELECT GROUP_CONCAT(DISTINCT mm.account_id) FROM message_row_assignments rr JOIN messages mm ON mm.id = rr.message_id WHERE rr.row_key = s.row_key AND mm.is_deleted = 0) AS account_ids
     FROM row_summaries s
     LEFT JOIN messages m ON m.id = s.newest_message_id
     LEFT JOIN messages mp ON mp.id = s.newest_people_id
@@ -228,6 +234,49 @@ extension PeopleQueries on AppDatabase {
     LEFT JOIN contacts c ON substr(s.row_key, 1, 2) = 'c:' AND c.key = substr(s.row_key, 3)
     LEFT JOIN people_groups g ON substr(s.row_key, 1, 2) = 'g:' AND g.id = CAST(substr(s.row_key, 3) AS INTEGER)
   ''';
+
+  /// Same shape as [_listSql], but the summary is computed on the fly for
+  /// one account's messages (spec 4.14 per-account view). Slower than the
+  /// trigger-maintained table, which is why the unified view does not use it.
+  static final _scopedListSql = _listSql.replaceFirst('FROM row_summaries s', '''
+    FROM (
+      SELECT v.row_key,
+             COUNT(*) AS total,
+             SUM(CASE WHEN v.is_seen = 0 AND v.is_from_me = 0 THEN 1 ELSE 0 END) AS unread,
+             MAX(CASE WHEN v.is_from_me = 0 THEN v.ts END) AS last_received,
+             MAX(v.ts) AS last_any,
+             MAX(v.is_flagged) AS has_starred,
+             MAX(v.has_attachments) AS has_attachments,
+             MAX(v.is_from_me) AS has_sent,
+             (SELECT m2.id FROM message_row_assignments r2 JOIN messages m2 ON m2.id = r2.message_id
+                WHERE r2.row_key = v.row_key AND m2.is_deleted = 0 AND m2.account_id = v.account_id
+                  AND m2.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))
+                ORDER BY COALESCE(m2.date, m2.internal_date) DESC, m2.id DESC LIMIT 1) AS newest_message_id,
+             SUM(CASE WHEN v.cls <> 'feeds' THEN 1 ELSE 0 END) AS people_total,
+             SUM(CASE WHEN v.cls <> 'feeds' AND v.is_seen = 0 AND v.is_from_me = 0 THEN 1 ELSE 0 END) AS people_unread,
+             SUM(CASE WHEN v.cls = 'feeds' THEN 1 ELSE 0 END) AS feeds_total,
+             SUM(CASE WHEN v.cls = 'feeds' AND v.is_seen = 0 AND v.is_from_me = 0 THEN 1 ELSE 0 END) AS feeds_unread,
+             MAX(CASE WHEN v.cls <> 'feeds' AND v.is_from_me = 0 THEN v.ts END) AS last_people,
+             MAX(CASE WHEN v.cls = 'feeds' THEN v.ts END) AS last_feeds,
+             (SELECT m2.id FROM message_row_assignments r2 JOIN messages m2 ON m2.id = r2.message_id
+                WHERE r2.row_key = v.row_key AND m2.is_deleted = 0 AND m2.account_id = v.account_id AND m2.classification <> 'feeds'
+                  AND m2.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))
+                ORDER BY COALESCE(m2.date, m2.internal_date) DESC, m2.id DESC LIMIT 1) AS newest_people_id,
+             (SELECT m2.id FROM message_row_assignments r2 JOIN messages m2 ON m2.id = r2.message_id
+                WHERE r2.row_key = v.row_key AND m2.is_deleted = 0 AND m2.account_id = v.account_id AND m2.classification = 'feeds'
+                  AND m2.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))
+                ORDER BY COALESCE(m2.date, m2.internal_date) DESC, m2.id DESC LIMIT 1) AS newest_feeds_id
+      FROM (
+        SELECT m.id, m.is_seen, m.is_flagged, m.has_attachments, m.is_from_me, m.classification AS cls, m.account_id,
+               COALESCE(m.date, m.internal_date) AS ts, r.row_key
+        FROM message_row_assignments r
+        JOIN messages m ON m.id = r.message_id
+        WHERE m.account_id = ? AND m.is_deleted = 0
+          AND m.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))
+      ) v
+      GROUP BY v.row_key
+    ) s
+''');
 
   Future<List<PeopleRow>> _materialize(List<QueryRow> rows, {required PeopleFilter filter, required String search, InboxTab tab = InboxTab.people}) async {
     Map<int, List<(String, String)>>? membersByGroup;
@@ -330,6 +379,7 @@ extension PeopleQueries on AppDatabase {
         feedsUnread: feedsUnread,
         snoozedUntil: snoozedUntil,
         muted: d['muted'] == 1,
+        accountIds: {for (final s in ((d['account_ids'] as String?) ?? '').split(',')) if (int.tryParse(s) != null) int.parse(s)},
       ));
     }
 

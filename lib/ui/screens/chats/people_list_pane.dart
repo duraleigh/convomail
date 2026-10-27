@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/account_scope.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/destinations.dart';
 import '../../../app/people_state.dart';
@@ -182,7 +183,32 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
           padding: const EdgeInsets.fromLTRB(20, 14, 8, 0),
           child: Row(
             children: [
-              Expanded(child: Text('Chats', style: text.headlineMedium)),
+              Expanded(
+                child: Builder(builder: (context) {
+                  final scope = ref.watch(accountScopeProvider);
+                  final accounts = ref.watch(accountsProvider).value ?? const [];
+                  final current = accounts.where((a) => a.id == scope).firstOrNull;
+                  if (current == null) return Text('Chats', style: text.headlineMedium);
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text('Chats', style: text.headlineMedium),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: InputChip(
+                          key: const ValueKey('scope-chip'),
+                          avatar: CircleAvatar(backgroundColor: accountColor(current.id, scheme), radius: 5),
+                          label: Text(current.email, overflow: TextOverflow.ellipsis),
+                          onDeleted: () => ref.read(accountScopeProvider.notifier).select(null),
+                          deleteButtonTooltipMessage: 'Show all accounts',
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ),
+                    ],
+                  );
+                }),
+              ),
               IconButton(tooltip: 'Filters', onPressed: () {}, icon: const Icon(Icons.tune_rounded)),
             ],
           ),

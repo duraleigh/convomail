@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../store/database.dart';
 import '../store/search_queries.dart';
+import 'account_scope.dart';
 import 'people_state.dart';
 import 'settings.dart';
 
@@ -39,7 +40,7 @@ final searchHitsProvider = FutureProvider<List<SearchHit>>((ref) async {
   if (q.trim().isEmpty) return const [];
   final filter = ref.watch(peopleFilterProvider);
   final includeFeeds = ref.watch(settingsProvider.select((s) => s.searchIncludeFeeds));
-  return ref.watch(databaseProvider).searchMessages(q, filter: filter, includeFeeds: includeFeeds);
+  return ref.watch(databaseProvider).searchMessages(q, filter: filter, includeFeeds: includeFeeds, accountId: ref.watch(accountScopeProvider));
 });
 
 /// In-conversation search (spec 4.6): the query typed into the

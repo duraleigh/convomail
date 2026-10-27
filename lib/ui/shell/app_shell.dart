@@ -3,10 +3,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/account_scope.dart';
 import '../../app/compose_state.dart';
 import '../../app/destinations.dart';
+import '../../app/onboarding.dart';
 import '../../app/people_state.dart';
 import '../../app/settings.dart';
+import '../../app/settings_navigation.dart';
 import '../../app/shortcuts.dart';
 import '../../platform/windows_integration.dart';
 import '../../store/database.dart';
@@ -108,6 +111,12 @@ class _AppShellState extends ConsumerState<AppShell> {
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(composeProvider.notifier).open(request));
     }
 
+    final settings = ref.watch(settingsProvider);
+    final accounts = ref.watch(accountsProvider).value;
+    if (ref.watch(showOnboardingProvider) && !settings.onboardingDone && accounts != null && accounts.isEmpty) {
+      return const OnboardingScreen();
+    }
+
     return AppShortcutScope(
       onCompose: () {
         ref.read(destinationProvider.notifier).select(Destination.chats);
@@ -179,14 +188,7 @@ class _Rail extends ConsumerWidget {
               children: [
                 _SettingsRailItem(selected: destination == Destination.settings),
                 const SizedBox(height: AppSpace.md),
-                Tooltip(
-                  message: 'Accounts',
-                  child: InkWell(
-                    customBorder: const CircleBorder(),
-                    onTap: () => ref.read(destinationProvider.notifier).select(Destination.settings),
-                    child: const TonalAvatar(identityKey: 'me', name: 'You', size: 36),
-                  ),
-                ),
+                const _AccountSwitcher(),
               ],
             ),
           ),
@@ -245,6 +247,65 @@ class _SettingsRailItem extends ConsumerWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// Rail avatar: opens the account switcher (spec 4.14) with the unified
+/// view, each account, and Add account. The avatar shows the scoped
+/// account's color when one is selected.
+class _AccountSwitcher extends ConsumerWidget {
+  const _AccountSwitcher();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final accounts = ref.watch(accountsProvider).value ?? const <Account>[];
+    final scope = ref.watch(accountScopeProvider);
+    final current = accounts.where((a) => a.id == scope).firstOrNull;
+    return PopupMenuButton<int>(
+      key: const ValueKey('account-switcher'),
+      tooltip: current == null ? 'All accounts' : current.email,
+      offset: const Offset(72, -8),
+      onSelected: (v) {
+        if (v == -1) {
+          ref.read(accountScopeProvider.notifier).select(null);
+        } else if (v == -2) {
+          ref.read(settingsSectionProvider.notifier).select(SettingsSection.accounts);
+          ref.read(settingsAddAccountRequestProvider.notifier).set(true);
+          ref.read(destinationProvider.notifier).select(Destination.settings);
+        } else {
+          ref.read(accountScopeProvider.notifier).select(v);
+        }
+        ref.read(selectedRowProvider.notifier).select(null);
+      },
+      itemBuilder: (_) => [
+        CheckedPopupMenuItem(value: -1, checked: scope == null, child: const Text('All accounts')),
+        for (final a in accounts)
+          CheckedPopupMenuItem(
+            value: a.id,
+            checked: scope == a.id,
+            child: Row(
+              children: [
+                Container(width: 10, height: 10, decoration: BoxDecoration(color: accountColor(a.id, scheme), shape: BoxShape.circle)),
+                const SizedBox(width: 10),
+                Expanded(child: Text(a.email, overflow: TextOverflow.ellipsis)),
+                if (!a.enabled) Text(' · paused', style: Theme.of(context).textTheme.labelSmall),
+              ],
+            ),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(value: -2, child: ListTile(leading: Icon(Icons.add_rounded), title: Text('Add account…'), dense: true, contentPadding: EdgeInsets.zero)),
+      ],
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          TonalAvatar(identityKey: current?.email ?? 'me', name: current == null ? 'You' : accountShortLabel(current), size: 36),
+          if (current != null)
+            Positioned(right: -2, bottom: -2, child: Container(width: 12, height: 12, decoration: BoxDecoration(color: accountColor(current.id, scheme), shape: BoxShape.circle, border: Border.all(color: scheme.surfaceContainer, width: 2)))),
+        ],
       ),
     );
   }

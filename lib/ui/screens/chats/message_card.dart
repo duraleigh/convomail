@@ -2,6 +2,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/account_scope.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../domain/classifier.dart';
@@ -65,7 +66,7 @@ class MessageCard extends ConsumerWidget {
                     ],
                   ),
                   Text(
-                    [if (to.isNotEmpty) 'To: $to', if (cc.isNotEmpty) 'CC: $cc', _fullTime(message.date ?? message.internalDate)].join(' · '),
+                    [if (to.isNotEmpty) 'To: $to', if (cc.isNotEmpty) 'CC: $cc', _fullTime(message.date ?? message.internalDate), if (ref.watch(multiAccountProvider)) 'via ${_accountEmail(ref)}'].join(' · '),
                     style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
@@ -188,6 +189,11 @@ class MessageCard extends ConsumerWidget {
   /// The row this card is shown in: the sender's, or for our own mail the
   /// selected row (the recipient's).
   String get _rowKey => 'c:${message.fromContactKey}';
+
+  String _accountEmail(WidgetRef ref) {
+    final accounts = ref.watch(accountsProvider).value ?? const <Account>[];
+    return accounts.where((a) => a.id == message.accountId).firstOrNull?.email ?? 'account ${message.accountId}';
+  }
 
   static String _label(MessageParticipant p) => p.isMe ? 'me' : (p.name.isNotEmpty ? p.name : p.address);
 

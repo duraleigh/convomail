@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../app/account_scope.dart';
 
 import '../../../store/people_queries.dart';
 import '../../theme/tokens.dart';
@@ -8,7 +11,7 @@ import 'people_list_pane.dart';
 /// One People-list row (spec 4.2): avatar, name, preview, time, unread
 /// badge, pin marker. Hover reveals action buttons; right-click opens the
 /// same actions as a context menu.
-class PersonRow extends StatefulWidget {
+class PersonRow extends ConsumerStatefulWidget {
   const PersonRow({super.key, required this.row, required this.selected, required this.onAction});
 
   final PeopleRow row;
@@ -16,10 +19,20 @@ class PersonRow extends StatefulWidget {
   final ValueChanged<RowAction> onAction;
 
   @override
-  State<PersonRow> createState() => _PersonRowState();
+  ConsumerState<PersonRow> createState() => _PersonRowState();
 }
 
-class _PersonRowState extends State<PersonRow> {
+class _PersonRowState extends ConsumerState<PersonRow> {
+  /// Screen-reader label (plan M12 accessibility): name, unread count,
+  /// and row state, so the row reads as one item.
+  static String semanticLabel(PeopleRow row) => [
+        row.title,
+        if (row.unread > 0) '${row.unread} unread',
+        if (row.pinned) 'pinned',
+        if (row.muted) 'muted',
+        if (row.snoozedUntil != null) 'snoozed',
+      ].join(', ');
+
   bool _hover = false;
 
   Future<void> _showMenu(Offset globalPosition) async {
@@ -76,7 +89,11 @@ class _PersonRowState extends State<PersonRow> {
     final row = widget.row;
     final unread = row.unread > 0;
 
-    return MouseRegion(
+    return Semantics(
+      button: true,
+      selected: widget.selected,
+      label: semanticLabel(row),
+      child: MouseRegion(
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
@@ -96,6 +113,14 @@ class _PersonRowState extends State<PersonRow> {
                         if (row.pinned) ...[
                           Icon(Icons.push_pin, size: 14, color: scheme.onSurfaceVariant),
                           const SizedBox(width: 4),
+                        ],
+                        if (ref.watch(multiAccountProvider) && ref.watch(accountScopeProvider) == null && row.accountIds.isNotEmpty) ...[
+                          for (final id in row.accountIds.take(3))
+                            Padding(
+                              padding: const EdgeInsets.only(right: 3),
+                              child: Container(key: ValueKey('account-dot-${row.rowKey}-$id'), width: 8, height: 8, decoration: BoxDecoration(color: accountColor(id, scheme), shape: BoxShape.circle)),
+                            ),
+                          const SizedBox(width: 3),
                         ],
                         if (row.muted) ...[
                           Tooltip(message: 'Notifications muted', child: Icon(Icons.notifications_off_outlined, size: 14, color: scheme.onSurfaceVariant)),
@@ -164,6 +189,7 @@ class _PersonRowState extends State<PersonRow> {
           ),
         ),
       ),
+    ),
     );
   }
 }

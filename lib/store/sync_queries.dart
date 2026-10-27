@@ -391,5 +391,22 @@ extension SyncQueries on AppDatabase {
         lastError: Value(error),
       ));
 
+  Future<void> setAccountEnabled(int accountId, bool enabled) => (update(accounts)..where((a) => a.id.equals(accountId))).write(AccountsCompanion(enabled: Value(enabled)));
+
+  /// Moves an account one place up or down in the list order.
+  Future<void> moveAccount(int accountId, int delta) async {
+    final all = await allAccounts();
+    final i = all.indexWhere((a) => a.id == accountId);
+    final j = i + delta;
+    if (i < 0 || j < 0 || j >= all.length) return;
+    final order = [...all]..removeAt(i);
+    order.insert(j, all[i]);
+    await transaction(() async {
+      for (var k = 0; k < order.length; k++) {
+        await (update(accounts)..where((a) => a.id.equals(order[k].id))).write(AccountsCompanion(sortOrder: Value(k)));
+      }
+    });
+  }
+
   Future<void> deleteAccount(int accountId) => (delete(accounts)..where((a) => a.id.equals(accountId))).go();
 }

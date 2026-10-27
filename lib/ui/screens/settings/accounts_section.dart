@@ -96,6 +96,12 @@ class _AccountTile extends ConsumerWidget {
         children: [
           if (status?.phase == SyncPhase.syncingFolder || status?.phase == SyncPhase.connecting || status?.phase == SyncPhase.listingFolders)
             const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5)),
+          IconButton(tooltip: 'Move up', visualDensity: VisualDensity.compact, icon: const Icon(Icons.keyboard_arrow_up_rounded), onPressed: () => ref.read(databaseProvider).moveAccount(account.id, -1)),
+          IconButton(tooltip: 'Move down', visualDensity: VisualDensity.compact, icon: const Icon(Icons.keyboard_arrow_down_rounded), onPressed: () => ref.read(databaseProvider).moveAccount(account.id, 1)),
+          Tooltip(
+            message: account.enabled ? 'Pause syncing' : 'Resume syncing',
+            child: Switch(key: ValueKey('account-enabled-${account.id}'), value: account.enabled, onChanged: (v) => ref.read(databaseProvider).setAccountEnabled(account.id, v)),
+          ),
           if (status == null || status?.phase == SyncPhase.error || status?.phase == SyncPhase.stopped)
             IconButton(
               tooltip: 'Sync now',

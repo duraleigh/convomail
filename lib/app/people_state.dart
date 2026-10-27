@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../store/database.dart';
 import '../store/people_queries.dart';
+import 'account_scope.dart';
 import 'destinations.dart';
 
 /// Active filter chip on the People list (spec 4.7). Exactly one.
@@ -40,7 +41,8 @@ final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   final filter = ref.watch(peopleFilterProvider);
   final search = ref.watch(peopleSearchProvider);
   final mode = ref.watch(inboxModeProvider);
-  return db.watchPeopleRows(filter: filter, search: search, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people);
+  final scope = ref.watch(accountScopeProvider);
+  return db.watchPeopleRows(filter: filter, search: search, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people, accountId: scope);
 });
 
 /// Dev/verification aid: when true, the list selects its first row and the
@@ -51,5 +53,5 @@ final autoOpenFirstProvider = Provider<bool>((ref) => false);
 final selectedRowMessagesProvider = StreamProvider<List<Message>>((ref) {
   final key = ref.watch(selectedRowProvider);
   if (key == null) return const Stream.empty();
-  return ref.watch(databaseProvider).watchMessagesForRow(key);
+  return ref.watch(databaseProvider).watchMessagesForRow(key, accountId: ref.watch(accountScopeProvider));
 });
