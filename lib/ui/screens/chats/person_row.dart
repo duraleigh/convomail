@@ -8,15 +8,24 @@ import '../../theme/tokens.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'people_list_pane.dart';
 
-/// One People-list row (spec 4.2): avatar, name, preview, time, unread
-/// badge, pin marker. Hover reveals action buttons; right-click opens the
+/// One People-list row (spec 4.2): avatar, name, time, unread badge, pin
+/// marker; one line, no message text. Hover reveals action buttons; right-click opens the
 /// same actions as a context menu.
 class PersonRow extends ConsumerStatefulWidget {
-  const PersonRow({super.key, required this.row, required this.selected, required this.onAction});
+  const PersonRow({super.key, required this.row, required this.selected, required this.onAction, this.checked = false, this.selectionMode = false, this.onCheck});
 
   final PeopleRow row;
   final bool selected;
   final ValueChanged<RowAction> onAction;
+
+  /// Picked for a bulk action.
+  final bool checked;
+
+  /// Some rows are picked: every row shows its checkbox.
+  final bool selectionMode;
+
+  /// Toggles [checked]; null hides the checkbox (search results).
+  final VoidCallback? onCheck;
 
   @override
   ConsumerState<PersonRow> createState() => _PersonRowState();
@@ -54,6 +63,8 @@ class _PersonRowState extends ConsumerState<PersonRow> {
             dense: true,
           ),
         ),
+        if (!widget.row.isGroup && widget.row.identityKey != 'me')
+          const PopupMenuItem(value: RowAction.rename, child: ListTile(leading: Icon(Icons.drive_file_rename_outline_rounded), title: Text('Rename…'), dense: true)),
         if (!widget.row.isGroup) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
@@ -99,10 +110,21 @@ class _PersonRowState extends ConsumerState<PersonRow> {
       child: GestureDetector(
         onSecondaryTapUp: (d) => _showMenu(d.globalPosition),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
           child: Row(
             children: [
-              rowAvatar(row, size: 40),
+              if (widget.onCheck != null && (widget.selectionMode || _hover))
+                SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: Checkbox(
+                    key: ValueKey('row-check-${row.rowKey}'),
+                    value: widget.checked,
+                    onChanged: (_) => widget.onCheck!(),
+                  ),
+                )
+              else
+                rowAvatar(row, size: 36),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -142,30 +164,6 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                             style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
                           ),
                         ),
-                        if (!_hover) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            relativeTime(row.lastActivity),
-                            style: text.labelSmall!.copyWith(
-                              color: unread ? scheme.primary : scheme.onSurfaceVariant,
-                              fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                              letterSpacing: 0,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            row.previewFromMe ? 'You: ${row.preview}' : row.preview,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant),
-                          ),
-                        ),
                         if (row.isFeeds && row.category != null) ...[
                           const SizedBox(width: 8),
                           Container(
@@ -175,7 +173,18 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                             child: Text(row.category!, style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, letterSpacing: 0)),
                           ),
                         ],
-                        if (!_hover && unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
+                        if (!_hover) ...[
+                          const SizedBox(width: 10),
+                          Text(
+                            relativeTime(row.lastActivity),
+                            style: text.labelSmall!.copyWith(
+                              color: unread ? scheme.primary : scheme.onSurfaceVariant,
+                              fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                              letterSpacing: 0,
+                            ),
+                          ),
+                          if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
+                        ],
                       ],
                     ),
                   ],

@@ -45,6 +45,18 @@ abstract interface class MailTransport {
   /// the schema upgrade that introduced them). Missing uids are omitted.
   Future<Map<int, BulkSignals>> fetchSignals(List<int> uids);
 
+  /// Server capability names from the login greeting (upper case), e.g.
+  /// `X-GM-EXT-1` on Gmail. Empty until connected.
+  List<String> get capabilities;
+
+  /// Raw `UID SEARCH` in the selected folder; returns matching UIDs. Used
+  /// for provider-side classification (Gmail `X-GM-RAW "category:..."`).
+  Future<Set<int>> searchUids(String criteria);
+
+  /// Diagnostic: header names present on each message, with the encoded
+  /// bulk signals the transport derives from them.
+  Future<List<String>> probeHeaders(List<int> uids, {String? criteria});
+
   /// Decoded bytes of the given MIME parts (attachment `partId`s from
   /// [fetchBody]) of a message in the selected folder. Parts that do not
   /// exist are left out of the result.

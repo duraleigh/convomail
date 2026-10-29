@@ -18,6 +18,21 @@ class ClassificationService {
   ClassificationService(this.db);
   final AppDatabase db;
 
+  /// Bumped when the rules change enough that existing automatic decisions
+  /// should be redone. Stored under [versionKey].
+  static const classifierVersion = 2;
+  static const versionKey = 'classifier.version';
+
+  /// Redoes automatic sender decisions once after a classifier upgrade;
+  /// manual moves stay. Returns true when a reset happened.
+  Future<bool> upgradeIfNeeded() async {
+    final stored = int.tryParse(await db.getSetting(versionKey) ?? '') ?? 1;
+    if (stored >= classifierVersion) return false;
+    await db.resetAutoClassifications();
+    await db.putSetting(versionKey, '$classifierVersion');
+    return true;
+  }
+
   Future<Classifier> _classifier() async {
     final rules = await db.loadRules();
     final names = <String>{};
@@ -76,6 +91,7 @@ class ClassificationService {
       snippet: m.snippet,
       signals: BulkSignals.decode(m.bulkSignals),
       isReplyToMine: await db.isReplyToMine(m.inReplyTo),
+      providerCategory: m.providerCategory,
     );
     var bucket = m.isFromMe ? Bucket.people : senderBucket;
     if (bucket == Bucket.feeds && classifier.isPersonalException(facts)) bucket = Bucket.people;

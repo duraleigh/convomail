@@ -62,13 +62,14 @@ This is the main/home screen, equivalent to Unibox's contact sidebar and ChatInb
 - **No pinned-contacts strip.** The reference apps show a horizontal row of avatars above the list; this app does not. Pinning a contact (via swipe action) keeps that contact's row at the top of the main list instead, marked with a small pin icon.
 - **Main contact list**: vertically scrolling list, each row containing:
   - Circular avatar (contact photo if available via device contacts/synced address book, otherwise colored circle with the contact's initials — color assigned deterministically per contact so it's consistent across sessions)
-  - Contact display name (bold if unread messages exist)
-  - Most recent message preview (single line, truncated with ellipsis)
+  - Contact display name (bold if unread messages exist). The user can **rename** a sender from the row menu; the new name replaces the header name everywhere the contact is shown, applies to all of the contact's addresses, and persists for all future mail from that sender even if every message is deleted. "Use original name" goes back to the header name.
+  - **No message text.** A row is one line: avatar, name, (Feeds) category pill, timestamp, unread badge. Subjects and bodies appear only in the conversation pane (changed Oct 29, 2026).
   - Timestamp of the most recent message, right-aligned (relative format: "9:41 AM" for today, "Yesterday," weekday name for this week, date for older)
   - Unread count badge (colored circle with number) if applicable
   - Each contact appears **exactly once** in this list, regardless of how many messages they've sent — sorted by the recency of the most recent message *that contact sent*. When a new reply arrives in a multi-person thread, only the replier's row moves to the top; the other participants' rows stay where they were.
   - **User-defined group rows** (see 4.19) appear in this same list and behave identically to contact rows: one row, sorted by recency, with an unread badge, swipe actions, and pinning.
   - The app **never auto-generates a group row**. Multi-recipient mail follows the sender-only filing rule unless the user has explicitly created a matching group in Settings.
+- **Multi-select**: Ctrl-click toggles a row, Shift-click picks a range (starting from the open row), Ctrl+A picks every visible row, and hovering a row shows a checkbox in place of its avatar. While rows are picked every row shows its checkbox, a plain click toggles, and a bar above the list offers **Move to Feeds** (or Move to People on the Feeds tab; a permanent manual move per 4.11), **Mark as read**, and **Archive**, each with a single Undo. Esc clears the selection.
 - **List behavior**: pull-to-refresh triggers a manual sync; list updates live as new mail arrives (push or periodic poll, see 4.17).
 - **Row actions**: Archive, Delete/Trash all messages from this sender, Mark all as read, Snooze, Pin/Unpin. On Windows these appear as hover-revealed icon buttons at the right edge of the row and in a right-click context menu, with keyboard shortcuts. On Android (Phase 2) they are swipe-to-reveal.
 
@@ -159,13 +160,17 @@ Tapping a contact opens their dedicated conversation screen.
 - Exception: an individual message from a Feeds sender that carries **strong personal signals** is pulled into People for that message. Strong signals are: the message is a direct reply to mail the user sent (In-Reply-To matches a user-sent Message-ID); the message is addressed to the user by name in the body salutation and has no bulk-mail headers; or the message comes from a human-named address at a Feeds sender's domain (e.g., a support agent replying from a company that otherwise sends receipts). Such a message appears under the sender's row in People for that message only; the sender stays in Feeds.
 
 **Classification method — Phase 1 is deterministic rules; ML is deferred**
+- **The provider's own sorting comes first (added Oct 29, 2026).** Gmail exposes its inbox categories over IMAP through the `X-GM-RAW "category:..."` search extension (advertised as `X-GM-EXT-1`). The app reads each message's category (Primary, Updates, Promotions, Social, Forums) as headers sync, and once for older mail. When at least half of a sender's distinct messages are in a non-Primary category the sender goes to Feeds, categorized from Gmail's label (Promotions → Promotion, Social → Social, Forums → Newsletter, Updates → Receipt when its subjects are receipts, else Notification). When Gmail files the sender under Primary it stays in People unless one of the strong signals below says otherwise. Measured on the developer's mailbox: 173 → 70 People senders, with the remaining 70 all real correspondents. Much of the bulk mail there carried no list headers at all, so header rules alone could not see it.
 - Phase 1 classifies with on-device, header- and history-based rules. A sender is routed to Feeds when it matches any of:
   - Presence of `List-Unsubscribe`, `List-Id`, `List-Post`, or `Feedback-ID` headers.
   - `Precedence: bulk` or `Precedence: list`, or `Auto-Submitted` with any value other than `no`.
   - Local-part patterns: `noreply`, `no-reply`, `donotreply`, `do-not-reply`, `notifications`, `notify`, `alerts`, `mailer-daemon`, `postmaster`, `newsletter`, `digest`, `updates`, `info@`, `hello@` (the last two only when combined with a bulk header).
   - Sender domain on a maintained, locally bundled list of known bulk/transactional/ESP sending domains (updatable with app releases, never fetched from a third-party service at runtime).
-- A sender is routed to **People** when any of these hold, and they override the Feeds rules above: the user has ever sent mail to that address; the address is in the device address book; the user has manually moved the sender to People.
-- All signals are readable from the message on the device. No server-side classification, no Gmail/Outlook category labels (which are API-only and unavailable over IMAP), and no network calls.
+  - A **dedicated sending subdomain**: three or more labels whose first label is a sending label such as `e.`, `em.`, `email.`, `mail.`, `t.`, `tr.`, `tx.`, `info.`, `news.`, `notifications.`, `loyalty.`, `confirmation.` (e.g. `e.brand.com`, `email.brand.com`, `info.email.aa.com`).
+  - Weaker signals, used only when the provider has no category for the sender: at least 60% of the sender's recent subjects match strict receipt / security-code / promotion / newsletter patterns (replies and forwards never count, and words common in business mail between people, such as "offer", "itinerary", "invoice", "reminder", are excluded); or an automated display name ("Customer Care", "Rewards", "The Brand Team") backed by a generic address, automated subjects, or three or more messages.
+- A sender is routed to **People** when it is in the device address book or the user has manually moved it to People. Having written to the sender also keeps it in People, unless the sender is plainly a mailer: Gmail files at least 80% of its mail as non-Primary **and** its mail carries bulk headers, an automated address, or a sending subdomain. Replies to the user's own mail still show in People message by message (the exception above).
+- All signals are read on the device from the message and from the mail server the account already uses. No third-party classification service and no extra network calls beyond IMAP searches on the user's own server.
+- When the rules change in a release, automatic decisions are redone once on the next start (`classifier.version` setting); manual moves are kept.
 - **On-device machine learning is a later milestone**, gated on confirming what runs on the target devices (see 4.15). Until then, every manual move and category correction is stored as labeled data for that future model.
 
 **Manual override — permanent until changed**
@@ -295,7 +300,7 @@ The design system is **Material 3 Expressive** (Google, 2025). Use its official 
 
 The mobile screens below and the phone frames in the mockups file remain the reference for the Android build in Phase 2. They also define the content of each screen, which the Windows panes in 5.3 present in a three-pane arrangement.
 
-1. **Chats (Home) screen**: flexible top app bar (menu icon, filter icon, account avatar; large "Chats" headline) → pill search bar → grouped, vertically scrolling contact list (avatar, name, preview, timestamp, unread badge; group rows with stacked avatars) with swipe-to-reveal actions → compose FAB bottom-right → bottom navigation bar (Chats · Boards · Planner · Settings). No pinned-avatar strip.
+1. **Chats (Home) screen**: flexible top app bar (menu icon, filter icon, account avatar; large "Chats" headline) → pill search bar → grouped, vertically scrolling contact list (avatar, name, timestamp, unread badge; no message text; group rows with stacked avatars) with swipe-to-reveal actions → compose FAB bottom-right → bottom navigation bar (Chats · Boards · Planner · Settings). No pinned-avatar strip.
 2. **Conversation screen**: top app bar with back/contact-name/search/overflow → date-grouped, collapsible message list → inline expand-to-read → inline reply composer anchored at the bottom of the screen.
 3. **Compose screen** (new message, not a reply): reachable via the pencil icon; recipient field with autocomplete from contacts, subject field, from/identity selector if applicable, block-based body editor, attachment chips, send button (with progress indicator on tap).
 4. **Attachments screen** (per contact): toggle between List and Grid view; featured/most-recent file card at top; full attachment list/grid below.
@@ -343,17 +348,13 @@ These are exact-layout reference diagrams — not visual mockups (no color, imag
 ├─────────────────────────────────────┤
 │ ( 🔍  Search people and mail       ) │  <- pill search bar (filters live behind the ⚙ icon)
 ├─────────────────────────────────────┤
-│ ○ James Kowalski        1:34 PM      │  <- grouped list: 2dp gaps, 20dp outer corners
-│   API Deployment Complete            │
+│ ○ James Kowalski        1:34 PM      │  <- grouped list, one line per sender (no message text)
 ├───────────────────────────────────── │
 │ ○ Priya Sharma          1:04 PM  (1) │  <- bold name = unread, badge = unread count
-│   Re: Weekly Sync                    │
 ├───────────────────────────────────── │
 │ ◎ Simon & Joann        12:40 PM      │  <- user-defined group row (4.19), stacked avatars
-│   Simon: Draft agenda attached       │
 ├───────────────────────────────────── │
 │ ○ Tom Andersen         12:14 PM      │
-│   Slides from Yesterday's Talk       │
 ├───────────────────────────────────── │
 │  … (list continues, one row/contact) │
 │                              [ ✎ ]   │  <- compose FAB
@@ -616,6 +617,12 @@ Product decisions made by the product owner after the original draft. Where any 
 **Visual design**
 18. **No pinned-contacts avatar strip** above the People list. Pinning keeps a contact's row at the top of the list with a pin icon. — 4.2, 5.2, 5.5
 19. The UI follows **Material 3 Expressive**: M3 color roles with tonal surface containers, the Expressive shape scale with grouped list segments, Roboto Flex with emphasized headlines, Material Symbols Rounded, FAB for compose, bottom navigation bar (mobile) and navigation rail (desktop), connected button groups, floating toolbar, wavy progress, spring motion. Windows uses Segoe UI Variable. — 5.1, 5.2, 5.3, 5.4
+
+**Changes after the Phase 1 build (October 29, 2026)**
+21. Classification reads **Gmail's own inbox categories** over IMAP (`X-GM-RAW`) and treats them as the first evidence; dedicated sending subdomains, strict subject patterns, and automated display names were added for mail without list headers; "you wrote to them" no longer keeps a plain mailer in People. This reverses the earlier statement that provider categories are unavailable over IMAP. — 4.11
+22. Chat rows show **the sender only**, with no message text. — 4.2, 5.5
+23. Rows support **multi-select** (Ctrl/Shift-click, checkbox, Ctrl+A) with bulk Move to Feeds / People, Mark as read, and Archive. — 4.2
+24. The user can **rename a sender**; the name persists for all future mail from that contact, even after its conversation is deleted. — 4.2
 
 **Build order**
 20. **Windows first, Android second.** Phase 1 is the Windows desktop app; no Android work until it is signed off. The Windows framework is proposed in the Phase 1 plan with its Phase 2 reuse implications stated. — 0, 2, 4.1, 4.2, 4.17, 4.18, 5.2, 5.3, 6, 7, 8, 9

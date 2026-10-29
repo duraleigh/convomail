@@ -56,8 +56,8 @@ class FeedsDetail extends ConsumerWidget {
             children: [
               for (final c in counting)
                 ListTile(
-                  leading: TonalAvatar(identityKey: c.key, name: c.displayName.isEmpty ? c.key : c.displayName, size: 36),
-                  title: Text(c.displayName.isEmpty ? c.key : c.displayName),
+                  leading: TonalAvatar(identityKey: c.key, name: c.shownName, size: 36),
+                  title: Text(c.shownName),
                   subtitle: Text(c.key),
                   trailing: IconButton(tooltip: 'Stop counting', icon: const Icon(Icons.notifications_off_outlined), onPressed: () => service.setCountsTowardUnread(c.key, false)),
                 ),
@@ -116,8 +116,8 @@ class FeedsDetail extends ConsumerWidget {
               for (final c in overrides)
                 ListTile(
                   key: ValueKey('override-${c.key}'),
-                  leading: TonalAvatar(identityKey: c.key, name: c.displayName.isEmpty ? c.key : c.displayName, size: 36),
-                  title: Text(c.displayName.isEmpty ? c.key : c.displayName),
+                  leading: TonalAvatar(identityKey: c.key, name: c.shownName, size: 36),
+                  title: Text(c.shownName),
                   subtitle: Text('${c.key} · in ${c.classification == 'feeds' ? 'Feeds' : 'People'}'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

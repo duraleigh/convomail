@@ -42,7 +42,7 @@ extension GroupQueries on AppDatabase {
     );
     return q.watch().asyncMap((rows) async {
       final members = await select(groupMembers).get();
-      final names = {for (final c in await select(contacts).get()) c.key: c.displayName};
+      final names = {for (final c in await select(contacts).get()) c.key: c.shownName};
       return [
         for (final r in rows)
           GroupInfo(

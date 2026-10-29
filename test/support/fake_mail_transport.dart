@@ -18,6 +18,9 @@ class FakeFolder {
   final Map<int, RemoteMessageHeader> messages = {};
   final Map<int, RemoteMessageBody> bodies = {};
 
+  /// Gmail inbox category per UID, answered by `X-GM-RAW "category:..."` searches.
+  final Map<int, String> categories = {};
+
   /// Decoded part bytes by uid then partId, for fetchParts.
   final Map<int, Map<String, Uint8List>> parts = {};
 
@@ -169,6 +172,29 @@ class FakeMailTransport implements MailTransport {
     _requireConnected();
     return _sel.bodies[uid] ?? const RemoteMessageBody(text: '');
   }
+
+  /// Capabilities reported after connect (tests set `X-GM-EXT-1` to act as Gmail).
+  @override
+  List<String> capabilities = const [];
+
+  /// Canned answers for [searchUids], keyed by the raw criteria.
+  final Map<String, Set<int>> searchResults = {};
+
+  @override
+  Future<Set<int>> searchUids(String criteria) async {
+    _requireConnected();
+    log.add('search $criteria');
+    final canned = searchResults[criteria];
+    if (canned != null) return canned;
+    // `UID lo:hi X-GM-RAW "category:name"` against the selected folder.
+    final m = RegExp(r'^UID (\d+):(\d+) X-GM-RAW "category:(\w+)"$').firstMatch(criteria);
+    if (m == null) return const {};
+    final lo = int.parse(m.group(1)!), hi = int.parse(m.group(2)!), cat = m.group(3)!;
+    return {for (final e in _sel.categories.entries) if (e.key >= lo && e.key <= hi && e.value == cat) e.key};
+  }
+
+  @override
+  Future<List<String>> probeHeaders(List<int> uids, {String? criteria}) async => [for (final u in uids) 'uid=$u names=[] signals=${_sel.messages[u]?.signals.encode() ?? ''}'];
 
   @override
   Future<Map<int, BulkSignals>> fetchSignals(List<int> uids) async {

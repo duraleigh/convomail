@@ -115,6 +115,8 @@ class SenderFacts {
     this.messagesWithKnownSignals = 0,
     this.listIds = const {},
     this.override,
+    this.providerCategories = const {},
+    this.subjects = const [],
   });
 
   final String address;
@@ -132,6 +134,17 @@ class SenderFacts {
   /// A manual, permanent decision; wins over everything.
   final Bucket? override;
 
+  /// How the mail provider filed this sender's messages, as message counts
+  /// per category (Gmail: `primary`, `updates`, `promotions`, `social`,
+  /// `forums`). Empty when the provider has no categories.
+  final Map<String, int> providerCategories;
+
+  /// Subjects of the sender's recent messages, newest first.
+  final List<String> subjects;
+
+  int get providerPrimary => providerCategories['primary'] ?? 0;
+  int get providerBulk => providerCategories.entries.where((e) => e.key != 'primary').fold(0, (a, e) => a + e.value);
+
   String get localPart => address.contains('@') ? address.substring(0, address.indexOf('@')).toLowerCase() : address.toLowerCase();
   String get domain => address.contains('@') ? address.substring(address.indexOf('@') + 1).toLowerCase() : '';
 }
@@ -146,6 +159,7 @@ class MessageFacts {
     this.snippet = '',
     this.signals = BulkSignals.none,
     this.isReplyToMine = false,
+    this.providerCategory,
   });
   final String from;
   final String fromName;
@@ -155,6 +169,9 @@ class MessageFacts {
 
   /// In-Reply-To names a Message-ID the user sent.
   final bool isReplyToMine;
+
+  /// The provider's category for this message (see [SenderFacts.providerCategories]).
+  final String? providerCategory;
 }
 
 /// A rule the user accepted (spec 4.11 "propose a rule, user confirms").
@@ -248,12 +265,49 @@ class Classifier {
 
   // Local parts that mark automated senders on their own.
   static final _bulkLocalParts = RegExp(
-    r'^(no-?reply|do-?not-?reply|donotreply|noreply-[\w.-]+|[\w.-]*-?noreply|notifications?|notify|alerts?|mailer-daemon|postmaster|newsletters?|digest|updates?|bounces?|[\w.-]*bounce[\w.-]*|marketing|promotions?|news|support-noreply|automated|auto-?confirm|confirm(ation)?s?|orders?|receipts?|billing|invoices?|statements?|security|account(s)?|team|robot|bot|system|daemon|ping)$',
+    r'^(no-?reply|do-?not-?reply|donotreply|noreply-[\w.-]+|[\w.-]*-?noreply|[\w.-]*-?no-reply|notifications?|notify|alerts?|mailer-daemon|postmaster|newsletters?|digest|updates?|bounces?|[\w.-]*bounce[\w.-]*|marketing|promotions?|promos?|news|enews|support-noreply|automated|auto-?confirm|confirm(ation)?s?|orders?|receipts?|billing|invoices?|statements?|security|account(s)?|team|robot|bot|system|daemon|ping|welcome|rewards|loyalty|members(hip)?|member-?services|community|events?|invitations?|invites?|surveys?|feedback|care|customer-?care|customer-?support|customer-?experience|guest-?services|reservations?|bookings?|shipping|tracking|deliver(y|ies)|verify|verification|otp|passwords?|reminders?|status|offers?|deals?|store|shop|mailer|mailings?|bulk|blast|campaigns?|helpdesk|help-?desk)$',
     caseSensitive: false,
   );
 
-  // Local parts that are bulk only together with a bulk header.
-  static final _softLocalParts = RegExp(r'^(info|hello|hi|contact|mail|email|admin|help|service|customerservice|customer-service|sales)$', caseSensitive: false);
+  // Local parts that are bulk only together with other evidence.
+  static final _softLocalParts = RegExp(r'^(info|hello|hi|contact|mail|email|admin|help|service|services|customerservice|customer-service|sales|support|office|inquiries|enquiries)$', caseSensitive: false);
+
+  /// First labels of dedicated sending subdomains (`e.brand.com`,
+  /// `email.brand.com`, `tr.brand.com`). Brands send marketing and
+  /// transactional mail from these so their main domain keeps its
+  /// reputation; people do not write from them.
+  static const sendingSubdomainLabels = {
+    'e', 'em', 'email', 'emails', 'mail', 'mailer', 'mailers', 'mailing', 't', 'tr', 'tx', 'txn', 'trans', 'transactional', 'm', 's', 'go', 'mg',
+    'news', 'newsletter', 'newsletters', 'enews', 'info', 'hello', 'no-reply', 'noreply', 'notification', 'notifications', 'notify', 'alert', 'alerts',
+    'update', 'updates', 'confirmation', 'confirmations', 'servicenotification', 'campaign', 'campaigns', 'account', 'accounts', 'loyalty', 'care',
+    'ecom', 'marketing', 'promo', 'promos', 'offers', 'reply', 'bounce', 'bounces', 'engage', 'comms', 'communications', 'comunicaciones', 'smtp', 'send',
+    'mta', 'delivery', 'crm', 'msg', 'messages', 'list', 'lists', 'members', 'rewards', 'store', 'shop', 'order', 'orders', 'receipts', 'billing',
+    'customer', 'customercare', 'community', 'events', 'invite', 'invites', 'link', 'links', 'click', 'digest', 'bulletin', 'response', 'auto', 'automail',
+  };
+
+  // Sender display names that only automated senders use.
+  static final _automatedName = RegExp(
+    r'(\b(newsletters?|news|notifications?|no.?reply|customer (care|service|support|experience)|rewards|marketing|digest|billing|orders?|alerts?|help ?desk|support|member services|guest services|reservations|do not reply)\b|\bteam$|^the .+ team$)',
+    caseSensitive: false,
+  );
+
+  // Strict subject patterns for the sender-level subject test. Narrower than
+  // the category patterns: words that also appear in business mail between
+  // people ("offer", "itinerary", "invoice", "reminder") are left out.
+  static final _strictReceipt = RegExp(
+    r'\b(receipt|order (confirmation|confirmed|#|number|received|update|placed|shipped)|your order|has shipped|out for delivery|payment (received|confirmation|successful|processed)|statement is (ready|available)|bill is ready|your (bill|statement)|refund|subscription (renewal|renewed|receipt)|booking confirmation|e-?ticket|tracking number)\b',
+    caseSensitive: false,
+  );
+  static final _strictNotification = RegExp(
+    r'\b(security alert|sign-?in|new login|verify your|verification code|one-?time (passcode|password|code)|passcode|your code|password (reset|changed)|2-?step|two-?factor|account (activity|update)|new device|mentioned you|assigned to you|pull request|build (failed|passed|succeeded)|job alert)\b',
+    caseSensitive: false,
+  );
+  static final _strictPromotion = RegExp(
+    r'(\d{1,2}% off|\$\d+ off|free shipping|coupon|promo code|limited time|last chance|ends (tonight|today|soon)|black friday|cyber monday|clearance|flash sale|new arrivals|just dropped|gift guide|bogo|shop now|% off)',
+    caseSensitive: false,
+  );
+  static final _strictNewsletter = RegExp(r'\b(newsletter|digest|issue #?\d+|this week in|the week in|top stories|in case you missed)\b', caseSensitive: false);
+  static final _replyPrefix = RegExp(r'^\s*(re|fw|fwd|aw|sv|tr)\s*:', caseSensitive: false);
 
   /// Bundled sending domains (ESPs, platforms, transactional senders).
   /// Matched on the domain or any subdomain.
@@ -263,7 +317,8 @@ class Classifier {
     'constantcontact.com', 'ccsend.com', 'createsend.com', 'cmail19.com', 'cmail20.com', 'exacttarget.com', 'et.e.mail', 'sailthru.com', 'klaviyo.com',
     'klaviyomail.com', 'hubspotemail.net', 'hs-send.com', 'substack.com', 'substackcdn.com', 'beehiiv.com', 'convertkit.com', 'ck.page', 'mailerlite.com',
     'sparkpostmail.com', 'postmarkapp.com', 'mandrillapp.com', 'braze.com', 'iterable.com', 'customeriomail.com', 'drip.com', 'activehosted.com', 'getresponse.com',
-    'aweber.com', 'campaign-archive.com', 'e.emailsrvr.com', 'em.', 'news.', 'newsletter.',
+    'aweber.com', 'campaign-archive.com', 'e.emailsrvr.com', 'sfcustomeremail.com', 'salesforce.com', 'marketo.com', 'mktomail.com', 'pardot.com',
+    'emarsys.net', 'responsys.net', 'bronto.com', 'listrak.com', 'attentivemobile.com', 'omnisend.com', 'sendinblue.com', 'brevo.com', 'mailjet.com',
     // social / platforms (notification mail)
     // (x.com is left out on purpose: X's notifications carry list headers
     // and automated local parts, and the bare domain is also a common
@@ -312,49 +367,125 @@ class Classifier {
       if (r.bucket != null && r.matchesSender(s)) return SenderDecision(r.bucket!, category: r.category, reasons: [r.describe()], source: 'rule');
     }
 
-    final peopleReasons = <String>[
-      if (s.userHasWrittenTo) 'You have written to this address',
-      if (s.inAddressBook) 'In your contacts',
-    ];
-    if (peopleReasons.isNotEmpty) return SenderDecision(Bucket.people, reasons: peopleReasons, source: 'people-signal');
-
     final reasons = <String>[];
     final hardLocal = _bulkLocalParts.hasMatch(s.localPart);
     final softLocal = _softLocalParts.hasMatch(s.localPart);
-    final domainHit = isBulkDomain(s.domain);
+    final domainHit = isListedSendingDomain(s.domain);
+    final sendingSub = isSendingSubdomain(s.domain);
     final withHeaders = s.messagesWithBulkHeaders;
     final known = s.messagesWithKnownSignals;
     // A sender is "bulk by headers" when a meaningful share of its mail
     // carries bulk headers (one stray forward does not condemn a person).
     final headerRatio = known == 0 ? 0.0 : withHeaders / known;
     final bulkByHeaders = withHeaders > 0 && (headerRatio >= 0.5 || withHeaders >= 3);
+    final (subjectCat, subjectShare) = subjectProfile(s.subjects);
+    final subjectsAutomated = subjectCat != null && s.subjects.length >= 2 && subjectShare >= 0.6;
+    final nameAutomated = s.name.isNotEmpty && _automatedName.hasMatch(s.name) && (softLocal || subjectsAutomated || known >= 3);
 
     if (bulkByHeaders) reasons.add(withHeaders == known ? 'Bulk-mail headers on every message' : 'Bulk-mail headers on $withHeaders of $known messages');
     if (hardLocal) reasons.add('Automated address (${s.localPart}@)');
     if (domainHit) reasons.add('Known sending platform (${s.domain})');
-    if (softLocal && (bulkByHeaders || domainHit)) reasons.add('Generic address (${s.localPart}@) with bulk signals');
+    if (sendingSub) reasons.add('Dedicated sending domain (${s.domain})');
+    if (softLocal && (bulkByHeaders || domainHit || sendingSub)) reasons.add('Generic address (${s.localPart}@) with bulk signals');
+    if (subjectsAutomated) reasons.add('Subjects look automated (${(subjectShare * 100).round()}% $subjectCat)');
+    if (nameAutomated) reasons.add('Automated sender name (${s.name})');
 
-    if (bulkByHeaders || hardLocal || domainHit) {
-      return SenderDecision(Bucket.feeds, category: _senderCategory(s, hardLocal: hardLocal), reasons: reasons);
+    final strong = bulkByHeaders || hardLocal || sendingSub || domainHit;
+    final providerTotal = s.providerPrimary + s.providerBulk;
+
+    // People signals. The address book always wins. Having written to a
+    // sender wins too, unless the sender is plainly a mailer: the provider
+    // files nearly all of its mail as bulk and the mail itself says so.
+    // (Replies to the user's own mail still show in People per message.)
+    if (s.inAddressBook) return const SenderDecision(Bucket.people, reasons: ['In your contacts'], source: 'people-signal');
+    if (s.userHasWrittenTo) {
+      final plainlyMailer = providerTotal > 0 && s.providerBulk / providerTotal >= 0.8 && (bulkByHeaders || hardLocal || sendingSub);
+      if (!plainlyMailer) return const SenderDecision(Bucket.people, reasons: ['You have written to this address'], source: 'people-signal');
+      reasons.add('You wrote to this sender, but it is a mailer');
+    }
+
+    // The provider's own sorting (Gmail categories) is the best evidence
+    // there is: it sees content, sending infrastructure, and how millions
+    // of people treat the sender.
+    if (providerTotal > 0) {
+      if (s.providerBulk / providerTotal >= 0.5) {
+        final top = (s.providerCategories.entries.where((e) => e.key != 'primary').toList()..sort((a, b) => b.value.compareTo(a.value))).first.key;
+        reasons.insert(0, 'Gmail files this sender under ${_providerLabel(top)}');
+        return SenderDecision(Bucket.feeds, category: _senderCategory(s, hardLocal: hardLocal, subjectCat: subjectsAutomated ? subjectCat : null, providerTop: top), reasons: reasons);
+      }
+      if (!strong) return const SenderDecision(Bucket.people, reasons: ['Gmail files this sender under Primary']);
+    }
+
+    if (strong || domainHit || subjectsAutomated || nameAutomated) {
+      return SenderDecision(Bucket.feeds, category: _senderCategory(s, hardLocal: hardLocal, subjectCat: subjectsAutomated ? subjectCat : null), reasons: reasons);
     }
     return const SenderDecision(Bucket.people, reasons: ['No bulk signals']);
   }
 
-  static bool isBulkDomain(String domain) {
+  static String _providerLabel(String category) => switch (category) {
+        'updates' => 'Updates',
+        'promotions' => 'Promotions',
+        'social' => 'Social',
+        'forums' => 'Forums',
+        _ => category,
+      };
+
+  /// The most common strict subject category among [subjects] and the
+  /// share of all subjects that matched any strict pattern. Replies and
+  /// forwards never match.
+  static (String?, double) subjectProfile(List<String> subjects) {
+    if (subjects.isEmpty) return (null, 0);
+    final counts = <String, int>{};
+    for (final subject in subjects) {
+      if (_replyPrefix.hasMatch(subject)) continue;
+      final c = _strictSubjectCategory(subject);
+      if (c != null) counts[c] = (counts[c] ?? 0) + 1;
+    }
+    if (counts.isEmpty) return (null, 0);
+    final top = counts.entries.reduce((a, b) => b.value > a.value ? b : a);
+    return (top.key, counts.values.fold(0, (a, b) => a + b) / subjects.length);
+  }
+
+  static String? _strictSubjectCategory(String subject) {
+    if (_socialSubject.hasMatch(subject)) return FeedsCategories.social;
+    if (_strictReceipt.hasMatch(subject)) return FeedsCategories.receipt;
+    if (_strictNotification.hasMatch(subject)) return FeedsCategories.notification;
+    if (_strictPromotion.hasMatch(subject)) return FeedsCategories.promotion;
+    if (_strictNewsletter.hasMatch(subject)) return FeedsCategories.newsletter;
+    return null;
+  }
+
+  /// A bundled sending platform, or a dedicated sending subdomain.
+  static bool isBulkDomain(String domain) => isListedSendingDomain(domain) || isSendingSubdomain(domain);
+
+  static bool isListedSendingDomain(String domain) {
     final d = domain.toLowerCase();
     if (d.isEmpty) return false;
     for (final b in bulkDomains) {
-      if (b.endsWith('.')) {
-        if (d.startsWith(b)) return true; // em., news., newsletter. prefixes
-      } else if (d == b || d.endsWith('.$b')) {
-        return true;
-      }
+      if (d == b || d.endsWith('.$b')) return true;
     }
     return false;
   }
 
-  String _senderCategory(SenderFacts s, {required bool hardLocal}) {
+  /// `e.brand.com`, `email.brand.co.uk`, `tr.brand.com`: three or more
+  /// labels whose first label is a known sending label.
+  static bool isSendingSubdomain(String domain) {
+    final labels = domain.toLowerCase().split('.');
+    if (labels.length < 3) return false;
+    return sendingSubdomainLabels.contains(labels.first);
+  }
+
+  String _senderCategory(SenderFacts s, {required bool hardLocal, String? subjectCat, String? providerTop}) {
     if (_socialDomains.any((d) => s.domain == d || s.domain.endsWith('.$d'))) return FeedsCategories.social;
+    switch (providerTop) {
+      case 'promotions':
+        return subjectCat == FeedsCategories.receipt ? FeedsCategories.receipt : FeedsCategories.promotion;
+      case 'social':
+        return FeedsCategories.social;
+      case 'forums':
+        return FeedsCategories.newsletter;
+    }
+    if (subjectCat != null) return subjectCat;
     final lp = s.localPart;
     if (RegExp(r'receipt|order|billing|invoice|statement|payment').hasMatch(lp)) return FeedsCategories.receipt;
     if (RegExp(r'newsletter|digest|news|weekly|daily').hasMatch(lp)) return FeedsCategories.newsletter;
@@ -398,11 +529,12 @@ class Classifier {
   String? inferCategory(MessageFacts m) {
     final subject = m.subject;
     final domain = m.from.contains('@') ? m.from.substring(m.from.indexOf('@') + 1).toLowerCase() : '';
-    if (_socialDomains.any((d) => domain == d || domain.endsWith('.$d')) || _socialSubject.hasMatch(subject)) return FeedsCategories.social;
+    final provider = m.providerCategory;
+    if (_socialDomains.any((d) => domain == d || domain.endsWith('.$d')) || _socialSubject.hasMatch(subject) || provider == 'social') return FeedsCategories.social;
     if (_receiptSubject.hasMatch(subject)) return FeedsCategories.receipt;
     if (_notificationSubject.hasMatch(subject)) return FeedsCategories.notification;
-    if (_promotionSubject.hasMatch(subject)) return FeedsCategories.promotion;
-    if (_newsletterSubject.hasMatch(subject) || m.signals.listId || m.signals.listUnsubscribe) return FeedsCategories.newsletter;
+    if (_promotionSubject.hasMatch(subject) || provider == 'promotions') return FeedsCategories.promotion;
+    if (_newsletterSubject.hasMatch(subject) || m.signals.listId || m.signals.listUnsubscribe || provider == 'forums') return FeedsCategories.newsletter;
     return null;
   }
 

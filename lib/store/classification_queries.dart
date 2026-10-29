@@ -28,6 +28,27 @@ extension ClassificationQueries on AppDatabase {
       variables: [for (var i = 0; i < 5; i++) Variable.withString(contactKey)],
     ).getSingle();
     final override = c?.classificationSource == 'override' ? (c!.classification == 'feeds' ? Bucket.feeds : Bucket.people) : null;
+    // Provider categories per distinct message (a message filed under two
+    // Gmail labels is stored once per folder).
+    final cats = await customSelect(
+      '''
+      SELECT cat, COUNT(*) AS n FROM (
+        SELECT MAX(m.provider_category) AS cat FROM messages m
+        WHERE m.from_contact_key = ? AND m.is_from_me = 0 AND m.provider_category IS NOT NULL AND m.provider_category <> ''
+        GROUP BY COALESCE(m.message_id, CAST(m.id AS TEXT))
+      ) GROUP BY cat
+      ''',
+      variables: [Variable.withString(contactKey)],
+    ).get();
+    final subjects = await customSelect(
+      '''
+      SELECT MAX(m.subject) AS subject FROM messages m
+      WHERE m.from_contact_key = ? AND m.is_from_me = 0 AND m.is_deleted = 0
+      GROUP BY COALESCE(m.message_id, CAST(m.id AS TEXT))
+      ORDER BY MAX(COALESCE(m.date, m.internal_date)) DESC LIMIT 20
+      ''',
+      variables: [Variable.withString(contactKey)],
+    ).get();
     return SenderFacts(
       address: address,
       name: agg.readNullable<String>('name') ?? c?.displayName ?? '',
@@ -37,8 +58,61 @@ extension ClassificationQueries on AppDatabase {
       messagesWithKnownSignals: agg.read<int>('known'),
       listIds: {for (final s in (agg.readNullable<String>('list_ids') ?? '').split(',')) if (s.trim().isNotEmpty) s.trim().toLowerCase()},
       override: override,
+      providerCategories: {for (final r in cats) r.read<String>('cat'): r.read<int>('n')},
+      subjects: [for (final r in subjects) r.readNullable<String>('subject') ?? ''],
     );
   }
+
+  // ---- provider categories (Gmail) ---------------------------------------------
+
+  /// Lowest and highest UID in [folderId] whose provider category was never
+  /// read; null when there are none.
+  Future<(int, int)?> uidRangeMissingProviderCategory(int folderId) async {
+    final r = await customSelect(
+      'SELECT MIN(uid) AS lo, MAX(uid) AS hi FROM messages WHERE folder_id = ? AND provider_category IS NULL',
+      variables: [Variable.withInt(folderId)],
+      readsFrom: {messages},
+    ).getSingle();
+    final lo = r.readNullable<int>('lo');
+    final hi = r.readNullable<int>('hi');
+    return lo == null || hi == null ? null : (lo, hi);
+  }
+
+  /// Stores the provider category for messages in [folderId]: [byCategory]
+  /// maps a category to the UIDs the provider returned for it; every other
+  /// message in `lo..hi` that is still unread gets `''` (searched, none).
+  /// Returns the senders whose messages changed.
+  Future<Set<String>> storeProviderCategories(int folderId, (int, int) range, Map<String, Set<int>> byCategory) async {
+    final (lo, hi) = range;
+    final senders = <String>{};
+    await transaction(() async {
+      for (final e in byCategory.entries) {
+        final uids = e.value.where((u) => u >= lo && u <= hi).toList();
+        for (var i = 0; i < uids.length; i += 500) {
+          final chunk = uids.sublist(i, i + 500 > uids.length ? uids.length : i + 500);
+          await (update(messages)..where((m) => m.folderId.equals(folderId) & m.uid.isIn(chunk))).write(MessagesCompanion(providerCategory: Value(e.key)));
+        }
+      }
+      await customUpdate(
+        "UPDATE messages SET provider_category = '' WHERE folder_id = ? AND uid BETWEEN ? AND ? AND provider_category IS NULL",
+        variables: [Variable.withInt(folderId), Variable.withInt(lo), Variable.withInt(hi)],
+        updates: {messages},
+      );
+      final rows = await customSelect(
+        'SELECT DISTINCT from_contact_key AS k FROM messages WHERE folder_id = ? AND uid BETWEEN ? AND ? AND is_from_me = 0',
+        variables: [Variable.withInt(folderId), Variable.withInt(lo), Variable.withInt(hi)],
+      ).get();
+      senders.addAll(rows.map((r) => r.read<String>('k')));
+    });
+    return senders;
+  }
+
+  /// Forgets every automatic sender decision so the classifier redoes them
+  /// (after a classifier upgrade). Manual moves are kept.
+  Future<void> resetAutoClassifications() => customUpdate(
+        "UPDATE contacts SET class_reasons = '' WHERE classification_source <> 'override'",
+        updates: {contacts},
+      );
 
   /// Message-IDs of mail the user sent, for the reply-to-me exception.
   Future<bool> isReplyToMine(String? inReplyTo) async {

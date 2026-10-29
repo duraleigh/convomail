@@ -131,6 +131,15 @@ extension PeopleQueries on AppDatabase {
   }
 
   /// Marks rows stale so the next refresh recomputes them.
+  /// The user's own name for a sender (spec 4.2). It replaces the name from
+  /// the mail headers everywhere the contact is shown and stays for all
+  /// future mail from any of the sender's addresses, even after every
+  /// message is deleted. Null or blank goes back to the header name.
+  Future<void> setContactLabel(String contactKey, String? label) async {
+    final v = label?.trim();
+    await (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(userLabel: Value(v == null || v.isEmpty ? null : v)));
+  }
+
   Future<void> markRowsDirty(Iterable<String> rowKeys) async {
     for (final k in rowKeys) {
       await customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) VALUES (?)', [k]);
@@ -222,7 +231,7 @@ extension PeopleQueries on AppDatabase {
            mp.subject AS pp_subject, mp.snippet AS pp_snippet, mp.is_from_me AS pp_from_me,
            mf.subject AS pf_subject, mf.snippet AS pf_snippet, mf.is_from_me AS pf_from_me,
            COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at, COALESCE(p.muted, 0) AS muted,
-           c.display_name AS c_name, COALESCE(c.in_address_book, 0) AS c_in_book,
+           COALESCE(NULLIF(c.user_label, ''), c.display_name) AS c_name, COALESCE(c.in_address_book, 0) AS c_in_book,
            COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
            g.name AS g_name,
            (SELECT GROUP_CONCAT(DISTINCT mm.account_id) FROM message_row_assignments rr JOIN messages mm ON mm.id = rr.message_id WHERE rr.row_key = s.row_key AND mm.is_deleted = 0) AS account_ids
@@ -287,7 +296,7 @@ extension PeopleQueries on AppDatabase {
         membersByGroup = {};
         for (final m in members) {
           final c = contactRows[m.contactKey];
-          membersByGroup!.putIfAbsent(m.groupId, () => []).add((m.contactKey, c?.displayName.isNotEmpty == true ? c!.displayName : m.contactKey));
+          membersByGroup!.putIfAbsent(m.groupId, () => []).add((m.contactKey, c?.shownName ?? m.contactKey));
         }
       }
       return membersByGroup![groupId] ?? const [];

@@ -17,6 +17,7 @@ class ImapTransport implements MailTransport {
   ImapClient? _client;
   Mailbox? _selected;
   bool _condStore = false;
+  List<String> _capabilities = const [];
   Completer<MailboxEvent?>? _pendingIdle;
 
   static const _signalFields = 'LIST-UNSUBSCRIBE LIST-ID LIST-POST FEEDBACK-ID PRECEDENCE AUTO-SUBMITTED';
@@ -33,6 +34,9 @@ class ImapTransport implements MailTransport {
   bool get isConnected => _client?.isConnected ?? false;
 
   @override
+  List<String> get capabilities => _capabilities;
+
+  @override
   Future<void> connect(ServerConfig server, MailCredentials credentials) async {
     final client = ImapClient(isLogEnabled: logEnabled, defaultResponseTimeout: responseTimeout);
     try {
@@ -42,6 +46,7 @@ class ImapTransport implements MailTransport {
       }
       final caps = await client.login(credentials.username, credentials.password);
       _condStore = caps.any((c) => c.name.toUpperCase() == 'CONDSTORE');
+      _capabilities = [for (final c in caps) c.name.toUpperCase()];
       _client = client;
     } on ImapException catch (e) {
       final msg = e.message ?? e.toString();
@@ -184,6 +189,31 @@ class ImapTransport implements MailTransport {
       final uid = m.uid;
       if (uid == null) continue;
       out[uid] = signalsFromMime(m);
+    }
+    return out;
+  }
+
+  @override
+  Future<Set<int>> searchUids(String criteria) async {
+    _requireSelected();
+    final result = await _c.uidSearchMessages(searchCriteria: criteria);
+    return {...?result.matchingSequence?.toList()};
+  }
+
+  /// Diagnostic only: switches enough_mail's wire log on or off after
+  /// login, so credentials never reach the log.
+  set debugLog(bool on) => _client?.isLogEnabled = on;
+
+  @override
+  Future<List<String>> probeHeaders(List<int> uids, {String? criteria}) async {
+    _requireSelected();
+    if (uids.isEmpty) return const [];
+    final seq = MessageSequence.fromIds(uids, isUid: true);
+    final result = await _c.uidFetchMessages(seq, criteria ?? '(UID BODY.PEEK[HEADER.FIELDS ($_signalFields)])');
+    final out = <String>[];
+    for (final m in result.messages) {
+      final names = [for (final h in m.headers ?? const <Header>[]) h.name.toLowerCase()];
+      out.add('uid=${m.uid} names=$names signals=${signalsFromMime(m).encode()}');
     }
     return out;
   }

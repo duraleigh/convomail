@@ -143,6 +143,7 @@ class AccountSyncer {
         }
       }
       await _backfillSignals(targets);
+      if (!_stopRequested) await _backfillProviderCategories(targets);
       if (!_stopRequested) await planner.recentPass(this);
       await db.setAccountSyncResult(account.id);
       _consecutiveFailures = 0;
@@ -174,6 +175,39 @@ class AccountSyncer {
     while (!_stopRequested && await classification.classifyPending() > 0) {}
   }
 
+  /// Gmail's inbox categories (Primary, Updates, Promotions, Social,
+  /// Forums), read with `X-GM-RAW` searches when the server offers them.
+  static const providerCategoryNames = ['primary', 'updates', 'promotions', 'social', 'forums'];
+
+  bool get _hasProviderCategories => transport.capabilities.contains('X-GM-EXT-1');
+
+  /// Reads the provider category of UIDs `lo..hi` in the selected [folderId]
+  /// and stores it. Returns the senders whose messages were updated.
+  Future<Set<String>> _readProviderCategories(int folderId, (int, int) range) async {
+    final (lo, hi) = range;
+    final found = <String, Set<int>>{};
+    for (final c in providerCategoryNames) {
+      found[c] = await transport.searchUids('UID $lo:$hi X-GM-RAW "category:$c"');
+    }
+    return db.storeProviderCategories(folderId, range, found);
+  }
+
+  /// Messages stored before categories were read get them once, and their
+  /// senders are classified again.
+  Future<void> _backfillProviderCategories(List<Folder> folders) async {
+    if (!_hasProviderCategories) return;
+    for (final folder in folders) {
+      if (_stopRequested) return;
+      if (_roleOf(folder) == FolderRole.sent) continue;
+      final range = await db.uidRangeMissingProviderCategory(folder.id);
+      if (range == null) continue;
+      _emit(_status.copyWith(message: 'reading Gmail categories in ${folder.path}'));
+      await transport.selectFolder(folder.path);
+      final senders = await _readProviderCategories(folder.id, range);
+      await classification.classifySenders(senders);
+    }
+  }
+
   static FolderRole _roleOf(Folder f) => FolderRole.values.firstWhere((r) => r.name == f.role, orElse: () => FolderRole.other);
 
   static int _priority(Folder f) => switch (_roleOf(f)) {
@@ -198,6 +232,7 @@ class AccountSyncer {
     }
 
     final filing = await db.loadFilingRule();
+    final readCategories = _hasProviderCategories && _roleOf(folder) != FolderRole.sent;
     final highWater = folder.lastSyncedUid;
     final serverTop = status.uidNext - 1;
     var fetched = 0;
@@ -212,6 +247,7 @@ class AccountSyncer {
         final headers = await transport.fetchHeaders(fromUid: pageStart, toUid: pageEnd);
         final newIds = <int>[];
         fetched += await db.upsertHeaders(account.id, folderId, headers, filing, newIds: newIds);
+        if (readCategories && headers.isNotEmpty) await _readProviderCategories(folderId, (pageStart, pageEnd));
         await classification.classifySenders({for (final h in headers) filing.identity.resolve(h.from.address).contactKey});
         // Replies to mail the user sent are People messages even from a Feeds
         // sender; Sent syncs after INBOX, so re-check once the originals land.

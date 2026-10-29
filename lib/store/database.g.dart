@@ -2912,6 +2912,17 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _providerCategoryMeta = const VerificationMeta(
+    'providerCategory',
+  );
+  @override
+  late final GeneratedColumn<String> providerCategory = GeneratedColumn<String>(
+    'provider_category',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _classificationMeta = const VerificationMeta(
     'classification',
   );
@@ -2988,6 +2999,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     threadKey,
     imagesAllowed,
     bulkSignals,
+    providerCategory,
     classification,
     feedsCategory,
     icsText,
@@ -3209,6 +3221,15 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('provider_category')) {
+      context.handle(
+        _providerCategoryMeta,
+        providerCategory.isAcceptableOrUnknown(
+          data['provider_category']!,
+          _providerCategoryMeta,
+        ),
+      );
+    }
     if (data.containsKey('classification')) {
       context.handle(
         _classificationMeta,
@@ -3371,6 +3392,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}bulk_signals'],
       ),
+      providerCategory: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}provider_category'],
+      ),
       classification: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}classification'],
@@ -3442,6 +3467,11 @@ class Message extends DataClass implements Insertable<Message> {
   /// Encoded [BulkSignals]; null until the list headers were fetched.
   final String? bulkSignals;
 
+  /// The provider's own inbox category when it exposes one (Gmail:
+  /// `primary`, `updates`, `promotions`, `social`, `forums`); null until
+  /// read, `''` when the provider has none for this message.
+  final String? providerCategory;
+
   /// `people` or `feeds` for this message (sender bucket with per-message
   /// exceptions, spec 4.11).
   final String classification;
@@ -3484,6 +3514,7 @@ class Message extends DataClass implements Insertable<Message> {
     this.threadKey,
     required this.imagesAllowed,
     this.bulkSignals,
+    this.providerCategory,
     required this.classification,
     this.feedsCategory,
     this.icsText,
@@ -3542,6 +3573,9 @@ class Message extends DataClass implements Insertable<Message> {
     map['images_allowed'] = Variable<bool>(imagesAllowed);
     if (!nullToAbsent || bulkSignals != null) {
       map['bulk_signals'] = Variable<String>(bulkSignals);
+    }
+    if (!nullToAbsent || providerCategory != null) {
+      map['provider_category'] = Variable<String>(providerCategory);
     }
     map['classification'] = Variable<String>(classification);
     if (!nullToAbsent || feedsCategory != null) {
@@ -3607,6 +3641,9 @@ class Message extends DataClass implements Insertable<Message> {
       bulkSignals: bulkSignals == null && nullToAbsent
           ? const Value.absent()
           : Value(bulkSignals),
+      providerCategory: providerCategory == null && nullToAbsent
+          ? const Value.absent()
+          : Value(providerCategory),
       classification: Value(classification),
       feedsCategory: feedsCategory == null && nullToAbsent
           ? const Value.absent()
@@ -3655,6 +3692,7 @@ class Message extends DataClass implements Insertable<Message> {
       threadKey: serializer.fromJson<String?>(json['threadKey']),
       imagesAllowed: serializer.fromJson<bool>(json['imagesAllowed']),
       bulkSignals: serializer.fromJson<String?>(json['bulkSignals']),
+      providerCategory: serializer.fromJson<String?>(json['providerCategory']),
       classification: serializer.fromJson<String>(json['classification']),
       feedsCategory: serializer.fromJson<String?>(json['feedsCategory']),
       icsText: serializer.fromJson<String?>(json['icsText']),
@@ -3694,6 +3732,7 @@ class Message extends DataClass implements Insertable<Message> {
       'threadKey': serializer.toJson<String?>(threadKey),
       'imagesAllowed': serializer.toJson<bool>(imagesAllowed),
       'bulkSignals': serializer.toJson<String?>(bulkSignals),
+      'providerCategory': serializer.toJson<String?>(providerCategory),
       'classification': serializer.toJson<String>(classification),
       'feedsCategory': serializer.toJson<String?>(feedsCategory),
       'icsText': serializer.toJson<String?>(icsText),
@@ -3731,6 +3770,7 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> threadKey = const Value.absent(),
     bool? imagesAllowed,
     Value<String?> bulkSignals = const Value.absent(),
+    Value<String?> providerCategory = const Value.absent(),
     String? classification,
     Value<String?> feedsCategory = const Value.absent(),
     Value<String?> icsText = const Value.absent(),
@@ -3771,6 +3811,9 @@ class Message extends DataClass implements Insertable<Message> {
     threadKey: threadKey.present ? threadKey.value : this.threadKey,
     imagesAllowed: imagesAllowed ?? this.imagesAllowed,
     bulkSignals: bulkSignals.present ? bulkSignals.value : this.bulkSignals,
+    providerCategory: providerCategory.present
+        ? providerCategory.value
+        : this.providerCategory,
     classification: classification ?? this.classification,
     feedsCategory: feedsCategory.present
         ? feedsCategory.value
@@ -3829,6 +3872,9 @@ class Message extends DataClass implements Insertable<Message> {
       bulkSignals: data.bulkSignals.present
           ? data.bulkSignals.value
           : this.bulkSignals,
+      providerCategory: data.providerCategory.present
+          ? data.providerCategory.value
+          : this.providerCategory,
       classification: data.classification.present
           ? data.classification.value
           : this.classification,
@@ -3874,6 +3920,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('threadKey: $threadKey, ')
           ..write('imagesAllowed: $imagesAllowed, ')
           ..write('bulkSignals: $bulkSignals, ')
+          ..write('providerCategory: $providerCategory, ')
           ..write('classification: $classification, ')
           ..write('feedsCategory: $feedsCategory, ')
           ..write('icsText: $icsText, ')
@@ -3913,6 +3960,7 @@ class Message extends DataClass implements Insertable<Message> {
     threadKey,
     imagesAllowed,
     bulkSignals,
+    providerCategory,
     classification,
     feedsCategory,
     icsText,
@@ -3951,6 +3999,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.threadKey == this.threadKey &&
           other.imagesAllowed == this.imagesAllowed &&
           other.bulkSignals == this.bulkSignals &&
+          other.providerCategory == this.providerCategory &&
           other.classification == this.classification &&
           other.feedsCategory == this.feedsCategory &&
           other.icsText == this.icsText &&
@@ -3987,6 +4036,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> threadKey;
   final Value<bool> imagesAllowed;
   final Value<String?> bulkSignals;
+  final Value<String?> providerCategory;
   final Value<String> classification;
   final Value<String?> feedsCategory;
   final Value<String?> icsText;
@@ -4021,6 +4071,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.threadKey = const Value.absent(),
     this.imagesAllowed = const Value.absent(),
     this.bulkSignals = const Value.absent(),
+    this.providerCategory = const Value.absent(),
     this.classification = const Value.absent(),
     this.feedsCategory = const Value.absent(),
     this.icsText = const Value.absent(),
@@ -4056,6 +4107,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.threadKey = const Value.absent(),
     this.imagesAllowed = const Value.absent(),
     this.bulkSignals = const Value.absent(),
+    this.providerCategory = const Value.absent(),
     this.classification = const Value.absent(),
     this.feedsCategory = const Value.absent(),
     this.icsText = const Value.absent(),
@@ -4093,6 +4145,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? threadKey,
     Expression<bool>? imagesAllowed,
     Expression<String>? bulkSignals,
+    Expression<String>? providerCategory,
     Expression<String>? classification,
     Expression<String>? feedsCategory,
     Expression<String>? icsText,
@@ -4128,6 +4181,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (threadKey != null) 'thread_key': threadKey,
       if (imagesAllowed != null) 'images_allowed': imagesAllowed,
       if (bulkSignals != null) 'bulk_signals': bulkSignals,
+      if (providerCategory != null) 'provider_category': providerCategory,
       if (classification != null) 'classification': classification,
       if (feedsCategory != null) 'feeds_category': feedsCategory,
       if (icsText != null) 'ics_text': icsText,
@@ -4165,6 +4219,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? threadKey,
     Value<bool>? imagesAllowed,
     Value<String?>? bulkSignals,
+    Value<String?>? providerCategory,
     Value<String>? classification,
     Value<String?>? feedsCategory,
     Value<String?>? icsText,
@@ -4200,6 +4255,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       threadKey: threadKey ?? this.threadKey,
       imagesAllowed: imagesAllowed ?? this.imagesAllowed,
       bulkSignals: bulkSignals ?? this.bulkSignals,
+      providerCategory: providerCategory ?? this.providerCategory,
       classification: classification ?? this.classification,
       feedsCategory: feedsCategory ?? this.feedsCategory,
       icsText: icsText ?? this.icsText,
@@ -4297,6 +4353,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (bulkSignals.present) {
       map['bulk_signals'] = Variable<String>(bulkSignals.value);
     }
+    if (providerCategory.present) {
+      map['provider_category'] = Variable<String>(providerCategory.value);
+    }
     if (classification.present) {
       map['classification'] = Variable<String>(classification.value);
     }
@@ -4344,6 +4403,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('threadKey: $threadKey, ')
           ..write('imagesAllowed: $imagesAllowed, ')
           ..write('bulkSignals: $bulkSignals, ')
+          ..write('providerCategory: $providerCategory, ')
           ..write('classification: $classification, ')
           ..write('feedsCategory: $feedsCategory, ')
           ..write('icsText: $icsText, ')
@@ -4827,6 +4887,17 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _userLabelMeta = const VerificationMeta(
+    'userLabel',
+  );
+  @override
+  late final GeneratedColumn<String> userLabel = GeneratedColumn<String>(
+    'user_label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _photoPathMeta = const VerificationMeta(
     'photoPath',
   );
@@ -4955,6 +5026,7 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
   List<GeneratedColumn> get $columns => [
     key,
     displayName,
+    userLabel,
     photoPath,
     isMe,
     inAddressBook,
@@ -4993,6 +5065,12 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
           data['display_name']!,
           _displayNameMeta,
         ),
+      );
+    }
+    if (data.containsKey('user_label')) {
+      context.handle(
+        _userLabelMeta,
+        userLabel.isAcceptableOrUnknown(data['user_label']!, _userLabelMeta),
       );
     }
     if (data.containsKey('photo_path')) {
@@ -5096,6 +5174,10 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
         DriftSqlType.string,
         data['${effectivePrefix}display_name'],
       )!,
+      userLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_label'],
+      ),
       photoPath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}photo_path'],
@@ -5148,6 +5230,10 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
 class Contact extends DataClass implements Insertable<Contact> {
   final String key;
   final String displayName;
+
+  /// A name the user gave this sender; shown instead of [displayName]
+  /// everywhere and kept for all future mail from any of its addresses.
+  final String? userLabel;
   final String? photoPath;
   final bool isMe;
   final bool inAddressBook;
@@ -5168,6 +5254,7 @@ class Contact extends DataClass implements Insertable<Contact> {
   const Contact({
     required this.key,
     required this.displayName,
+    this.userLabel,
     this.photoPath,
     required this.isMe,
     required this.inAddressBook,
@@ -5184,6 +5271,9 @@ class Contact extends DataClass implements Insertable<Contact> {
     final map = <String, Expression>{};
     map['key'] = Variable<String>(key);
     map['display_name'] = Variable<String>(displayName);
+    if (!nullToAbsent || userLabel != null) {
+      map['user_label'] = Variable<String>(userLabel);
+    }
     if (!nullToAbsent || photoPath != null) {
       map['photo_path'] = Variable<String>(photoPath);
     }
@@ -5205,6 +5295,9 @@ class Contact extends DataClass implements Insertable<Contact> {
     return ContactsCompanion(
       key: Value(key),
       displayName: Value(displayName),
+      userLabel: userLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userLabel),
       photoPath: photoPath == null && nullToAbsent
           ? const Value.absent()
           : Value(photoPath),
@@ -5230,6 +5323,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     return Contact(
       key: serializer.fromJson<String>(json['key']),
       displayName: serializer.fromJson<String>(json['displayName']),
+      userLabel: serializer.fromJson<String?>(json['userLabel']),
       photoPath: serializer.fromJson<String?>(json['photoPath']),
       isMe: serializer.fromJson<bool>(json['isMe']),
       inAddressBook: serializer.fromJson<bool>(json['inAddressBook']),
@@ -5250,6 +5344,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     return <String, dynamic>{
       'key': serializer.toJson<String>(key),
       'displayName': serializer.toJson<String>(displayName),
+      'userLabel': serializer.toJson<String?>(userLabel),
       'photoPath': serializer.toJson<String?>(photoPath),
       'isMe': serializer.toJson<bool>(isMe),
       'inAddressBook': serializer.toJson<bool>(inAddressBook),
@@ -5266,6 +5361,7 @@ class Contact extends DataClass implements Insertable<Contact> {
   Contact copyWith({
     String? key,
     String? displayName,
+    Value<String?> userLabel = const Value.absent(),
     Value<String?> photoPath = const Value.absent(),
     bool? isMe,
     bool? inAddressBook,
@@ -5279,6 +5375,7 @@ class Contact extends DataClass implements Insertable<Contact> {
   }) => Contact(
     key: key ?? this.key,
     displayName: displayName ?? this.displayName,
+    userLabel: userLabel.present ? userLabel.value : this.userLabel,
     photoPath: photoPath.present ? photoPath.value : this.photoPath,
     isMe: isMe ?? this.isMe,
     inAddressBook: inAddressBook ?? this.inAddressBook,
@@ -5298,6 +5395,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       displayName: data.displayName.present
           ? data.displayName.value
           : this.displayName,
+      userLabel: data.userLabel.present ? data.userLabel.value : this.userLabel,
       photoPath: data.photoPath.present ? data.photoPath.value : this.photoPath,
       isMe: data.isMe.present ? data.isMe.value : this.isMe,
       inAddressBook: data.inAddressBook.present
@@ -5332,6 +5430,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     return (StringBuffer('Contact(')
           ..write('key: $key, ')
           ..write('displayName: $displayName, ')
+          ..write('userLabel: $userLabel, ')
           ..write('photoPath: $photoPath, ')
           ..write('isMe: $isMe, ')
           ..write('inAddressBook: $inAddressBook, ')
@@ -5350,6 +5449,7 @@ class Contact extends DataClass implements Insertable<Contact> {
   int get hashCode => Object.hash(
     key,
     displayName,
+    userLabel,
     photoPath,
     isMe,
     inAddressBook,
@@ -5367,6 +5467,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       (other is Contact &&
           other.key == this.key &&
           other.displayName == this.displayName &&
+          other.userLabel == this.userLabel &&
           other.photoPath == this.photoPath &&
           other.isMe == this.isMe &&
           other.inAddressBook == this.inAddressBook &&
@@ -5382,6 +5483,7 @@ class Contact extends DataClass implements Insertable<Contact> {
 class ContactsCompanion extends UpdateCompanion<Contact> {
   final Value<String> key;
   final Value<String> displayName;
+  final Value<String?> userLabel;
   final Value<String?> photoPath;
   final Value<bool> isMe;
   final Value<bool> inAddressBook;
@@ -5396,6 +5498,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   const ContactsCompanion({
     this.key = const Value.absent(),
     this.displayName = const Value.absent(),
+    this.userLabel = const Value.absent(),
     this.photoPath = const Value.absent(),
     this.isMe = const Value.absent(),
     this.inAddressBook = const Value.absent(),
@@ -5411,6 +5514,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   ContactsCompanion.insert({
     required String key,
     this.displayName = const Value.absent(),
+    this.userLabel = const Value.absent(),
     this.photoPath = const Value.absent(),
     this.isMe = const Value.absent(),
     this.inAddressBook = const Value.absent(),
@@ -5426,6 +5530,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   static Insertable<Contact> custom({
     Expression<String>? key,
     Expression<String>? displayName,
+    Expression<String>? userLabel,
     Expression<String>? photoPath,
     Expression<bool>? isMe,
     Expression<bool>? inAddressBook,
@@ -5441,6 +5546,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     return RawValuesInsertable({
       if (key != null) 'key': key,
       if (displayName != null) 'display_name': displayName,
+      if (userLabel != null) 'user_label': userLabel,
       if (photoPath != null) 'photo_path': photoPath,
       if (isMe != null) 'is_me': isMe,
       if (inAddressBook != null) 'in_address_book': inAddressBook,
@@ -5460,6 +5566,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   ContactsCompanion copyWith({
     Value<String>? key,
     Value<String>? displayName,
+    Value<String?>? userLabel,
     Value<String?>? photoPath,
     Value<bool>? isMe,
     Value<bool>? inAddressBook,
@@ -5475,6 +5582,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     return ContactsCompanion(
       key: key ?? this.key,
       displayName: displayName ?? this.displayName,
+      userLabel: userLabel ?? this.userLabel,
       photoPath: photoPath ?? this.photoPath,
       isMe: isMe ?? this.isMe,
       inAddressBook: inAddressBook ?? this.inAddressBook,
@@ -5497,6 +5605,9 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     }
     if (displayName.present) {
       map['display_name'] = Variable<String>(displayName.value);
+    }
+    if (userLabel.present) {
+      map['user_label'] = Variable<String>(userLabel.value);
     }
     if (photoPath.present) {
       map['photo_path'] = Variable<String>(photoPath.value);
@@ -5541,6 +5652,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     return (StringBuffer('ContactsCompanion(')
           ..write('key: $key, ')
           ..write('displayName: $displayName, ')
+          ..write('userLabel: $userLabel, ')
           ..write('photoPath: $photoPath, ')
           ..write('isMe: $isMe, ')
           ..write('inAddressBook: $inAddressBook, ')
@@ -16060,6 +16172,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> threadKey,
   Value<bool> imagesAllowed,
   Value<String?> bulkSignals,
+  Value<String?> providerCategory,
   Value<String> classification,
   Value<String?> feedsCategory,
   Value<String?> icsText,
@@ -16095,6 +16208,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> threadKey,
   Value<bool> imagesAllowed,
   Value<String?> bulkSignals,
+  Value<String?> providerCategory,
   Value<String> classification,
   Value<String?> feedsCategory,
   Value<String?> icsText,
@@ -16366,6 +16480,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get bulkSignals => $composableBuilder(
     column: $table.bulkSignals,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get providerCategory => $composableBuilder(
+    column: $table.providerCategory,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16681,6 +16800,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get providerCategory => $composableBuilder(
+    column: $table.providerCategory,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get classification => $composableBuilder(
     column: $table.classification,
     builder: (column) => ColumnOrderings(column),
@@ -16855,6 +16979,11 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get bulkSignals => $composableBuilder(
     column: $table.bulkSignals,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get providerCategory => $composableBuilder(
+    column: $table.providerCategory,
     builder: (column) => column,
   );
 
@@ -17089,6 +17218,7 @@ class $$MessagesTableTableManager
                 Value<String?> threadKey = const Value.absent(),
                 Value<bool> imagesAllowed = const Value.absent(),
                 Value<String?> bulkSignals = const Value.absent(),
+                Value<String?> providerCategory = const Value.absent(),
                 Value<String> classification = const Value.absent(),
                 Value<String?> feedsCategory = const Value.absent(),
                 Value<String?> icsText = const Value.absent(),
@@ -17123,6 +17253,7 @@ class $$MessagesTableTableManager
                 threadKey: threadKey,
                 imagesAllowed: imagesAllowed,
                 bulkSignals: bulkSignals,
+                providerCategory: providerCategory,
                 classification: classification,
                 feedsCategory: feedsCategory,
                 icsText: icsText,
@@ -17159,6 +17290,7 @@ class $$MessagesTableTableManager
                 Value<String?> threadKey = const Value.absent(),
                 Value<bool> imagesAllowed = const Value.absent(),
                 Value<String?> bulkSignals = const Value.absent(),
+                Value<String?> providerCategory = const Value.absent(),
                 Value<String> classification = const Value.absent(),
                 Value<String?> feedsCategory = const Value.absent(),
                 Value<String?> icsText = const Value.absent(),
@@ -17193,6 +17325,7 @@ class $$MessagesTableTableManager
                 threadKey: threadKey,
                 imagesAllowed: imagesAllowed,
                 bulkSignals: bulkSignals,
+                providerCategory: providerCategory,
                 classification: classification,
                 feedsCategory: feedsCategory,
                 icsText: icsText,
@@ -17750,6 +17883,7 @@ typedef $$MessageParticipantsTableProcessedTableManager =
 typedef $$ContactsTableCreateCompanionBuilder = ContactsCompanion Function({
   required String key,
   Value<String> displayName,
+  Value<String?> userLabel,
   Value<String?> photoPath,
   Value<bool> isMe,
   Value<bool> inAddressBook,
@@ -17765,6 +17899,7 @@ typedef $$ContactsTableCreateCompanionBuilder = ContactsCompanion Function({
 typedef $$ContactsTableUpdateCompanionBuilder = ContactsCompanion Function({
   Value<String> key,
   Value<String> displayName,
+  Value<String?> userLabel,
   Value<String?> photoPath,
   Value<bool> isMe,
   Value<bool> inAddressBook,
@@ -17819,6 +17954,11 @@ class $$ContactsTableFilterComposer
 
   ColumnFilters<String> get displayName => $composableBuilder(
     column: $table.displayName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userLabel => $composableBuilder(
+    column: $table.userLabel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -17917,6 +18057,11 @@ class $$ContactsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get userLabel => $composableBuilder(
+    column: $table.userLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get photoPath => $composableBuilder(
     column: $table.photoPath,
     builder: (column) => ColumnOrderings(column),
@@ -17984,6 +18129,9 @@ class $$ContactsTableAnnotationComposer
     column: $table.displayName,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get userLabel =>
+      $composableBuilder(column: $table.userLabel, builder: (column) => column);
 
   GeneratedColumn<String> get photoPath =>
       $composableBuilder(column: $table.photoPath, builder: (column) => column);
@@ -18087,6 +18235,7 @@ class $$ContactsTableTableManager
               ({
                 Value<String> key = const Value.absent(),
                 Value<String> displayName = const Value.absent(),
+                Value<String?> userLabel = const Value.absent(),
                 Value<String?> photoPath = const Value.absent(),
                 Value<bool> isMe = const Value.absent(),
                 Value<bool> inAddressBook = const Value.absent(),
@@ -18101,6 +18250,7 @@ class $$ContactsTableTableManager
               }) => ContactsCompanion(
                 key: key,
                 displayName: displayName,
+                userLabel: userLabel,
                 photoPath: photoPath,
                 isMe: isMe,
                 inAddressBook: inAddressBook,
@@ -18117,6 +18267,7 @@ class $$ContactsTableTableManager
               ({
                 required String key,
                 Value<String> displayName = const Value.absent(),
+                Value<String?> userLabel = const Value.absent(),
                 Value<String?> photoPath = const Value.absent(),
                 Value<bool> isMe = const Value.absent(),
                 Value<bool> inAddressBook = const Value.absent(),
@@ -18131,6 +18282,7 @@ class $$ContactsTableTableManager
               }) => ContactsCompanion.insert(
                 key: key,
                 displayName: displayName,
+                userLabel: userLabel,
                 photoPath: photoPath,
                 isMe: isMe,
                 inAddressBook: inAddressBook,

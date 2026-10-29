@@ -11,6 +11,7 @@ import 'app/app_log.dart';
 import 'app/bench.dart';
 import 'app/compose_state.dart';
 import 'app/destinations.dart';
+import 'app/diag.dart';
 import 'app/onboarding.dart';
 import 'app/people_state.dart';
 import 'app/settings.dart';
@@ -118,6 +119,10 @@ Future<void> main(List<String> args) async {
   }
   if (args.contains('--bench-search')) {
     await runSearchBench();
+    exit(0);
+  }
+  if (args.contains('--diag-signals') || args.contains('--diag-classify')) {
+    await runDiag(classify: args.contains('--diag-classify'));
     exit(0);
   }
   final startup = StartupArgs.parse(args);

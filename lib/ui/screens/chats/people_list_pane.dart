@@ -25,6 +25,7 @@ import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import '../planner/event_dialogs.dart';
 import 'person_row.dart';
+import 'rename_sender_dialog.dart';
 import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
 
@@ -67,6 +68,88 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     var i = rows.indexWhere((r) => r.rowKey == current);
     i = (i + delta).clamp(0, rows.length - 1);
     ref.read(selectedRowProvider.notifier).select(rows[i].rowKey);
+  }
+
+  /// Click: open the row, or toggle it while rows are picked. Ctrl-click
+  /// toggles, Shift-click picks a range; the open row joins the selection
+  /// when picking starts, as in Explorer.
+  void _onRowTap(PeopleRow row, List<PeopleRow> list) {
+    final multi = ref.read(multiSelectProvider.notifier);
+    final picked = ref.read(multiSelectProvider);
+    final keyboard = HardwareKeyboard.instance;
+    final open = ref.read(selectedRowProvider);
+    if (keyboard.isControlPressed || keyboard.isShiftPressed) {
+      if (picked.isEmpty && open != null && open != row.rowKey && list.any((r) => r.rowKey == open)) multi.toggle(open);
+      if (keyboard.isShiftPressed) {
+        multi.extendTo(row.rowKey, [for (final r in list) r.rowKey]);
+      } else {
+        multi.toggle(row.rowKey);
+      }
+      _listFocus.requestFocus();
+      return;
+    }
+    if (picked.isNotEmpty) {
+      multi.toggle(row.rowKey);
+      return;
+    }
+    ref.read(selectedRowProvider.notifier).select(row.rowKey);
+    _listFocus.requestFocus();
+  }
+
+  Future<void> _bulk(BulkAction action, List<PeopleRow> list) async {
+    final picked = ref.read(multiSelectProvider);
+    final rows = [for (final r in list) if (picked.contains(r.rowKey)) r];
+    if (rows.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final actions = ref.read(rowActionsProvider);
+    ref.read(multiSelectProvider.notifier).clear();
+    switch (action) {
+      case BulkAction.moveToFeeds:
+      case BulkAction.moveToPeople:
+        // Spec 4.11: a manual move is permanent until changed.
+        final service = ref.read(classificationServiceProvider);
+        final target = action == BulkAction.moveToFeeds ? Bucket.feeds : Bucket.people;
+        final keys = [for (final r in rows) if (r.ref case ContactRow(:final contactKey)) if (contactKey != 'me') contactKey];
+        for (final k in keys) {
+          await service.moveSender(k, target);
+        }
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(
+          content: Text('${keys.length} sender${keys.length == 1 ? '' : 's'} moved to ${target == Bucket.feeds ? 'Feeds' : 'People'}. Rules will not move ${keys.length == 1 ? 'it' : 'them'} back.'),
+          behavior: SnackBarBehavior.floating,
+          width: 480,
+          action: SnackBarAction(label: 'Undo', onPressed: () async {
+            for (final k in keys) {
+              await service.moveSender(k, null);
+            }
+          }),
+        ));
+        if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
+      case BulkAction.markRead:
+        for (final r in rows) {
+          await actions.markRowRead(r.rowKey);
+        }
+      case BulkAction.archive:
+        final pending = <PendingAction>[];
+        for (final r in rows) {
+          final p = await actions.archiveRow(r.rowKey);
+          if (p != null) pending.add(p);
+        }
+        if (!mounted) return;
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(SnackBar(
+          content: Text('Archived ${pending.length} conversation${pending.length == 1 ? '' : 's'}'),
+          duration: actions.undoWindow,
+          behavior: SnackBarBehavior.floating,
+          width: 420,
+          action: SnackBarAction(label: 'Undo', onPressed: () async {
+            for (final p in pending) {
+              await actions.undo(p);
+            }
+          }),
+        ));
+        if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
+    }
   }
 
   /// R / Shift+R / F: open the inline composer on the row's newest message.
@@ -129,6 +212,12 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
           action: until == SnoozeChoice.unsnooze ? null : SnackBarAction(label: 'Undo', onPressed: () => ref.read(databaseProvider).snoozeRow(row.rowKey, null)),
         ));
         if (ref.read(selectedRowProvider) == row.rowKey && until != SnoozeChoice.unsnooze) ref.read(selectedRowProvider.notifier).select(null);
+      case RowAction.rename:
+        if (row.ref case ContactRow(:final contactKey)) {
+          final name = await showRenameSenderDialog(context, current: row.title, address: row.identityKey);
+          if (name == null) return;
+          await ref.read(databaseProvider).setContactLabel(contactKey, name);
+        }
       case RowAction.category:
         if (row.ref case ContactRow(:final contactKey)) {
           final names = await ref.read(databaseProvider).categoryNames();
@@ -175,6 +264,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     final rows = ref.watch(peopleRowsProvider);
     final selected = ref.watch(selectedRowProvider);
     final searchFocus = ref.watch(searchFocusProvider);
+    final picked = ref.watch(multiSelectProvider);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -262,13 +352,17 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
           child: ConnectedButtonGroup<InboxMode>(
             selected: mode,
-            onSelected: (m) => ref.read(inboxModeProvider.notifier).select(m),
+            onSelected: (m) {
+              ref.read(multiSelectProvider.notifier).clear();
+              ref.read(inboxModeProvider.notifier).select(m);
+            },
             items: const [
               ButtonGroupItem(value: InboxMode.people, label: 'People', icon: Icons.person_outline_rounded),
               ButtonGroupItem(value: InboxMode.feeds, label: 'Feeds', icon: Icons.rss_feed_rounded),
             ],
           ),
         ),
+        if (picked.isNotEmpty) _SelectionBar(count: picked.length, mode: mode, onAction: (a) => _bulk(a, rows.value ?? const []), onClear: () => ref.read(multiSelectProvider.notifier).clear()),
         Expanded(
           child: rows.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -302,6 +396,14 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   }
                   if (key == LogicalKeyboardKey.arrowUp) {
                     _moveSelection(list, -1);
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.keyA && HardwareKeyboard.instance.isControlPressed) {
+                    ref.read(multiSelectProvider.notifier).setAll([for (final r in list) r.rowKey]);
+                    return KeyEventResult.handled;
+                  }
+                  if (key == LogicalKeyboardKey.escape && ref.read(multiSelectProvider).isNotEmpty) {
+                    ref.read(multiSelectProvider.notifier).clear();
                     return KeyEventResult.handled;
                   }
                   final current = list.where((r) => r.rowKey == selected).firstOrNull;
@@ -342,12 +444,16 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                       padding: EdgeInsets.only(top: i == 1 ? 0 : 2),
                       child: GroupedListItem(
                         radius: GroupedList.radiusFor(i - 1, list.length),
-                        selected: row.rowKey == selected,
-                        onTap: () {
-                          ref.read(selectedRowProvider.notifier).select(row.rowKey);
-                          _listFocus.requestFocus();
-                        },
-                        child: PersonRow(row: row, selected: row.rowKey == selected, onAction: (a) => _act(row, a)),
+                        selected: row.rowKey == selected || picked.contains(row.rowKey),
+                        onTap: () => _onRowTap(row, list),
+                        child: PersonRow(
+                          row: row,
+                          selected: row.rowKey == selected,
+                          onAction: (a) => _act(row, a),
+                          checked: picked.contains(row.rowKey),
+                          selectionMode: picked.isNotEmpty,
+                          onCheck: () => ref.read(multiSelectProvider.notifier).toggle(row.rowKey),
+                        ),
                       ),
                     );
                   },
@@ -376,6 +482,51 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         },
         icon: const Icon(Icons.add_rounded),
         label: const Text('Add account'),
+      ),
+    );
+  }
+}
+
+/// Shown while rows are picked: the count and the bulk actions.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({required this.count, required this.mode, required this.onAction, required this.onClear});
+  final int count;
+  final InboxMode mode;
+  final ValueChanged<BulkAction> onAction;
+  final VoidCallback onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final toFeeds = mode == InboxMode.people;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Material(
+        key: const ValueKey('selection-bar'),
+        color: scheme.secondaryContainer,
+        borderRadius: BorderRadius.circular(AppShapes.md),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              IconButton(tooltip: 'Clear selection (Esc)', icon: const Icon(Icons.close_rounded, size: 20), onPressed: onClear),
+              Text('$count selected', style: text.labelLarge!.copyWith(color: scheme.onSecondaryContainer)),
+              const SizedBox(width: 4),
+              FilledButton.icon(
+                key: const ValueKey('bulk-move'),
+                onPressed: () => onAction(toFeeds ? BulkAction.moveToFeeds : BulkAction.moveToPeople),
+                icon: Icon(toFeeds ? Icons.rss_feed_rounded : Icons.person_outline_rounded, size: 18),
+                label: Text(toFeeds ? 'Move to Feeds' : 'Move to People'),
+              ),
+              IconButton(key: const ValueKey('bulk-read'), tooltip: 'Mark as read', icon: const Icon(Icons.mark_email_read_outlined, size: 20), onPressed: () => onAction(BulkAction.markRead)),
+              IconButton(key: const ValueKey('bulk-archive'), tooltip: 'Archive', icon: const Icon(Icons.archive_outlined, size: 20), onPressed: () => onAction(BulkAction.archive)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -421,7 +572,10 @@ class _FeedsBanner extends ConsumerWidget {
 final feedsFiledThisWeekProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsFiledSince(DateTime.now().subtract(const Duration(days: 7))));
 
 /// Small helper so both the row and the pane agree on action names.
-enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze, mute }
+enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze, mute, rename }
+
+/// Actions on every picked row at once.
+enum BulkAction { moveToFeeds, moveToPeople, markRead, archive }
 
 /// Relative timestamp per spec 4.2: time today, "Yesterday", weekday this
 /// week, date otherwise.

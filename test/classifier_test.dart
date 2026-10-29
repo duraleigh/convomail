@@ -22,7 +22,7 @@ void main() {
       const bulkLocals = ['noreply', 'no-reply', 'notifications', 'newsletter', 'alerts', 'donotreply', 'updates', 'digest', 'orders', 'billing'];
       const plainLocals = ['hello', 'info', 'team', 'news', 'editor', 'support', 'community', 'deals', 'press', 'contact'];
       for (var i = 0; i < 1200; i++) {
-        final shape = i % 6;
+        final shape = i % 9;
         late SenderFacts s;
         var signals = BulkSignals.none;
         switch (shape) {
@@ -39,6 +39,17 @@ void main() {
           case 4: // auto-submitted system mail
             signals = const BulkSignals(autoSubmitted: true);
             s = SenderFacts(address: 'system@corp$i.net', messagesWithBulkHeaders: 1, messagesWithKnownSignals: 1);
+          case 6: // no headers at all, sent from a dedicated sending subdomain
+            s = SenderFacts(address: 'jessica@e.brand$i.com', name: 'Brand $i', messagesWithKnownSignals: 2);
+          case 7: // no headers, ordinary-looking address, receipt subjects
+            s = SenderFacts(
+              address: 'jessica$i@shopco$i.com',
+              name: 'Shop Co',
+              messagesWithKnownSignals: 3,
+              subjects: const ['Your order #4411 has shipped', 'Receipt for your purchase', 'Your order is out for delivery'],
+            );
+          case 8: // no headers, nothing in the address, but Gmail files it under Updates
+            s = SenderFacts(address: 'mark$i@vendor$i.com', name: 'Mark at Vendor', messagesWithKnownSignals: 3, providerCategories: const {'updates': 3});
           default: // feedback-id marketing with a single message so far
             signals = const BulkSignals(feedbackId: true, listUnsubscribe: true);
             s = SenderFacts(address: 'offers@retail$i.com', messagesWithBulkHeaders: 1, messagesWithKnownSignals: 1);
@@ -128,6 +139,95 @@ void main() {
       expect(Classifier.isBulkDomain('news.example.org'), isTrue);
       expect(Classifier.isBulkDomain('example.org'), isFalse);
       expect(Classifier.isBulkDomain('mygithub.company.com'), isFalse);
+    });
+  });
+
+  group('evidence without bulk headers', () {
+    test('dedicated sending subdomains are bulk; ordinary three-label domains are not', () {
+      expect(Classifier.isSendingSubdomain('e.tovala.com'), isTrue);
+      expect(Classifier.isSendingSubdomain('email.electrifyamerica.com'), isTrue);
+      expect(Classifier.isSendingSubdomain('info.email.aa.com'), isTrue);
+      expect(Classifier.isSendingSubdomain('tr.1800contacts.com'), isTrue);
+      expect(Classifier.isSendingSubdomain('tovala.com'), isFalse);
+      expect(Classifier.isSendingSubdomain('cs.stanford.edu'), isFalse);
+      expect(classifier.classifySender(const SenderFacts(address: 'sarah@e.tovala.com', name: 'Sarah at Tovala', messagesWithKnownSignals: 2)).bucket, Bucket.feeds);
+    });
+
+    test('Gmail Updates or Promotions sends a sender to Feeds with a matching category', () {
+      final d = classifier.classifySender(const SenderFacts(address: 'mark@vendor.com', messagesWithKnownSignals: 3, providerCategories: {'updates': 3}));
+      expect(d.bucket, Bucket.feeds);
+      expect(d.reasons.first, contains('Gmail files this sender under Updates'));
+      expect(d.category, FeedsCategories.notification);
+      final promo = classifier.classifySender(const SenderFacts(address: 'hello@brand.com', messagesWithKnownSignals: 2, providerCategories: {'promotions': 2}));
+      expect(promo.category, FeedsCategories.promotion);
+      final receipts = classifier.classifySender(const SenderFacts(
+        address: 'mark@vendor.com',
+        messagesWithKnownSignals: 2,
+        providerCategories: {'updates': 2},
+        subjects: ['Your order #1 has shipped', 'Receipt for your purchase'],
+      ));
+      expect(receipts.category, FeedsCategories.receipt);
+    });
+
+    test('Gmail Primary keeps a sender in People against weak evidence, not against strong', () {
+      // Automated-looking subjects and name, but Gmail says Primary.
+      final weak = classifier.classifySender(const SenderFacts(
+        address: 'support@smallstudio.com',
+        name: 'Studio Support',
+        messagesWithKnownSignals: 3,
+        providerCategories: {'primary': 3},
+        subjects: ['Your order #1 has shipped', 'Receipt for your purchase', 'Your order is out for delivery'],
+      ));
+      expect(weak.bucket, Bucket.people);
+      expect(weak.reasons.single, contains('Primary'));
+      // noreply@ is strong evidence even in Primary.
+      expect(classifier.classifySender(const SenderFacts(address: 'noreply@bank.com', messagesWithKnownSignals: 1, providerCategories: {'primary': 1})).bucket, Bucket.feeds);
+    });
+
+    test('mostly automated subjects send a sender to Feeds; business words between people do not', () {
+      final shop = classifier.classifySender(const SenderFacts(
+        address: 'jessica@shopco.com',
+        messagesWithKnownSignals: 3,
+        subjects: ['Your order #4411 has shipped', 'Receipt for your purchase', 'Lunch?'],
+      ));
+      expect(shop.bucket, Bucket.feeds);
+      expect(shop.category, FeedsCategories.receipt);
+      final agent = classifier.classifySender(const SenderFacts(
+        address: 'dana@agency.com',
+        name: 'Dana Smith',
+        messagesWithKnownSignals: 4,
+        subjects: ['Offer - Cerritos Center', 'Itinerary for Friday', 'Invoice for October', 'Reminder: call at 3'],
+      ));
+      expect(agent.bucket, Bucket.people);
+      // Replies and forwards never count as automated subjects.
+      expect(classifier.classifySender(const SenderFacts(address: 'tom@x.com', messagesWithKnownSignals: 2, subjects: ['Fwd: Your order has shipped', 'Re: Receipt for your purchase'])).bucket, Bucket.people);
+    });
+
+    test('automated display names count only with supporting evidence', () {
+      expect(classifier.classifySender(const SenderFacts(address: 'info@brand.com', name: 'Brand Customer Care', messagesWithKnownSignals: 1)).bucket, Bucket.feeds);
+      expect(classifier.classifySender(const SenderFacts(address: 'pat@brand.com', name: 'The Brand Team', messagesWithKnownSignals: 3)).bucket, Bucket.feeds);
+      expect(classifier.classifySender(const SenderFacts(address: 'pat@brand.com', name: 'The Brand Team', messagesWithKnownSignals: 1)).bucket, Bucket.people);
+      expect(classifier.classifySender(const SenderFacts(address: 'merch@clayfans.com', name: 'Team Clay', messagesWithKnownSignals: 5)).bucket, Bucket.people);
+    });
+
+    test('having written to a sender keeps it in People unless it is plainly a mailer', () {
+      const person = SenderFacts(address: 'pat@vendor.com', userHasWrittenTo: true, messagesWithKnownSignals: 3, providerCategories: {'updates': 3});
+      expect(classifier.classifySender(person).bucket, Bucket.people, reason: 'Gmail alone does not outweigh a conversation');
+      const mailer = SenderFacts(address: 'news@shop.com', userHasWrittenTo: true, messagesWithBulkHeaders: 6, messagesWithKnownSignals: 6, providerCategories: {'updates': 6});
+      final d = classifier.classifySender(mailer);
+      expect(d.bucket, Bucket.feeds);
+      expect(d.reasons, contains('You wrote to this sender, but it is a mailer'));
+      expect(
+        classifier.classifySender(const SenderFacts(address: 'news@shop.com', inAddressBook: true, messagesWithBulkHeaders: 6, messagesWithKnownSignals: 6, providerCategories: {'updates': 6})).bucket,
+        Bucket.people,
+        reason: 'the address book always wins',
+      );
+    });
+
+    test('message category uses the provider label when the subject says nothing', () {
+      expect(classifier.inferCategory(const MessageFacts(from: 'a@b.com', subject: 'Hello there', providerCategory: 'promotions')), FeedsCategories.promotion);
+      expect(classifier.inferCategory(const MessageFacts(from: 'a@b.com', subject: 'Hello there', providerCategory: 'social')), FeedsCategories.social);
+      expect(classifier.inferCategory(const MessageFacts(from: 'a@b.com', subject: 'Hello there', providerCategory: 'updates')), isNull);
     });
   });
 

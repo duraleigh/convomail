@@ -50,6 +50,7 @@ class SyncController {
     unawaited(() async {
       final service = ClassificationService(_db);
       try {
+        await service.upgradeIfNeeded();
         while (await service.classifyPending(limit: 200) > 0) {}
       } catch (_) {
         // Best effort; the sync engine's backfill pass retries.

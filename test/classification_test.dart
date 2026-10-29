@@ -149,6 +149,59 @@ void main() {
       expect((await db.select(db.classificationEvents).get()).where((e) => e.source == 'override'), hasLength(2));
     });
 
+    test('Gmail categories: read per page, stored per message, and decisive for senders without headers', () async {
+      imap.capabilities = const ['X-GM-EXT-1'];
+      final inbox = imap.folder('INBOX');
+      final t = DateTime.now().subtract(const Duration(hours: 1));
+      // A store that sends plain mail from an ordinary address: no list headers, nothing in the address.
+      final a = inbox.add(RemoteMessageHeader(uid: 0, from: const RemoteAddress('mark@vendorco.com', 'Mark at Vendorco'), to: const [me], subject: 'Checking in', date: t));
+      final b = inbox.add(RemoteMessageHeader(uid: 0, from: const RemoteAddress('mark@vendorco.com', 'Mark at Vendorco'), to: const [me], subject: 'New styles', date: t.add(const Duration(minutes: 5))));
+      inbox.categories..[a] = 'updates'..[b] = 'promotions';
+      for (final uid in inbox.messages.keys) {
+        inbox.categories.putIfAbsent(uid, () => 'primary');
+      }
+      await sync();
+      final vendor = await contact('mark@vendorco.com');
+      expect(vendor.classification, 'feeds');
+      expect(vendor.classReasons, contains('Gmail files this sender under'));
+      expect((await contact('sarah@x.com')).classification, 'people');
+      final stored = await (db.select(db.messages)..where((m) => m.fromAddress.equals('mark@vendorco.com'))).get();
+      expect(stored.map((m) => m.providerCategory).toSet(), {'updates', 'promotions'});
+      expect(imap.log.where((l) => l.startsWith('search ') && l.contains('X-GM-RAW')), isNotEmpty);
+      expect(imap.log.where((l) => l.startsWith('search ') && l.contains('Sent')), isEmpty);
+    });
+
+    test('Gmail categories backfill once for mail synced before they were read', () async {
+      await sync();
+      expect((await db.select(db.messages).get()).every((m) => m.providerCategory == null), isTrue, reason: 'not a Gmail server');
+      imap.capabilities = const ['X-GM-EXT-1'];
+      for (final uid in imap.folder('INBOX').messages.keys) {
+        imap.folder('INBOX').categories[uid] = 'updates';
+      }
+      imap.log.clear();
+      await sync();
+      final inbox = await (db.select(db.folders)..where((f) => f.role.equals('inbox'))).getSingle();
+      final inboxMsgs = await (db.select(db.messages)..where((m) => m.folderId.equals(inbox.id))).get();
+      expect(inboxMsgs.every((m) => m.providerCategory == 'updates'), isTrue);
+      final searches = imap.log.where((l) => l.startsWith('search ')).length;
+      imap.log.clear();
+      await sync();
+      expect(imap.log.where((l) => l.startsWith('search ')).length, lessThan(searches), reason: 'nothing left to backfill');
+    });
+
+    test('a classifier upgrade redoes automatic decisions once and keeps manual moves', () async {
+      await sync();
+      final service = ClassificationService(db);
+      await service.moveSender('hello@dailybrief.com', Bucket.people);
+      expect(await service.upgradeIfNeeded(), isTrue);
+      expect((await contact('noreply@bank.com')).classReasons, isEmpty);
+      expect((await contact('hello@dailybrief.com')).classReasons, 'Moved by you');
+      expect(await service.upgradeIfNeeded(), isFalse, reason: 'only once');
+      while (await service.classifyPending() > 0) {}
+      expect((await contact('noreply@bank.com')).classification, 'feeds');
+      expect((await contact('hello@dailybrief.com')).classification, 'people');
+    });
+
     test('signals backfill: pre-M8 messages (no signals stored) get them fetched and their senders classified', () async {
       await sync();
       // Simulate rows synced before M8: wipe signals and classification.

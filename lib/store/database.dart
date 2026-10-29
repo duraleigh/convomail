@@ -135,6 +135,11 @@ class Messages extends Table {
   /// Encoded [BulkSignals]; null until the list headers were fetched.
   TextColumn get bulkSignals => text().nullable()();
 
+  /// The provider's own inbox category when it exposes one (Gmail:
+  /// `primary`, `updates`, `promotions`, `social`, `forums`); null until
+  /// read, `''` when the provider has none for this message.
+  TextColumn get providerCategory => text().nullable()();
+
   /// `people` or `feeds` for this message (sender bucket with per-message
   /// exceptions, spec 4.11).
   TextColumn get classification => text().withDefault(const Constant('people'))();
@@ -172,6 +177,10 @@ class MessageParticipants extends Table {
 class Contacts extends Table {
   TextColumn get key => text()();
   TextColumn get displayName => text().withDefault(const Constant(''))();
+
+  /// A name the user gave this sender; shown instead of [displayName]
+  /// everywhere and kept for all future mail from any of its addresses.
+  TextColumn get userLabel => text().nullable()();
   TextColumn get photoPath => text().nullable()();
   BoolColumn get isMe => boolean().withDefault(const Constant(false))();
   BoolColumn get inAddressBook => boolean().withDefault(const Constant(false))();
@@ -192,6 +201,11 @@ class Contacts extends Table {
 
   @override
   Set<Column> get primaryKey => {key};
+}
+
+extension ContactShownName on Contact {
+  /// The user's label, else the name from the headers, else the address.
+  String get shownName => (userLabel?.trim().isNotEmpty ?? false) ? userLabel!.trim() : (displayName.isNotEmpty ? displayName : key);
 }
 
 /// Address → contact mapping (many addresses, one person).
@@ -488,7 +502,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -584,6 +598,11 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await customStatement('CREATE INDEX IF NOT EXISTS idx_reminders_due ON reminders(due_at)');
             await _seedBoardColumns();
           }
+          if (from < 10) {
+            await m.addColumn(messages, messages.providerCategory);
+            await m.addColumn(contacts, contacts.userLabel);
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_provider_category ON messages(folder_id, provider_category)');
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -639,6 +658,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_key)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_tracker_message ON tracker_events(message_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_provider_category ON messages(folder_id, provider_category)');
   }
 
   /// Triggers that mark People rows stale whenever anything that feeds a
