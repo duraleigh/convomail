@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -13,15 +14,147 @@ typedef HtmlRendererBuilder = Widget Function(BuildContext context, String html,
 
 final htmlRendererProvider = Provider<HtmlRendererBuilder>((ref) {
   if (Platform.isWindows) {
+    WebViewPool.instance.warm();
     return (context, html, {maxHeight = 1200}) => WebView2Body(html: html, maxHeight: maxHeight);
   }
   return (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html);
 });
 
-/// Renders in an embedded WebView2. Navigation is disabled: clicks on links
-/// are intercepted in the page and opened in the system browser. The
-/// document height is measured after load so the view sizes to content,
-/// capped at [maxHeight] with internal scrolling beyond that.
+/// Opens a link from an email in the system browser, for the schemes mail
+/// uses. Anything else is ignored.
+void openMailLink(String href) {
+  final uri = Uri.tryParse(href);
+  if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http' || uri.scheme == 'mailto' || uri.scheme == 'tel')) {
+    launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+/// One WebView2 kept for reuse. Its message and address streams can be
+/// listened to only once, so they are listened to here and passed to
+/// whichever email is using it.
+class PooledWebView {
+  PooledWebView._(this.controller);
+  final WebviewController controller;
+  void Function(dynamic message)? onMessage;
+  void Function(String url)? onUrl;
+}
+
+/// Starting a WebView2 takes a noticeable moment, so two are kept started
+/// and ready, and each one goes back to the pool when its email closes.
+/// Opening an email then only loads its page.
+class WebViewPool {
+  WebViewPool._();
+  static final instance = WebViewPool._();
+
+  /// Ready views to keep on hand.
+  static const keep = 2;
+
+  final List<PooledWebView> _ready = [];
+  int _starting = 0;
+  final List<Completer<PooledWebView>> _waiting = [];
+
+  static const _script = r'''
+    (function(){
+      document.addEventListener('click', function(e){
+        var a = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (!a) return;
+        e.preventDefault();
+        var href = a.getAttribute('href') || '';
+        if (href) window.chrome.webview.postMessage(JSON.stringify({type:'link', href: href}));
+      }, true);
+      function height(){ return Math.ceil(document.documentElement.scrollHeight); }
+      // "ready" goes once, after the page has laid out and painted twice,
+      // so the view is shown only when it already looks right.
+      function ready(){
+        requestAnimationFrame(function(){ requestAnimationFrame(function(){
+          window.chrome.webview.postMessage(JSON.stringify({type:'ready', h: height()}));
+          var last = height();
+          new ResizeObserver(function(){
+            var h = height();
+            if (Math.abs(h - last) > 16) { last = h; window.chrome.webview.postMessage(JSON.stringify({type:'height', h: h})); }
+          }).observe(document.documentElement);
+        }); });
+      }
+      if (document.readyState === 'complete') { ready(); } else { window.addEventListener('load', ready); }
+    })();
+  ''';
+
+  /// Starts views until [keep] are ready or starting.
+  void warm() {
+    while (_ready.length + _starting < keep) {
+      _starting++;
+      unawaited(_create().then((v) {
+        _starting--;
+        _hand(v);
+      }, onError: (Object _) {
+        _starting--;
+      }));
+    }
+  }
+
+  void _hand(PooledWebView v) {
+    if (_waiting.isNotEmpty) {
+      _waiting.removeAt(0).complete(v);
+    } else {
+      _ready.add(v);
+    }
+  }
+
+  Future<PooledWebView> _create() async {
+    final c = WebviewController();
+    await c.initialize();
+    await c.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
+    await c.addScriptToExecuteOnDocumentCreated(_script);
+    final v = PooledWebView._(c);
+    c.webMessage.listen((m) => v.onMessage?.call(m));
+    c.url.listen((u) => v.onUrl?.call(u));
+    return v;
+  }
+
+  /// A ready view, at once when one is on hand.
+  Future<PooledWebView> take() {
+    final completer = Completer<PooledWebView>();
+    if (_ready.isNotEmpty) {
+      completer.complete(_ready.removeLast());
+    } else {
+      _waiting.add(completer);
+      if (_starting == 0) {
+        _starting++;
+        unawaited(_create().then((v) {
+          _starting--;
+          _hand(v);
+        }, onError: (Object e) {
+          _starting--;
+          if (!completer.isCompleted) {
+            _waiting.remove(completer);
+            completer.completeError(e);
+          }
+        }));
+      }
+    }
+    // Replace what was taken, in the background.
+    Future<void>.microtask(warm);
+    return completer.future;
+  }
+
+  /// Back from a closed email: blanked and kept, or closed when enough are
+  /// on hand.
+  void giveBack(PooledWebView v) {
+    v.onMessage = null;
+    v.onUrl = null;
+    if (_ready.length >= keep) {
+      unawaited(v.controller.dispose());
+      return;
+    }
+    unawaited(v.controller.loadStringContent('<!DOCTYPE html><html><body></body></html>').then((_) => _hand(v), onError: (Object _) {}));
+  }
+}
+
+/// Renders in an embedded WebView2 taken from [WebViewPool]. Navigation is
+/// disabled: link clicks are opened in the system browser. Until the page
+/// has painted and measured itself, a plain cover in the card's colour sits
+/// over it at a steady height, so there is no black box and no jumping;
+/// then the email appears once, at its own height.
 class WebView2Body extends StatefulWidget {
   const WebView2Body({super.key, required this.html, this.maxHeight = 1200});
   final String html;
@@ -32,58 +165,69 @@ class WebView2Body extends StatefulWidget {
 }
 
 class _WebView2BodyState extends State<WebView2Body> {
-  final _controller = WebviewController();
-  final _subs = <StreamSubscription<dynamic>>[];
-  double _height = 240;
-  bool _ready = false;
+  PooledWebView? _view;
+  double _height = 160;
+  bool _shown = false;
+  bool _slow = false;
   String? _error;
-
-  static const _interceptScript = r'''
-    (function(){
-      document.addEventListener('click', function(e){
-        var a = e.target && e.target.closest ? e.target.closest('a') : null;
-        if (!a) return;
-        e.preventDefault();
-        var href = a.getAttribute('href') || '';
-        if (href) window.chrome.webview.postMessage(JSON.stringify({type:'link', href: href}));
-      }, true);
-      function report(){ window.chrome.webview.postMessage(JSON.stringify({type:'height', h: document.documentElement.scrollHeight})); }
-      window.addEventListener('load', report);
-      new ResizeObserver(report).observe(document.documentElement);
-      setTimeout(report, 50); setTimeout(report, 400);
-    })();
-  ''';
+  Timer? _fallback;
+  Timer? _slowTimer;
+  bool _disposed = false;
 
   @override
   void initState() {
     super.initState();
-    _init();
+    // A quiet line, only if loading is unusually slow.
+    _slowTimer = Timer(const Duration(milliseconds: 600), () {
+      if (mounted && !_shown) setState(() => _slow = true);
+    });
+    _open();
   }
 
-  Future<void> _init() async {
+  Future<void> _open() async {
     try {
-      await _controller.initialize();
-      await _controller.setBackgroundColor(Colors.white);
-      await _controller.setPopupWindowPolicy(WebviewPopupWindowPolicy.deny);
-      await _controller.addScriptToExecuteOnDocumentCreated(_interceptScript);
-      _subs.add(_controller.webMessage.listen(_onMessage));
-      _subs.add(_controller.url.listen((u) {
+      final v = await WebViewPool.instance.take();
+      if (_disposed) {
+        WebViewPool.instance.giveBack(v);
+        return;
+      }
+      v.onMessage = _onMessage;
+      v.onUrl = (u) {
         // Any navigation away from our content is refused: reload ours.
-        if (u.isNotEmpty && !u.startsWith('about:') && !u.startsWith('data:')) {
-          _controller.loadStringContent(widget.html);
-        }
-      }));
-      await _controller.loadStringContent(widget.html);
-      if (mounted) setState(() => _ready = true);
+        if (u.isNotEmpty && !u.startsWith('about:') && !u.startsWith('data:')) v.controller.loadStringContent(widget.html);
+      };
+      if (!mounted) return;
+      await v.controller.setBackgroundColor(Theme.of(context).colorScheme.surfaceContainerLowest);
+      await v.controller.loadStringContent(widget.html);
+      if (!mounted) return;
+      setState(() => _view = v);
+      // Shown regardless after a while, should the page never report back.
+      _fallback = Timer(const Duration(milliseconds: 2500), () => _reveal(null));
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     }
   }
 
+  void _reveal(double? h) {
+    if (!mounted || _shown) return;
+    setState(() {
+      if (h != null) _height = (h + 8).clamp(40, widget.maxHeight);
+    });
+    // The view takes its new size first; the cover lifts a frame later, so
+    // the resize itself is never seen.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future<void>.delayed(const Duration(milliseconds: 40), () {
+          if (mounted) setState(() => _shown = true);
+        });
+      });
+    });
+  }
+
   @override
   void didUpdateWidget(WebView2Body old) {
     super.didUpdateWidget(old);
-    if (old.html != widget.html && _ready) _controller.loadStringContent(widget.html);
+    if (old.html != widget.html) _view?.controller.loadStringContent(widget.html);
   }
 
   void _onMessage(dynamic raw) {
@@ -91,36 +235,105 @@ class _WebView2BodyState extends State<WebView2Body> {
       final msg = raw is String ? jsonDecode(raw) : raw;
       if (msg is! Map) return;
       switch (msg['type']) {
+        case 'ready':
+          _reveal((msg['h'] as num).toDouble());
         case 'height':
-          final h = (msg['h'] as num).toDouble() + 8;
-          if (mounted && (h - _height).abs() > 4) setState(() => _height = h.clamp(80, widget.maxHeight));
+          final h = ((msg['h'] as num).toDouble() + 8).clamp(40.0, widget.maxHeight);
+          if (mounted && (h - _height).abs() > 16) setState(() => _height = h);
         case 'link':
-          final href = msg['href'] as String? ?? '';
-          final uri = Uri.tryParse(href);
-          if (uri != null && (uri.scheme == 'https' || uri.scheme == 'http' || uri.scheme == 'mailto' || uri.scheme == 'tel')) {
-            launchUrl(uri, mode: LaunchMode.externalApplication);
-          }
+          openMailLink(msg['href'] as String? ?? '');
       }
     } catch (_) {}
   }
 
   @override
   void dispose() {
-    for (final s in _subs) {
-      s.cancel();
-    }
-    _controller.dispose();
+    _disposed = true;
+    _fallback?.cancel();
+    _slowTimer?.cancel();
+    final v = _view;
+    if (v != null) WebViewPool.instance.giveBack(v);
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     if (_error != null) return PlainHtmlFallback(html: widget.html, note: 'WebView2 is not available on this system ($_error). Showing text only.');
-    if (!_ready) return const SizedBox(height: 120, child: Center(child: CircularProgressIndicator()));
+    final scheme = Theme.of(context).colorScheme;
+    final view = _view;
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: SizedBox(height: _height, child: Webview(_controller)),
+      child: SizedBox(
+        height: _height,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (view != null) Webview(view.controller),
+            IgnorePointer(
+              ignoring: _shown,
+              child: AnimatedOpacity(
+                opacity: _shown ? 0 : 1,
+                duration: const Duration(milliseconds: 120),
+                child: Container(
+                  color: scheme.surfaceContainerLowest,
+                  alignment: Alignment.topLeft,
+                  padding: const EdgeInsets.all(12),
+                  child: _slow ? SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 2, color: scheme.primary.withValues(alpha: 0.6))) : null,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+}
+
+/// A plain-text email drawn directly, with no browser engine: it appears at
+/// once. Links can be clicked and search terms are marked.
+class PlainTextBody extends StatelessWidget {
+  const PlainTextBody({super.key, required this.text, this.highlight = const []});
+  final String text;
+  final List<String> highlight;
+
+  static final _link = RegExp(r'(https?://[^\s<>"]+[^\s<>".,;:!?)\]])|([\w.+-]+@[\w-]+\.[\w.-]+\w)', caseSensitive: false);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final base = theme.textTheme.bodyMedium!;
+    final linkStyle = base.copyWith(color: theme.colorScheme.primary, decoration: TextDecoration.underline);
+    final markStyle = TextStyle(backgroundColor: theme.colorScheme.tertiaryContainer, color: theme.colorScheme.onTertiaryContainer);
+    final body = text.replaceAll('\r\n', '\n').trimRight();
+    final spans = <InlineSpan>[];
+    var at = 0;
+    for (final m in _link.allMatches(body)) {
+      if (m.start > at) spans.addAll(_marked(body.substring(at, m.start), markStyle));
+      final target = m.group(0)!;
+      spans.add(TextSpan(
+        text: target,
+        style: linkStyle,
+        recognizer: TapGestureRecognizer()..onTap = () => openMailLink(m.group(1) != null ? target : 'mailto:$target'),
+      ));
+      at = m.end;
+    }
+    if (at < body.length) spans.addAll(_marked(body.substring(at), markStyle));
+    return SelectableText.rich(TextSpan(style: base, children: spans), key: const ValueKey('plain-body'));
+  }
+
+  List<InlineSpan> _marked(String s, TextStyle mark) {
+    final terms = [for (final t in highlight) if (t.trim().isNotEmpty) RegExp.escape(t.trim())];
+    if (terms.isEmpty) return [TextSpan(text: s)];
+    final re = RegExp(terms.join('|'), caseSensitive: false);
+    final out = <InlineSpan>[];
+    var at = 0;
+    for (final m in re.allMatches(s)) {
+      if (m.start > at) out.add(TextSpan(text: s.substring(at, m.start)));
+      out.add(TextSpan(text: m.group(0), style: mark));
+      at = m.end;
+    }
+    if (at < s.length) out.add(TextSpan(text: s.substring(at)));
+    return out;
   }
 }
 

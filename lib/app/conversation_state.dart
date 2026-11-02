@@ -59,6 +59,19 @@ final messageBodyProvider = FutureProvider.family<Message, int>((ref, messageId)
 /// retries would keep the spinner up, each one possibly a full timeout.
 Duration? _noAutomaticRetry(int count, Object error) => null;
 
+/// Downloads the bodies of a chat's newest messages ahead of time, one after
+/// another, so opening one shows it at once. Failures are left for the
+/// message's own Retry.
+Future<void> prefetchBodies(Future<Message> Function(int messageId) load, Iterable<Message> messages, {int limit = 8}) async {
+  for (final m in messages.where((m) => m.bodyFetchedAt == null).take(limit)) {
+    try {
+      await load(m.id);
+    } catch (_) {
+      // Shown on the message if the user opens it.
+    }
+  }
+}
+
 /// Attachments of a message.
 final messageAttachmentsProvider = StreamProvider.family<List<Attachment>, int>((ref, messageId) {
   final db = ref.watch(databaseProvider);
@@ -68,10 +81,13 @@ final messageAttachmentsProvider = StreamProvider.family<List<Attachment>, int>(
 /// Rendered, sanitized HTML for a message plus what was blocked. Records
 /// tracker events (spec 4.13) as a side effect of rendering.
 class RenderedBody {
-  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText});
+  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = ''});
   final String html;
   final SanitizedHtml sanitized;
   final bool isPlainText;
+
+  /// The message's text, for plain-text mail drawn without a browser.
+  final String text;
 }
 
 final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, messageId) async {
@@ -92,7 +108,7 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   final highlight = ref.watch(conversationHighlightProvider);
   final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid), highlight: highlight);
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
-  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain);
+  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: m.bodyText ?? '');
 }, retry: _noAutomaticRetry);
 
 /// Thread messages across all participants (spec 4.20), oldest first.

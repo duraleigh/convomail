@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/account_scope.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
+import '../../../app/search_state.dart';
 import '../../../domain/classifier.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
@@ -87,7 +90,9 @@ class MessageCard extends ConsumerWidget {
         ),
         const SizedBox(height: AppSpace.md),
         body.when(
-          loading: () => const Padding(padding: EdgeInsets.symmetric(vertical: 24), child: Center(child: CircularProgressIndicator())),
+          // A steady blank of about an email's height, with a quiet bar only
+          // if the download takes a while: no spinner flashing by.
+          loading: () => const _BodyPlaceholder(),
           error: (e, _) => Container(
             padding: const EdgeInsets.all(AppSpace.md),
             decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(AppShapes.md)),
@@ -108,7 +113,10 @@ class MessageCard extends ConsumerWidget {
             children: [
               if (r.sanitized.hasRemoteContent) _PrivacyStrip(message: message, rendered: r),
               if (r.sanitized.hasRemoteContent) const SizedBox(height: AppSpace.sm),
-              ref.watch(htmlRendererProvider)(context, r.html),
+              if (r.isPlainText && !r.sanitized.hasRemoteContent)
+                PlainTextBody(text: r.text, highlight: ref.watch(conversationHighlightProvider))
+              else
+                ref.watch(htmlRendererProvider)(context, r.html),
             ],
           ),
         ),
@@ -303,4 +311,39 @@ class _PrivacyStripState extends ConsumerState<_PrivacyStrip> {
       ),
     );
   }
+}
+
+class _BodyPlaceholder extends StatefulWidget {
+  const _BodyPlaceholder();
+
+  @override
+  State<_BodyPlaceholder> createState() => _BodyPlaceholderState();
+}
+
+class _BodyPlaceholderState extends State<_BodyPlaceholder> {
+  bool _slow = false;
+  late final Timer _timer = Timer(const Duration(milliseconds: 600), () {
+    if (mounted) setState(() => _slow = true);
+  });
+
+  @override
+  void initState() {
+    super.initState();
+    _timer;
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 160,
+        child: Align(
+          alignment: Alignment.topLeft,
+          child: _slow ? SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 2, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6))) : null,
+        ),
+      );
 }

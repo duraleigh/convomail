@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,6 +53,8 @@ class ConversationPane extends ConsumerWidget {
       final key = ref.read(selectedRowProvider);
       if (list == null || list.isEmpty || key == null || ref.read(_newestOpenedForProvider) == key) return;
       ref.read(_newestOpenedForProvider.notifier).set(key);
+      // The rest of the chat's recent mail downloads behind it.
+      unawaited(prefetchBodies((id) => ref.read(messageBodyProvider(id).future), list.skip(1)));
       final newest = list.first;
       ref.read(expandedMessagesProvider.notifier).expand(newest.id);
       if (!newest.isSeen && !newest.isFromMe) ref.read(rowActionsProvider).markMessageRead(newest.id);
