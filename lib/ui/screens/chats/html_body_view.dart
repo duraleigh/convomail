@@ -227,7 +227,14 @@ class _WebView2BodyState extends State<WebView2Body> {
   @override
   void didUpdateWidget(WebView2Body old) {
     super.didUpdateWidget(old);
-    if (old.html != widget.html) _view?.controller.loadStringContent(widget.html);
+    // New content (a picture arrived, images allowed): covered again until it
+    // has painted, so the reload is never seen as a flash.
+    if (old.html != widget.html && _view != null) {
+      setState(() => _shown = false);
+      _fallback?.cancel();
+      _fallback = Timer(const Duration(milliseconds: 2500), () => _reveal(null));
+      _view!.controller.loadStringContent(widget.html);
+    }
   }
 
   void _onMessage(dynamic raw) {

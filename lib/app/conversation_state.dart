@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/html_sanitizer.dart';
+import '../store/attachment_queries.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
@@ -99,11 +100,25 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   final source = isPlain ? plainTextToHtml(m.bodyText ?? '') : m.bodyHtml!;
 
   // Inline (cid:) images come from the message itself, never the network:
-  // downloaded parts are embedded as data URIs; missing ones are fetched
-  // and the attachments stream re-renders this provider when they land.
-  final inline = (ref.watch(messageAttachmentsProvider(messageId)).value ?? const <Attachment>[]).where((a) => a.isInline).toList();
+  // downloaded parts are embedded as data URIs. Missing ones are fetched
+  // first, briefly, so the email is drawn once with its pictures rather than
+  // drawn, then reloaded when they arrive (a visible flash).
+  var inline = (await ref.watch(messageAttachmentsProvider(messageId).future)).where((a) => a.isInline).toList();
   if (inline.any((a) => a.localPath == null)) {
-    unawaited(ref.read(attachmentServiceProvider).downloadInline(messageId));
+    // At most a few seconds; past that it is drawn without them, and the
+    // attachments stream redraws when they land. The timer goes with the
+    // email if it closes first.
+    final done = Completer<void>();
+    final limit = Timer(const Duration(seconds: 4), () {
+      if (!done.isCompleted) done.complete();
+    });
+    ref.onDispose(limit.cancel);
+    unawaited(ref.read(attachmentServiceProvider).downloadInline(messageId).then((_) {}, onError: (Object _) {}).whenComplete(() {
+      if (!done.isCompleted) done.complete();
+    }));
+    await done.future;
+    limit.cancel();
+    inline = (await ref.read(databaseProvider).attachmentsForMessage(messageId)).where((a) => a.isInline).toList();
   }
   final highlight = ref.watch(conversationHighlightProvider);
   final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid), highlight: highlight);

@@ -89,7 +89,10 @@ class MessageCard extends ConsumerWidget {
           ],
         ),
         const SizedBox(height: AppSpace.md),
+        // While the email is worked out again (marked read, say), the one on
+        // screen stays: a reload never blanks it.
         body.when(
+          skipLoadingOnReload: true,
           // A steady blank of about an email's height, with a quiet bar only
           // if the download takes a while: no spinner flashing by.
           loading: () => const _BodyPlaceholder(),
