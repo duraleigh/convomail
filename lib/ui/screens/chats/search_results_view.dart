@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/conversation_state.dart';
+import '../../../app/destinations.dart';
 import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../app/settings.dart';
@@ -79,7 +80,8 @@ class SearchResultsView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
-        Padding(
+        // Searching from Feeds always covers Feeds.
+        if (ref.watch(inboxModeProvider) != InboxMode.feeds) Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 0, 8),
           child: Row(
             children: [

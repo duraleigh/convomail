@@ -2637,6 +2637,33 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _timelyCheckedAtMeta = const VerificationMeta(
+    'timelyCheckedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> timelyCheckedAt =
+      GeneratedColumn<DateTime>(
+        'timely_checked_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _hasTimelyItemMeta = const VerificationMeta(
+    'hasTimelyItem',
+  );
+  @override
+  late final GeneratedColumn<bool> hasTimelyItem = GeneratedColumn<bool>(
+    'has_timely_item',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("has_timely_item" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _subjectMeta = const VerificationMeta(
     'subject',
   );
@@ -2977,6 +3004,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     messageId,
     inReplyTo,
     referencesHeader,
+    timelyCheckedAt,
+    hasTimelyItem,
     subject,
     fromAddress,
     fromName,
@@ -3062,6 +3091,24 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         referencesHeader.isAcceptableOrUnknown(
           data['references_header']!,
           _referencesHeaderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('timely_checked_at')) {
+      context.handle(
+        _timelyCheckedAtMeta,
+        timelyCheckedAt.isAcceptableOrUnknown(
+          data['timely_checked_at']!,
+          _timelyCheckedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('has_timely_item')) {
+      context.handle(
+        _hasTimelyItemMeta,
+        hasTimelyItem.isAcceptableOrUnknown(
+          data['has_timely_item']!,
+          _hasTimelyItemMeta,
         ),
       );
     }
@@ -3304,6 +3351,14 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}references_header'],
       ),
+      timelyCheckedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}timely_checked_at'],
+      ),
+      hasTimelyItem: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}has_timely_item'],
+      )!,
       subject: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}subject'],
@@ -3431,6 +3486,11 @@ class Message extends DataClass implements Insertable<Message> {
 
   /// Space-separated Message-IDs from the References header.
   final String? referencesHeader;
+
+  /// When this message was read for timely information (spec 4.20), and
+  /// whether it held any.
+  final DateTime? timelyCheckedAt;
+  final bool hasTimelyItem;
   final String subject;
 
   /// Normalized sender address (see IdentityResolver.normalize).
@@ -3492,6 +3552,8 @@ class Message extends DataClass implements Insertable<Message> {
     this.messageId,
     this.inReplyTo,
     this.referencesHeader,
+    this.timelyCheckedAt,
+    required this.hasTimelyItem,
     required this.subject,
     required this.fromAddress,
     required this.fromName,
@@ -3536,6 +3598,10 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || referencesHeader != null) {
       map['references_header'] = Variable<String>(referencesHeader);
     }
+    if (!nullToAbsent || timelyCheckedAt != null) {
+      map['timely_checked_at'] = Variable<DateTime>(timelyCheckedAt);
+    }
+    map['has_timely_item'] = Variable<bool>(hasTimelyItem);
     map['subject'] = Variable<String>(subject);
     map['from_address'] = Variable<String>(fromAddress);
     map['from_name'] = Variable<String>(fromName);
@@ -3605,6 +3671,10 @@ class Message extends DataClass implements Insertable<Message> {
       referencesHeader: referencesHeader == null && nullToAbsent
           ? const Value.absent()
           : Value(referencesHeader),
+      timelyCheckedAt: timelyCheckedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(timelyCheckedAt),
+      hasTimelyItem: Value(hasTimelyItem),
       subject: Value(subject),
       fromAddress: Value(fromAddress),
       fromName: Value(fromName),
@@ -3670,6 +3740,8 @@ class Message extends DataClass implements Insertable<Message> {
       messageId: serializer.fromJson<String?>(json['messageId']),
       inReplyTo: serializer.fromJson<String?>(json['inReplyTo']),
       referencesHeader: serializer.fromJson<String?>(json['referencesHeader']),
+      timelyCheckedAt: serializer.fromJson<DateTime?>(json['timelyCheckedAt']),
+      hasTimelyItem: serializer.fromJson<bool>(json['hasTimelyItem']),
       subject: serializer.fromJson<String>(json['subject']),
       fromAddress: serializer.fromJson<String>(json['fromAddress']),
       fromName: serializer.fromJson<String>(json['fromName']),
@@ -3710,6 +3782,8 @@ class Message extends DataClass implements Insertable<Message> {
       'messageId': serializer.toJson<String?>(messageId),
       'inReplyTo': serializer.toJson<String?>(inReplyTo),
       'referencesHeader': serializer.toJson<String?>(referencesHeader),
+      'timelyCheckedAt': serializer.toJson<DateTime?>(timelyCheckedAt),
+      'hasTimelyItem': serializer.toJson<bool>(hasTimelyItem),
       'subject': serializer.toJson<String>(subject),
       'fromAddress': serializer.toJson<String>(fromAddress),
       'fromName': serializer.toJson<String>(fromName),
@@ -3748,6 +3822,8 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> messageId = const Value.absent(),
     Value<String?> inReplyTo = const Value.absent(),
     Value<String?> referencesHeader = const Value.absent(),
+    Value<DateTime?> timelyCheckedAt = const Value.absent(),
+    bool? hasTimelyItem,
     String? subject,
     String? fromAddress,
     String? fromName,
@@ -3785,6 +3861,10 @@ class Message extends DataClass implements Insertable<Message> {
     referencesHeader: referencesHeader.present
         ? referencesHeader.value
         : this.referencesHeader,
+    timelyCheckedAt: timelyCheckedAt.present
+        ? timelyCheckedAt.value
+        : this.timelyCheckedAt,
+    hasTimelyItem: hasTimelyItem ?? this.hasTimelyItem,
     subject: subject ?? this.subject,
     fromAddress: fromAddress ?? this.fromAddress,
     fromName: fromName ?? this.fromName,
@@ -3832,6 +3912,12 @@ class Message extends DataClass implements Insertable<Message> {
       referencesHeader: data.referencesHeader.present
           ? data.referencesHeader.value
           : this.referencesHeader,
+      timelyCheckedAt: data.timelyCheckedAt.present
+          ? data.timelyCheckedAt.value
+          : this.timelyCheckedAt,
+      hasTimelyItem: data.hasTimelyItem.present
+          ? data.hasTimelyItem.value
+          : this.hasTimelyItem,
       subject: data.subject.present ? data.subject.value : this.subject,
       fromAddress: data.fromAddress.present
           ? data.fromAddress.value
@@ -3898,6 +3984,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('messageId: $messageId, ')
           ..write('inReplyTo: $inReplyTo, ')
           ..write('referencesHeader: $referencesHeader, ')
+          ..write('timelyCheckedAt: $timelyCheckedAt, ')
+          ..write('hasTimelyItem: $hasTimelyItem, ')
           ..write('subject: $subject, ')
           ..write('fromAddress: $fromAddress, ')
           ..write('fromName: $fromName, ')
@@ -3938,6 +4026,8 @@ class Message extends DataClass implements Insertable<Message> {
     messageId,
     inReplyTo,
     referencesHeader,
+    timelyCheckedAt,
+    hasTimelyItem,
     subject,
     fromAddress,
     fromName,
@@ -3977,6 +4067,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.messageId == this.messageId &&
           other.inReplyTo == this.inReplyTo &&
           other.referencesHeader == this.referencesHeader &&
+          other.timelyCheckedAt == this.timelyCheckedAt &&
+          other.hasTimelyItem == this.hasTimelyItem &&
           other.subject == this.subject &&
           other.fromAddress == this.fromAddress &&
           other.fromName == this.fromName &&
@@ -4014,6 +4106,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> messageId;
   final Value<String?> inReplyTo;
   final Value<String?> referencesHeader;
+  final Value<DateTime?> timelyCheckedAt;
+  final Value<bool> hasTimelyItem;
   final Value<String> subject;
   final Value<String> fromAddress;
   final Value<String> fromName;
@@ -4049,6 +4143,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.messageId = const Value.absent(),
     this.inReplyTo = const Value.absent(),
     this.referencesHeader = const Value.absent(),
+    this.timelyCheckedAt = const Value.absent(),
+    this.hasTimelyItem = const Value.absent(),
     this.subject = const Value.absent(),
     this.fromAddress = const Value.absent(),
     this.fromName = const Value.absent(),
@@ -4085,6 +4181,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.messageId = const Value.absent(),
     this.inReplyTo = const Value.absent(),
     this.referencesHeader = const Value.absent(),
+    this.timelyCheckedAt = const Value.absent(),
+    this.hasTimelyItem = const Value.absent(),
     this.subject = const Value.absent(),
     this.fromAddress = const Value.absent(),
     this.fromName = const Value.absent(),
@@ -4123,6 +4221,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? messageId,
     Expression<String>? inReplyTo,
     Expression<String>? referencesHeader,
+    Expression<DateTime>? timelyCheckedAt,
+    Expression<bool>? hasTimelyItem,
     Expression<String>? subject,
     Expression<String>? fromAddress,
     Expression<String>? fromName,
@@ -4159,6 +4259,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (messageId != null) 'message_id': messageId,
       if (inReplyTo != null) 'in_reply_to': inReplyTo,
       if (referencesHeader != null) 'references_header': referencesHeader,
+      if (timelyCheckedAt != null) 'timely_checked_at': timelyCheckedAt,
+      if (hasTimelyItem != null) 'has_timely_item': hasTimelyItem,
       if (subject != null) 'subject': subject,
       if (fromAddress != null) 'from_address': fromAddress,
       if (fromName != null) 'from_name': fromName,
@@ -4197,6 +4299,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? messageId,
     Value<String?>? inReplyTo,
     Value<String?>? referencesHeader,
+    Value<DateTime?>? timelyCheckedAt,
+    Value<bool>? hasTimelyItem,
     Value<String>? subject,
     Value<String>? fromAddress,
     Value<String>? fromName,
@@ -4233,6 +4337,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       messageId: messageId ?? this.messageId,
       inReplyTo: inReplyTo ?? this.inReplyTo,
       referencesHeader: referencesHeader ?? this.referencesHeader,
+      timelyCheckedAt: timelyCheckedAt ?? this.timelyCheckedAt,
+      hasTimelyItem: hasTimelyItem ?? this.hasTimelyItem,
       subject: subject ?? this.subject,
       fromAddress: fromAddress ?? this.fromAddress,
       fromName: fromName ?? this.fromName,
@@ -4286,6 +4392,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     }
     if (referencesHeader.present) {
       map['references_header'] = Variable<String>(referencesHeader.value);
+    }
+    if (timelyCheckedAt.present) {
+      map['timely_checked_at'] = Variable<DateTime>(timelyCheckedAt.value);
+    }
+    if (hasTimelyItem.present) {
+      map['has_timely_item'] = Variable<bool>(hasTimelyItem.value);
     }
     if (subject.present) {
       map['subject'] = Variable<String>(subject.value);
@@ -4381,6 +4493,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('messageId: $messageId, ')
           ..write('inReplyTo: $inReplyTo, ')
           ..write('referencesHeader: $referencesHeader, ')
+          ..write('timelyCheckedAt: $timelyCheckedAt, ')
+          ..write('hasTimelyItem: $hasTimelyItem, ')
           ..write('subject: $subject, ')
           ..write('fromAddress: $fromAddress, ')
           ..write('fromName: $fromName, ')
@@ -14100,6 +14214,1321 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
   }
 }
 
+class $TimelyItemsTable extends TimelyItems
+    with TableInfo<$TimelyItemsTable, TimelyItem> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $TimelyItemsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _typeMeta = const VerificationMeta('type');
+  @override
+  late final GeneratedColumn<String> type = GeneratedColumn<String>(
+    'type',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dedupeKeyMeta = const VerificationMeta(
+    'dedupeKey',
+  );
+  @override
+  late final GeneratedColumn<String> dedupeKey = GeneratedColumn<String>(
+    'dedupe_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<int> messageId = GeneratedColumn<int>(
+    'message_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES messages (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _accountIdMeta = const VerificationMeta(
+    'accountId',
+  );
+  @override
+  late final GeneratedColumn<int> accountId = GeneratedColumn<int>(
+    'account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contactKeyMeta = const VerificationMeta(
+    'contactKey',
+  );
+  @override
+  late final GeneratedColumn<String> contactKey = GeneratedColumn<String>(
+    'contact_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _detailMeta = const VerificationMeta('detail');
+  @override
+  late final GeneratedColumn<String> detail = GeneratedColumn<String>(
+    'detail',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _startsAtMeta = const VerificationMeta(
+    'startsAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startsAt = GeneratedColumn<DateTime>(
+    'starts_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endsAtMeta = const VerificationMeta('endsAt');
+  @override
+  late final GeneratedColumn<DateTime> endsAt = GeneratedColumn<DateTime>(
+    'ends_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _showFromMeta = const VerificationMeta(
+    'showFrom',
+  );
+  @override
+  late final GeneratedColumn<DateTime> showFrom = GeneratedColumn<DateTime>(
+    'show_from',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _hideAfterMeta = const VerificationMeta(
+    'hideAfter',
+  );
+  @override
+  late final GeneratedColumn<DateTime> hideAfter = GeneratedColumn<DateTime>(
+    'hide_after',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _actionUrlMeta = const VerificationMeta(
+    'actionUrl',
+  );
+  @override
+  late final GeneratedColumn<String> actionUrl = GeneratedColumn<String>(
+    'action_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _actionLabelMeta = const VerificationMeta(
+    'actionLabel',
+  );
+  @override
+  late final GeneratedColumn<String> actionLabel = GeneratedColumn<String>(
+    'action_label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _codeMeta = const VerificationMeta('code');
+  @override
+  late final GeneratedColumn<String> code = GeneratedColumn<String>(
+    'code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _dismissedAtMeta = const VerificationMeta(
+    'dismissedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> dismissedAt = GeneratedColumn<DateTime>(
+    'dismissed_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    type,
+    dedupeKey,
+    messageId,
+    accountId,
+    contactKey,
+    title,
+    detail,
+    startsAt,
+    endsAt,
+    showFrom,
+    hideAfter,
+    actionUrl,
+    actionLabel,
+    code,
+    status,
+    dismissedAt,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'timely_items';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<TimelyItem> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('type')) {
+      context.handle(
+        _typeMeta,
+        type.isAcceptableOrUnknown(data['type']!, _typeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_typeMeta);
+    }
+    if (data.containsKey('dedupe_key')) {
+      context.handle(
+        _dedupeKeyMeta,
+        dedupeKey.isAcceptableOrUnknown(data['dedupe_key']!, _dedupeKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_dedupeKeyMeta);
+    }
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    }
+    if (data.containsKey('account_id')) {
+      context.handle(
+        _accountIdMeta,
+        accountId.isAcceptableOrUnknown(data['account_id']!, _accountIdMeta),
+      );
+    }
+    if (data.containsKey('contact_key')) {
+      context.handle(
+        _contactKeyMeta,
+        contactKey.isAcceptableOrUnknown(data['contact_key']!, _contactKeyMeta),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    }
+    if (data.containsKey('detail')) {
+      context.handle(
+        _detailMeta,
+        detail.isAcceptableOrUnknown(data['detail']!, _detailMeta),
+      );
+    }
+    if (data.containsKey('starts_at')) {
+      context.handle(
+        _startsAtMeta,
+        startsAt.isAcceptableOrUnknown(data['starts_at']!, _startsAtMeta),
+      );
+    }
+    if (data.containsKey('ends_at')) {
+      context.handle(
+        _endsAtMeta,
+        endsAt.isAcceptableOrUnknown(data['ends_at']!, _endsAtMeta),
+      );
+    }
+    if (data.containsKey('show_from')) {
+      context.handle(
+        _showFromMeta,
+        showFrom.isAcceptableOrUnknown(data['show_from']!, _showFromMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_showFromMeta);
+    }
+    if (data.containsKey('hide_after')) {
+      context.handle(
+        _hideAfterMeta,
+        hideAfter.isAcceptableOrUnknown(data['hide_after']!, _hideAfterMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_hideAfterMeta);
+    }
+    if (data.containsKey('action_url')) {
+      context.handle(
+        _actionUrlMeta,
+        actionUrl.isAcceptableOrUnknown(data['action_url']!, _actionUrlMeta),
+      );
+    }
+    if (data.containsKey('action_label')) {
+      context.handle(
+        _actionLabelMeta,
+        actionLabel.isAcceptableOrUnknown(
+          data['action_label']!,
+          _actionLabelMeta,
+        ),
+      );
+    }
+    if (data.containsKey('code')) {
+      context.handle(
+        _codeMeta,
+        code.isAcceptableOrUnknown(data['code']!, _codeMeta),
+      );
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('dismissed_at')) {
+      context.handle(
+        _dismissedAtMeta,
+        dismissedAt.isAcceptableOrUnknown(
+          data['dismissed_at']!,
+          _dismissedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  TimelyItem map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return TimelyItem(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      type: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}type'],
+      )!,
+      dedupeKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}dedupe_key'],
+      )!,
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}message_id'],
+      ),
+      accountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}account_id'],
+      ),
+      contactKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}contact_key'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      detail: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}detail'],
+      )!,
+      startsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}starts_at'],
+      ),
+      endsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ends_at'],
+      ),
+      showFrom: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}show_from'],
+      )!,
+      hideAfter: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}hide_after'],
+      )!,
+      actionUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}action_url'],
+      ),
+      actionLabel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}action_label'],
+      ),
+      code: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}code'],
+      ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      ),
+      dismissedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}dismissed_at'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $TimelyItemsTable createAlias(String alias) {
+    return $TimelyItemsTable(attachedDatabase, alias);
+  }
+}
+
+class TimelyItem extends DataClass implements Insertable<TimelyItem> {
+  final int id;
+
+  /// A [TimelyType] name.
+  final String type;
+  final String dedupeKey;
+  final int? messageId;
+  final int? accountId;
+  final String contactKey;
+  final String title;
+  final String detail;
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+  final DateTime showFrom;
+  final DateTime hideAfter;
+  final String? actionUrl;
+  final String? actionLabel;
+  final String? code;
+  final String? status;
+  final DateTime? dismissedAt;
+  final DateTime updatedAt;
+  const TimelyItem({
+    required this.id,
+    required this.type,
+    required this.dedupeKey,
+    this.messageId,
+    this.accountId,
+    required this.contactKey,
+    required this.title,
+    required this.detail,
+    this.startsAt,
+    this.endsAt,
+    required this.showFrom,
+    required this.hideAfter,
+    this.actionUrl,
+    this.actionLabel,
+    this.code,
+    this.status,
+    this.dismissedAt,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['type'] = Variable<String>(type);
+    map['dedupe_key'] = Variable<String>(dedupeKey);
+    if (!nullToAbsent || messageId != null) {
+      map['message_id'] = Variable<int>(messageId);
+    }
+    if (!nullToAbsent || accountId != null) {
+      map['account_id'] = Variable<int>(accountId);
+    }
+    map['contact_key'] = Variable<String>(contactKey);
+    map['title'] = Variable<String>(title);
+    map['detail'] = Variable<String>(detail);
+    if (!nullToAbsent || startsAt != null) {
+      map['starts_at'] = Variable<DateTime>(startsAt);
+    }
+    if (!nullToAbsent || endsAt != null) {
+      map['ends_at'] = Variable<DateTime>(endsAt);
+    }
+    map['show_from'] = Variable<DateTime>(showFrom);
+    map['hide_after'] = Variable<DateTime>(hideAfter);
+    if (!nullToAbsent || actionUrl != null) {
+      map['action_url'] = Variable<String>(actionUrl);
+    }
+    if (!nullToAbsent || actionLabel != null) {
+      map['action_label'] = Variable<String>(actionLabel);
+    }
+    if (!nullToAbsent || code != null) {
+      map['code'] = Variable<String>(code);
+    }
+    if (!nullToAbsent || status != null) {
+      map['status'] = Variable<String>(status);
+    }
+    if (!nullToAbsent || dismissedAt != null) {
+      map['dismissed_at'] = Variable<DateTime>(dismissedAt);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  TimelyItemsCompanion toCompanion(bool nullToAbsent) {
+    return TimelyItemsCompanion(
+      id: Value(id),
+      type: Value(type),
+      dedupeKey: Value(dedupeKey),
+      messageId: messageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(messageId),
+      accountId: accountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(accountId),
+      contactKey: Value(contactKey),
+      title: Value(title),
+      detail: Value(detail),
+      startsAt: startsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startsAt),
+      endsAt: endsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endsAt),
+      showFrom: Value(showFrom),
+      hideAfter: Value(hideAfter),
+      actionUrl: actionUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actionUrl),
+      actionLabel: actionLabel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(actionLabel),
+      code: code == null && nullToAbsent ? const Value.absent() : Value(code),
+      status: status == null && nullToAbsent
+          ? const Value.absent()
+          : Value(status),
+      dismissedAt: dismissedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(dismissedAt),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory TimelyItem.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return TimelyItem(
+      id: serializer.fromJson<int>(json['id']),
+      type: serializer.fromJson<String>(json['type']),
+      dedupeKey: serializer.fromJson<String>(json['dedupeKey']),
+      messageId: serializer.fromJson<int?>(json['messageId']),
+      accountId: serializer.fromJson<int?>(json['accountId']),
+      contactKey: serializer.fromJson<String>(json['contactKey']),
+      title: serializer.fromJson<String>(json['title']),
+      detail: serializer.fromJson<String>(json['detail']),
+      startsAt: serializer.fromJson<DateTime?>(json['startsAt']),
+      endsAt: serializer.fromJson<DateTime?>(json['endsAt']),
+      showFrom: serializer.fromJson<DateTime>(json['showFrom']),
+      hideAfter: serializer.fromJson<DateTime>(json['hideAfter']),
+      actionUrl: serializer.fromJson<String?>(json['actionUrl']),
+      actionLabel: serializer.fromJson<String?>(json['actionLabel']),
+      code: serializer.fromJson<String?>(json['code']),
+      status: serializer.fromJson<String?>(json['status']),
+      dismissedAt: serializer.fromJson<DateTime?>(json['dismissedAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'type': serializer.toJson<String>(type),
+      'dedupeKey': serializer.toJson<String>(dedupeKey),
+      'messageId': serializer.toJson<int?>(messageId),
+      'accountId': serializer.toJson<int?>(accountId),
+      'contactKey': serializer.toJson<String>(contactKey),
+      'title': serializer.toJson<String>(title),
+      'detail': serializer.toJson<String>(detail),
+      'startsAt': serializer.toJson<DateTime?>(startsAt),
+      'endsAt': serializer.toJson<DateTime?>(endsAt),
+      'showFrom': serializer.toJson<DateTime>(showFrom),
+      'hideAfter': serializer.toJson<DateTime>(hideAfter),
+      'actionUrl': serializer.toJson<String?>(actionUrl),
+      'actionLabel': serializer.toJson<String?>(actionLabel),
+      'code': serializer.toJson<String?>(code),
+      'status': serializer.toJson<String?>(status),
+      'dismissedAt': serializer.toJson<DateTime?>(dismissedAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  TimelyItem copyWith({
+    int? id,
+    String? type,
+    String? dedupeKey,
+    Value<int?> messageId = const Value.absent(),
+    Value<int?> accountId = const Value.absent(),
+    String? contactKey,
+    String? title,
+    String? detail,
+    Value<DateTime?> startsAt = const Value.absent(),
+    Value<DateTime?> endsAt = const Value.absent(),
+    DateTime? showFrom,
+    DateTime? hideAfter,
+    Value<String?> actionUrl = const Value.absent(),
+    Value<String?> actionLabel = const Value.absent(),
+    Value<String?> code = const Value.absent(),
+    Value<String?> status = const Value.absent(),
+    Value<DateTime?> dismissedAt = const Value.absent(),
+    DateTime? updatedAt,
+  }) => TimelyItem(
+    id: id ?? this.id,
+    type: type ?? this.type,
+    dedupeKey: dedupeKey ?? this.dedupeKey,
+    messageId: messageId.present ? messageId.value : this.messageId,
+    accountId: accountId.present ? accountId.value : this.accountId,
+    contactKey: contactKey ?? this.contactKey,
+    title: title ?? this.title,
+    detail: detail ?? this.detail,
+    startsAt: startsAt.present ? startsAt.value : this.startsAt,
+    endsAt: endsAt.present ? endsAt.value : this.endsAt,
+    showFrom: showFrom ?? this.showFrom,
+    hideAfter: hideAfter ?? this.hideAfter,
+    actionUrl: actionUrl.present ? actionUrl.value : this.actionUrl,
+    actionLabel: actionLabel.present ? actionLabel.value : this.actionLabel,
+    code: code.present ? code.value : this.code,
+    status: status.present ? status.value : this.status,
+    dismissedAt: dismissedAt.present ? dismissedAt.value : this.dismissedAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  TimelyItem copyWithCompanion(TimelyItemsCompanion data) {
+    return TimelyItem(
+      id: data.id.present ? data.id.value : this.id,
+      type: data.type.present ? data.type.value : this.type,
+      dedupeKey: data.dedupeKey.present ? data.dedupeKey.value : this.dedupeKey,
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      contactKey: data.contactKey.present
+          ? data.contactKey.value
+          : this.contactKey,
+      title: data.title.present ? data.title.value : this.title,
+      detail: data.detail.present ? data.detail.value : this.detail,
+      startsAt: data.startsAt.present ? data.startsAt.value : this.startsAt,
+      endsAt: data.endsAt.present ? data.endsAt.value : this.endsAt,
+      showFrom: data.showFrom.present ? data.showFrom.value : this.showFrom,
+      hideAfter: data.hideAfter.present ? data.hideAfter.value : this.hideAfter,
+      actionUrl: data.actionUrl.present ? data.actionUrl.value : this.actionUrl,
+      actionLabel: data.actionLabel.present
+          ? data.actionLabel.value
+          : this.actionLabel,
+      code: data.code.present ? data.code.value : this.code,
+      status: data.status.present ? data.status.value : this.status,
+      dismissedAt: data.dismissedAt.present
+          ? data.dismissedAt.value
+          : this.dismissedAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TimelyItem(')
+          ..write('id: $id, ')
+          ..write('type: $type, ')
+          ..write('dedupeKey: $dedupeKey, ')
+          ..write('messageId: $messageId, ')
+          ..write('accountId: $accountId, ')
+          ..write('contactKey: $contactKey, ')
+          ..write('title: $title, ')
+          ..write('detail: $detail, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('endsAt: $endsAt, ')
+          ..write('showFrom: $showFrom, ')
+          ..write('hideAfter: $hideAfter, ')
+          ..write('actionUrl: $actionUrl, ')
+          ..write('actionLabel: $actionLabel, ')
+          ..write('code: $code, ')
+          ..write('status: $status, ')
+          ..write('dismissedAt: $dismissedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    type,
+    dedupeKey,
+    messageId,
+    accountId,
+    contactKey,
+    title,
+    detail,
+    startsAt,
+    endsAt,
+    showFrom,
+    hideAfter,
+    actionUrl,
+    actionLabel,
+    code,
+    status,
+    dismissedAt,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is TimelyItem &&
+          other.id == this.id &&
+          other.type == this.type &&
+          other.dedupeKey == this.dedupeKey &&
+          other.messageId == this.messageId &&
+          other.accountId == this.accountId &&
+          other.contactKey == this.contactKey &&
+          other.title == this.title &&
+          other.detail == this.detail &&
+          other.startsAt == this.startsAt &&
+          other.endsAt == this.endsAt &&
+          other.showFrom == this.showFrom &&
+          other.hideAfter == this.hideAfter &&
+          other.actionUrl == this.actionUrl &&
+          other.actionLabel == this.actionLabel &&
+          other.code == this.code &&
+          other.status == this.status &&
+          other.dismissedAt == this.dismissedAt &&
+          other.updatedAt == this.updatedAt);
+}
+
+class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
+  final Value<int> id;
+  final Value<String> type;
+  final Value<String> dedupeKey;
+  final Value<int?> messageId;
+  final Value<int?> accountId;
+  final Value<String> contactKey;
+  final Value<String> title;
+  final Value<String> detail;
+  final Value<DateTime?> startsAt;
+  final Value<DateTime?> endsAt;
+  final Value<DateTime> showFrom;
+  final Value<DateTime> hideAfter;
+  final Value<String?> actionUrl;
+  final Value<String?> actionLabel;
+  final Value<String?> code;
+  final Value<String?> status;
+  final Value<DateTime?> dismissedAt;
+  final Value<DateTime> updatedAt;
+  const TimelyItemsCompanion({
+    this.id = const Value.absent(),
+    this.type = const Value.absent(),
+    this.dedupeKey = const Value.absent(),
+    this.messageId = const Value.absent(),
+    this.accountId = const Value.absent(),
+    this.contactKey = const Value.absent(),
+    this.title = const Value.absent(),
+    this.detail = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
+    this.showFrom = const Value.absent(),
+    this.hideAfter = const Value.absent(),
+    this.actionUrl = const Value.absent(),
+    this.actionLabel = const Value.absent(),
+    this.code = const Value.absent(),
+    this.status = const Value.absent(),
+    this.dismissedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  });
+  TimelyItemsCompanion.insert({
+    this.id = const Value.absent(),
+    required String type,
+    required String dedupeKey,
+    this.messageId = const Value.absent(),
+    this.accountId = const Value.absent(),
+    this.contactKey = const Value.absent(),
+    this.title = const Value.absent(),
+    this.detail = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
+    required DateTime showFrom,
+    required DateTime hideAfter,
+    this.actionUrl = const Value.absent(),
+    this.actionLabel = const Value.absent(),
+    this.code = const Value.absent(),
+    this.status = const Value.absent(),
+    this.dismissedAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+  }) : type = Value(type),
+       dedupeKey = Value(dedupeKey),
+       showFrom = Value(showFrom),
+       hideAfter = Value(hideAfter);
+  static Insertable<TimelyItem> custom({
+    Expression<int>? id,
+    Expression<String>? type,
+    Expression<String>? dedupeKey,
+    Expression<int>? messageId,
+    Expression<int>? accountId,
+    Expression<String>? contactKey,
+    Expression<String>? title,
+    Expression<String>? detail,
+    Expression<DateTime>? startsAt,
+    Expression<DateTime>? endsAt,
+    Expression<DateTime>? showFrom,
+    Expression<DateTime>? hideAfter,
+    Expression<String>? actionUrl,
+    Expression<String>? actionLabel,
+    Expression<String>? code,
+    Expression<String>? status,
+    Expression<DateTime>? dismissedAt,
+    Expression<DateTime>? updatedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (type != null) 'type': type,
+      if (dedupeKey != null) 'dedupe_key': dedupeKey,
+      if (messageId != null) 'message_id': messageId,
+      if (accountId != null) 'account_id': accountId,
+      if (contactKey != null) 'contact_key': contactKey,
+      if (title != null) 'title': title,
+      if (detail != null) 'detail': detail,
+      if (startsAt != null) 'starts_at': startsAt,
+      if (endsAt != null) 'ends_at': endsAt,
+      if (showFrom != null) 'show_from': showFrom,
+      if (hideAfter != null) 'hide_after': hideAfter,
+      if (actionUrl != null) 'action_url': actionUrl,
+      if (actionLabel != null) 'action_label': actionLabel,
+      if (code != null) 'code': code,
+      if (status != null) 'status': status,
+      if (dismissedAt != null) 'dismissed_at': dismissedAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+    });
+  }
+
+  TimelyItemsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? type,
+    Value<String>? dedupeKey,
+    Value<int?>? messageId,
+    Value<int?>? accountId,
+    Value<String>? contactKey,
+    Value<String>? title,
+    Value<String>? detail,
+    Value<DateTime?>? startsAt,
+    Value<DateTime?>? endsAt,
+    Value<DateTime>? showFrom,
+    Value<DateTime>? hideAfter,
+    Value<String?>? actionUrl,
+    Value<String?>? actionLabel,
+    Value<String?>? code,
+    Value<String?>? status,
+    Value<DateTime?>? dismissedAt,
+    Value<DateTime>? updatedAt,
+  }) {
+    return TimelyItemsCompanion(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      dedupeKey: dedupeKey ?? this.dedupeKey,
+      messageId: messageId ?? this.messageId,
+      accountId: accountId ?? this.accountId,
+      contactKey: contactKey ?? this.contactKey,
+      title: title ?? this.title,
+      detail: detail ?? this.detail,
+      startsAt: startsAt ?? this.startsAt,
+      endsAt: endsAt ?? this.endsAt,
+      showFrom: showFrom ?? this.showFrom,
+      hideAfter: hideAfter ?? this.hideAfter,
+      actionUrl: actionUrl ?? this.actionUrl,
+      actionLabel: actionLabel ?? this.actionLabel,
+      code: code ?? this.code,
+      status: status ?? this.status,
+      dismissedAt: dismissedAt ?? this.dismissedAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (type.present) {
+      map['type'] = Variable<String>(type.value);
+    }
+    if (dedupeKey.present) {
+      map['dedupe_key'] = Variable<String>(dedupeKey.value);
+    }
+    if (messageId.present) {
+      map['message_id'] = Variable<int>(messageId.value);
+    }
+    if (accountId.present) {
+      map['account_id'] = Variable<int>(accountId.value);
+    }
+    if (contactKey.present) {
+      map['contact_key'] = Variable<String>(contactKey.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (detail.present) {
+      map['detail'] = Variable<String>(detail.value);
+    }
+    if (startsAt.present) {
+      map['starts_at'] = Variable<DateTime>(startsAt.value);
+    }
+    if (endsAt.present) {
+      map['ends_at'] = Variable<DateTime>(endsAt.value);
+    }
+    if (showFrom.present) {
+      map['show_from'] = Variable<DateTime>(showFrom.value);
+    }
+    if (hideAfter.present) {
+      map['hide_after'] = Variable<DateTime>(hideAfter.value);
+    }
+    if (actionUrl.present) {
+      map['action_url'] = Variable<String>(actionUrl.value);
+    }
+    if (actionLabel.present) {
+      map['action_label'] = Variable<String>(actionLabel.value);
+    }
+    if (code.present) {
+      map['code'] = Variable<String>(code.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (dismissedAt.present) {
+      map['dismissed_at'] = Variable<DateTime>(dismissedAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('TimelyItemsCompanion(')
+          ..write('id: $id, ')
+          ..write('type: $type, ')
+          ..write('dedupeKey: $dedupeKey, ')
+          ..write('messageId: $messageId, ')
+          ..write('accountId: $accountId, ')
+          ..write('contactKey: $contactKey, ')
+          ..write('title: $title, ')
+          ..write('detail: $detail, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('endsAt: $endsAt, ')
+          ..write('showFrom: $showFrom, ')
+          ..write('hideAfter: $hideAfter, ')
+          ..write('actionUrl: $actionUrl, ')
+          ..write('actionLabel: $actionLabel, ')
+          ..write('code: $code, ')
+          ..write('status: $status, ')
+          ..write('dismissedAt: $dismissedAt, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $AddressBookEntryRowsTable extends AddressBookEntryRows
+    with TableInfo<$AddressBookEntryRowsTable, AddressBookEntry> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $AddressBookEntryRowsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _addressMeta = const VerificationMeta(
+    'address',
+  );
+  @override
+  late final GeneratedColumn<String> address = GeneratedColumn<String>(
+    'address',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _resourceNameMeta = const VerificationMeta(
+    'resourceName',
+  );
+  @override
+  late final GeneratedColumn<String> resourceName = GeneratedColumn<String>(
+    'resource_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _photoPathMeta = const VerificationMeta(
+    'photoPath',
+  );
+  @override
+  late final GeneratedColumn<String> photoPath = GeneratedColumn<String>(
+    'photo_path',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _photoUrlMeta = const VerificationMeta(
+    'photoUrl',
+  );
+  @override
+  late final GeneratedColumn<String> photoUrl = GeneratedColumn<String>(
+    'photo_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    address,
+    resourceName,
+    photoPath,
+    photoUrl,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'address_book_entry_rows';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<AddressBookEntry> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('address')) {
+      context.handle(
+        _addressMeta,
+        address.isAcceptableOrUnknown(data['address']!, _addressMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_addressMeta);
+    }
+    if (data.containsKey('resource_name')) {
+      context.handle(
+        _resourceNameMeta,
+        resourceName.isAcceptableOrUnknown(
+          data['resource_name']!,
+          _resourceNameMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_resourceNameMeta);
+    }
+    if (data.containsKey('photo_path')) {
+      context.handle(
+        _photoPathMeta,
+        photoPath.isAcceptableOrUnknown(data['photo_path']!, _photoPathMeta),
+      );
+    }
+    if (data.containsKey('photo_url')) {
+      context.handle(
+        _photoUrlMeta,
+        photoUrl.isAcceptableOrUnknown(data['photo_url']!, _photoUrlMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {address};
+  @override
+  AddressBookEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return AddressBookEntry(
+      address: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}address'],
+      )!,
+      resourceName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}resource_name'],
+      )!,
+      photoPath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}photo_path'],
+      ),
+      photoUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}photo_url'],
+      ),
+    );
+  }
+
+  @override
+  $AddressBookEntryRowsTable createAlias(String alias) {
+    return $AddressBookEntryRowsTable(attachedDatabase, alias);
+  }
+}
+
+class AddressBookEntry extends DataClass
+    implements Insertable<AddressBookEntry> {
+  final String address;
+  final String resourceName;
+  final String? photoPath;
+  final String? photoUrl;
+  const AddressBookEntry({
+    required this.address,
+    required this.resourceName,
+    this.photoPath,
+    this.photoUrl,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['address'] = Variable<String>(address);
+    map['resource_name'] = Variable<String>(resourceName);
+    if (!nullToAbsent || photoPath != null) {
+      map['photo_path'] = Variable<String>(photoPath);
+    }
+    if (!nullToAbsent || photoUrl != null) {
+      map['photo_url'] = Variable<String>(photoUrl);
+    }
+    return map;
+  }
+
+  AddressBookEntryRowsCompanion toCompanion(bool nullToAbsent) {
+    return AddressBookEntryRowsCompanion(
+      address: Value(address),
+      resourceName: Value(resourceName),
+      photoPath: photoPath == null && nullToAbsent
+          ? const Value.absent()
+          : Value(photoPath),
+      photoUrl: photoUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(photoUrl),
+    );
+  }
+
+  factory AddressBookEntry.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return AddressBookEntry(
+      address: serializer.fromJson<String>(json['address']),
+      resourceName: serializer.fromJson<String>(json['resourceName']),
+      photoPath: serializer.fromJson<String?>(json['photoPath']),
+      photoUrl: serializer.fromJson<String?>(json['photoUrl']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'address': serializer.toJson<String>(address),
+      'resourceName': serializer.toJson<String>(resourceName),
+      'photoPath': serializer.toJson<String?>(photoPath),
+      'photoUrl': serializer.toJson<String?>(photoUrl),
+    };
+  }
+
+  AddressBookEntry copyWith({
+    String? address,
+    String? resourceName,
+    Value<String?> photoPath = const Value.absent(),
+    Value<String?> photoUrl = const Value.absent(),
+  }) => AddressBookEntry(
+    address: address ?? this.address,
+    resourceName: resourceName ?? this.resourceName,
+    photoPath: photoPath.present ? photoPath.value : this.photoPath,
+    photoUrl: photoUrl.present ? photoUrl.value : this.photoUrl,
+  );
+  AddressBookEntry copyWithCompanion(AddressBookEntryRowsCompanion data) {
+    return AddressBookEntry(
+      address: data.address.present ? data.address.value : this.address,
+      resourceName: data.resourceName.present
+          ? data.resourceName.value
+          : this.resourceName,
+      photoPath: data.photoPath.present ? data.photoPath.value : this.photoPath,
+      photoUrl: data.photoUrl.present ? data.photoUrl.value : this.photoUrl,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AddressBookEntry(')
+          ..write('address: $address, ')
+          ..write('resourceName: $resourceName, ')
+          ..write('photoPath: $photoPath, ')
+          ..write('photoUrl: $photoUrl')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(address, resourceName, photoPath, photoUrl);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is AddressBookEntry &&
+          other.address == this.address &&
+          other.resourceName == this.resourceName &&
+          other.photoPath == this.photoPath &&
+          other.photoUrl == this.photoUrl);
+}
+
+class AddressBookEntryRowsCompanion extends UpdateCompanion<AddressBookEntry> {
+  final Value<String> address;
+  final Value<String> resourceName;
+  final Value<String?> photoPath;
+  final Value<String?> photoUrl;
+  final Value<int> rowid;
+  const AddressBookEntryRowsCompanion({
+    this.address = const Value.absent(),
+    this.resourceName = const Value.absent(),
+    this.photoPath = const Value.absent(),
+    this.photoUrl = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  AddressBookEntryRowsCompanion.insert({
+    required String address,
+    required String resourceName,
+    this.photoPath = const Value.absent(),
+    this.photoUrl = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : address = Value(address),
+       resourceName = Value(resourceName);
+  static Insertable<AddressBookEntry> custom({
+    Expression<String>? address,
+    Expression<String>? resourceName,
+    Expression<String>? photoPath,
+    Expression<String>? photoUrl,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (address != null) 'address': address,
+      if (resourceName != null) 'resource_name': resourceName,
+      if (photoPath != null) 'photo_path': photoPath,
+      if (photoUrl != null) 'photo_url': photoUrl,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  AddressBookEntryRowsCompanion copyWith({
+    Value<String>? address,
+    Value<String>? resourceName,
+    Value<String?>? photoPath,
+    Value<String?>? photoUrl,
+    Value<int>? rowid,
+  }) {
+    return AddressBookEntryRowsCompanion(
+      address: address ?? this.address,
+      resourceName: resourceName ?? this.resourceName,
+      photoPath: photoPath ?? this.photoPath,
+      photoUrl: photoUrl ?? this.photoUrl,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (address.present) {
+      map['address'] = Variable<String>(address.value);
+    }
+    if (resourceName.present) {
+      map['resource_name'] = Variable<String>(resourceName.value);
+    }
+    if (photoPath.present) {
+      map['photo_path'] = Variable<String>(photoPath.value);
+    }
+    if (photoUrl.present) {
+      map['photo_url'] = Variable<String>(photoUrl.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('AddressBookEntryRowsCompanion(')
+          ..write('address: $address, ')
+          ..write('resourceName: $resourceName, ')
+          ..write('photoPath: $photoPath, ')
+          ..write('photoUrl: $photoUrl, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -14136,6 +15565,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $CardTagsTable cardTags = $CardTagsTable(this);
   late final $RemindersTable reminders = $RemindersTable(this);
   late final $PlannerEventsTable plannerEvents = $PlannerEventsTable(this);
+  late final $TimelyItemsTable timelyItems = $TimelyItemsTable(this);
+  late final $AddressBookEntryRowsTable addressBookEntryRows =
+      $AddressBookEntryRowsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -14167,6 +15599,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     cardTags,
     reminders,
     plannerEvents,
+    timelyItems,
+    addressBookEntryRows,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -14267,6 +15701,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('card_tags', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'messages',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('timely_items', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -16207,6 +17648,8 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> messageId,
   Value<String?> inReplyTo,
   Value<String?> referencesHeader,
+  Value<DateTime?> timelyCheckedAt,
+  Value<bool> hasTimelyItem,
   Value<String> subject,
   Value<String> fromAddress,
   Value<String> fromName,
@@ -16243,6 +17686,8 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> messageId,
   Value<String?> inReplyTo,
   Value<String?> referencesHeader,
+  Value<DateTime?> timelyCheckedAt,
+  Value<bool> hasTimelyItem,
   Value<String> subject,
   Value<String> fromAddress,
   Value<String> fromName,
@@ -16394,6 +17839,24 @@ final class $$MessagesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$TimelyItemsTable, List<TimelyItem>>
+  _timelyItemsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.timelyItems,
+    aliasName: 'messages__id__timely_items__message_id',
+  );
+
+  $$TimelyItemsTableProcessedTableManager get timelyItemsRefs {
+    final manager = $$TimelyItemsTableTableManager(
+      $_db,
+      $_db.timelyItems,
+    ).filter((f) => f.messageId.id.sqlEquals($_itemColumn<int>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_timelyItemsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$MessagesTableFilterComposer
@@ -16427,6 +17890,16 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get referencesHeader => $composableBuilder(
     column: $table.referencesHeader,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get timelyCheckedAt => $composableBuilder(
+    column: $table.timelyCheckedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get hasTimelyItem => $composableBuilder(
+    column: $table.hasTimelyItem,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16711,6 +18184,31 @@ class $$MessagesTableFilterComposer
     );
     return f(composer);
   }
+
+  Expression<bool> timelyItemsRefs(
+    Expression<bool> Function($$TimelyItemsTableFilterComposer f) f,
+  ) {
+    final $$TimelyItemsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.timelyItems,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TimelyItemsTableFilterComposer(
+            $db: $db,
+            $table: $db.timelyItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableOrderingComposer
@@ -16744,6 +18242,16 @@ class $$MessagesTableOrderingComposer
 
   ColumnOrderings<String> get referencesHeader => $composableBuilder(
     column: $table.referencesHeader,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get timelyCheckedAt => $composableBuilder(
+    column: $table.timelyCheckedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get hasTimelyItem => $composableBuilder(
+    column: $table.hasTimelyItem,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -16952,6 +18460,16 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get referencesHeader => $composableBuilder(
     column: $table.referencesHeader,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get timelyCheckedAt => $composableBuilder(
+    column: $table.timelyCheckedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get hasTimelyItem => $composableBuilder(
+    column: $table.hasTimelyItem,
     builder: (column) => column,
   );
 
@@ -17209,6 +18727,31 @@ class $$MessagesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> timelyItemsRefs<T extends Object>(
+    Expression<T> Function($$TimelyItemsTableAnnotationComposer a) f,
+  ) {
+    final $$TimelyItemsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.timelyItems,
+      getReferencedColumn: (t) => t.messageId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$TimelyItemsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.timelyItems,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$MessagesTableTableManager
@@ -17231,6 +18774,7 @@ class $$MessagesTableTableManager
             bool attachmentsRefs,
             bool messageRowAssignmentsRefs,
             bool trackerEventsRefs,
+            bool timelyItemsRefs,
           })
         > {
   $$MessagesTableTableManager(_$AppDatabase db, $MessagesTable table)
@@ -17253,6 +18797,8 @@ class $$MessagesTableTableManager
                 Value<String?> messageId = const Value.absent(),
                 Value<String?> inReplyTo = const Value.absent(),
                 Value<String?> referencesHeader = const Value.absent(),
+                Value<DateTime?> timelyCheckedAt = const Value.absent(),
+                Value<bool> hasTimelyItem = const Value.absent(),
                 Value<String> subject = const Value.absent(),
                 Value<String> fromAddress = const Value.absent(),
                 Value<String> fromName = const Value.absent(),
@@ -17288,6 +18834,8 @@ class $$MessagesTableTableManager
                 messageId: messageId,
                 inReplyTo: inReplyTo,
                 referencesHeader: referencesHeader,
+                timelyCheckedAt: timelyCheckedAt,
+                hasTimelyItem: hasTimelyItem,
                 subject: subject,
                 fromAddress: fromAddress,
                 fromName: fromName,
@@ -17325,6 +18873,8 @@ class $$MessagesTableTableManager
                 Value<String?> messageId = const Value.absent(),
                 Value<String?> inReplyTo = const Value.absent(),
                 Value<String?> referencesHeader = const Value.absent(),
+                Value<DateTime?> timelyCheckedAt = const Value.absent(),
+                Value<bool> hasTimelyItem = const Value.absent(),
                 Value<String> subject = const Value.absent(),
                 Value<String> fromAddress = const Value.absent(),
                 Value<String> fromName = const Value.absent(),
@@ -17360,6 +18910,8 @@ class $$MessagesTableTableManager
                 messageId: messageId,
                 inReplyTo: inReplyTo,
                 referencesHeader: referencesHeader,
+                timelyCheckedAt: timelyCheckedAt,
+                hasTimelyItem: hasTimelyItem,
                 subject: subject,
                 fromAddress: fromAddress,
                 fromName: fromName,
@@ -17404,6 +18956,7 @@ class $$MessagesTableTableManager
                 attachmentsRefs = false,
                 messageRowAssignmentsRefs = false,
                 trackerEventsRefs = false,
+                timelyItemsRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -17412,6 +18965,7 @@ class $$MessagesTableTableManager
                     if (attachmentsRefs) db.attachments,
                     if (messageRowAssignmentsRefs) db.messageRowAssignments,
                     if (trackerEventsRefs) db.trackerEvents,
+                    if (timelyItemsRefs) db.timelyItems,
                   ],
                   addJoins:
                       <
@@ -17540,6 +19094,27 @@ class $$MessagesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (timelyItemsRefs)
+                        await $_getPrefetchedData<
+                          Message,
+                          $MessagesTable,
+                          TimelyItem
+                        >(
+                          currentTable: table,
+                          referencedTable: $$MessagesTableReferences
+                              ._timelyItemsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$MessagesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).timelyItemsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.messageId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -17567,6 +19142,7 @@ typedef $$MessagesTableProcessedTableManager =
         bool attachmentsRefs,
         bool messageRowAssignmentsRefs,
         bool trackerEventsRefs,
+        bool timelyItemsRefs,
       })
     >;
 typedef $$MessageParticipantsTableCreateCompanionBuilder =
@@ -24310,6 +25886,778 @@ typedef $$PlannerEventsTableProcessedTableManager =
       PlannerEvent,
       PrefetchHooks Function()
     >;
+typedef $$TimelyItemsTableCreateCompanionBuilder =
+    TimelyItemsCompanion Function({
+      Value<int> id,
+      required String type,
+      required String dedupeKey,
+      Value<int?> messageId,
+      Value<int?> accountId,
+      Value<String> contactKey,
+      Value<String> title,
+      Value<String> detail,
+      Value<DateTime?> startsAt,
+      Value<DateTime?> endsAt,
+      required DateTime showFrom,
+      required DateTime hideAfter,
+      Value<String?> actionUrl,
+      Value<String?> actionLabel,
+      Value<String?> code,
+      Value<String?> status,
+      Value<DateTime?> dismissedAt,
+      Value<DateTime> updatedAt,
+    });
+typedef $$TimelyItemsTableUpdateCompanionBuilder =
+    TimelyItemsCompanion Function({
+      Value<int> id,
+      Value<String> type,
+      Value<String> dedupeKey,
+      Value<int?> messageId,
+      Value<int?> accountId,
+      Value<String> contactKey,
+      Value<String> title,
+      Value<String> detail,
+      Value<DateTime?> startsAt,
+      Value<DateTime?> endsAt,
+      Value<DateTime> showFrom,
+      Value<DateTime> hideAfter,
+      Value<String?> actionUrl,
+      Value<String?> actionLabel,
+      Value<String?> code,
+      Value<String?> status,
+      Value<DateTime?> dismissedAt,
+      Value<DateTime> updatedAt,
+    });
+
+final class $$TimelyItemsTableReferences
+    extends BaseReferences<_$AppDatabase, $TimelyItemsTable, TimelyItem> {
+  $$TimelyItemsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $MessagesTable _messageIdTable(_$AppDatabase db) =>
+      db.messages.createAlias('timely_items__message_id__messages__id');
+
+  $$MessagesTableProcessedTableManager? get messageId {
+    final $_column = $_itemColumn<int>('message_id');
+    if ($_column == null) return null;
+    final manager = $$MessagesTableTableManager(
+      $_db,
+      $_db.messages,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_messageIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$TimelyItemsTableFilterComposer
+    extends Composer<_$AppDatabase, $TimelyItemsTable> {
+  $$TimelyItemsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get dedupeKey => $composableBuilder(
+    column: $table.dedupeKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contactKey => $composableBuilder(
+    column: $table.contactKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get detail => $composableBuilder(
+    column: $table.detail,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startsAt => $composableBuilder(
+    column: $table.startsAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get showFrom => $composableBuilder(
+    column: $table.showFrom,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get hideAfter => $composableBuilder(
+    column: $table.hideAfter,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actionUrl => $composableBuilder(
+    column: $table.actionUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get actionLabel => $composableBuilder(
+    column: $table.actionLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get dismissedAt => $composableBuilder(
+    column: $table.dismissedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$MessagesTableFilterComposer get messageId {
+    final $$MessagesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableFilterComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TimelyItemsTableOrderingComposer
+    extends Composer<_$AppDatabase, $TimelyItemsTable> {
+  $$TimelyItemsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get type => $composableBuilder(
+    column: $table.type,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get dedupeKey => $composableBuilder(
+    column: $table.dedupeKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get accountId => $composableBuilder(
+    column: $table.accountId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contactKey => $composableBuilder(
+    column: $table.contactKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get detail => $composableBuilder(
+    column: $table.detail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startsAt => $composableBuilder(
+    column: $table.startsAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get showFrom => $composableBuilder(
+    column: $table.showFrom,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get hideAfter => $composableBuilder(
+    column: $table.hideAfter,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get actionUrl => $composableBuilder(
+    column: $table.actionUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get actionLabel => $composableBuilder(
+    column: $table.actionLabel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get code => $composableBuilder(
+    column: $table.code,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get dismissedAt => $composableBuilder(
+    column: $table.dismissedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$MessagesTableOrderingComposer get messageId {
+    final $$MessagesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableOrderingComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TimelyItemsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TimelyItemsTable> {
+  $$TimelyItemsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get type =>
+      $composableBuilder(column: $table.type, builder: (column) => column);
+
+  GeneratedColumn<String> get dedupeKey =>
+      $composableBuilder(column: $table.dedupeKey, builder: (column) => column);
+
+  GeneratedColumn<int> get accountId =>
+      $composableBuilder(column: $table.accountId, builder: (column) => column);
+
+  GeneratedColumn<String> get contactKey => $composableBuilder(
+    column: $table.contactKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get detail =>
+      $composableBuilder(column: $table.detail, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startsAt =>
+      $composableBuilder(column: $table.startsAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endsAt =>
+      $composableBuilder(column: $table.endsAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get showFrom =>
+      $composableBuilder(column: $table.showFrom, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get hideAfter =>
+      $composableBuilder(column: $table.hideAfter, builder: (column) => column);
+
+  GeneratedColumn<String> get actionUrl =>
+      $composableBuilder(column: $table.actionUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get actionLabel => $composableBuilder(
+    column: $table.actionLabel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get code =>
+      $composableBuilder(column: $table.code, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get dismissedAt => $composableBuilder(
+    column: $table.dismissedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$MessagesTableAnnotationComposer get messageId {
+    final $$MessagesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.messageId,
+      referencedTable: $db.messages,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$MessagesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.messages,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$TimelyItemsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $TimelyItemsTable,
+          TimelyItem,
+          $$TimelyItemsTableFilterComposer,
+          $$TimelyItemsTableOrderingComposer,
+          $$TimelyItemsTableAnnotationComposer,
+          $$TimelyItemsTableCreateCompanionBuilder,
+          $$TimelyItemsTableUpdateCompanionBuilder,
+          (TimelyItem, $$TimelyItemsTableReferences),
+          TimelyItem,
+          PrefetchHooks Function({bool messageId})
+        > {
+  $$TimelyItemsTableTableManager(_$AppDatabase db, $TimelyItemsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$TimelyItemsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$TimelyItemsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$TimelyItemsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> type = const Value.absent(),
+                Value<String> dedupeKey = const Value.absent(),
+                Value<int?> messageId = const Value.absent(),
+                Value<int?> accountId = const Value.absent(),
+                Value<String> contactKey = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> detail = const Value.absent(),
+                Value<DateTime?> startsAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
+                Value<DateTime> showFrom = const Value.absent(),
+                Value<DateTime> hideAfter = const Value.absent(),
+                Value<String?> actionUrl = const Value.absent(),
+                Value<String?> actionLabel = const Value.absent(),
+                Value<String?> code = const Value.absent(),
+                Value<String?> status = const Value.absent(),
+                Value<DateTime?> dismissedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => TimelyItemsCompanion(
+                id: id,
+                type: type,
+                dedupeKey: dedupeKey,
+                messageId: messageId,
+                accountId: accountId,
+                contactKey: contactKey,
+                title: title,
+                detail: detail,
+                startsAt: startsAt,
+                endsAt: endsAt,
+                showFrom: showFrom,
+                hideAfter: hideAfter,
+                actionUrl: actionUrl,
+                actionLabel: actionLabel,
+                code: code,
+                status: status,
+                dismissedAt: dismissedAt,
+                updatedAt: updatedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String type,
+                required String dedupeKey,
+                Value<int?> messageId = const Value.absent(),
+                Value<int?> accountId = const Value.absent(),
+                Value<String> contactKey = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String> detail = const Value.absent(),
+                Value<DateTime?> startsAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
+                required DateTime showFrom,
+                required DateTime hideAfter,
+                Value<String?> actionUrl = const Value.absent(),
+                Value<String?> actionLabel = const Value.absent(),
+                Value<String?> code = const Value.absent(),
+                Value<String?> status = const Value.absent(),
+                Value<DateTime?> dismissedAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+              }) => TimelyItemsCompanion.insert(
+                id: id,
+                type: type,
+                dedupeKey: dedupeKey,
+                messageId: messageId,
+                accountId: accountId,
+                contactKey: contactKey,
+                title: title,
+                detail: detail,
+                startsAt: startsAt,
+                endsAt: endsAt,
+                showFrom: showFrom,
+                hideAfter: hideAfter,
+                actionUrl: actionUrl,
+                actionLabel: actionLabel,
+                code: code,
+                status: status,
+                dismissedAt: dismissedAt,
+                updatedAt: updatedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$TimelyItemsTable, TimelyItem>(table),
+                  $$TimelyItemsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({messageId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (messageId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.messageId,
+                        referencedTable: $$TimelyItemsTableReferences
+                            ._messageIdTable(db),
+                        referencedColumn: $$TimelyItemsTableReferences
+                            ._messageIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$TimelyItemsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $TimelyItemsTable,
+      TimelyItem,
+      $$TimelyItemsTableFilterComposer,
+      $$TimelyItemsTableOrderingComposer,
+      $$TimelyItemsTableAnnotationComposer,
+      $$TimelyItemsTableCreateCompanionBuilder,
+      $$TimelyItemsTableUpdateCompanionBuilder,
+      (TimelyItem, $$TimelyItemsTableReferences),
+      TimelyItem,
+      PrefetchHooks Function({bool messageId})
+    >;
+typedef $$AddressBookEntryRowsTableCreateCompanionBuilder =
+    AddressBookEntryRowsCompanion Function({
+      required String address,
+      required String resourceName,
+      Value<String?> photoPath,
+      Value<String?> photoUrl,
+      Value<int> rowid,
+    });
+typedef $$AddressBookEntryRowsTableUpdateCompanionBuilder =
+    AddressBookEntryRowsCompanion Function({
+      Value<String> address,
+      Value<String> resourceName,
+      Value<String?> photoPath,
+      Value<String?> photoUrl,
+      Value<int> rowid,
+    });
+
+class $$AddressBookEntryRowsTableFilterComposer
+    extends Composer<_$AppDatabase, $AddressBookEntryRowsTable> {
+  $$AddressBookEntryRowsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get resourceName => $composableBuilder(
+    column: $table.resourceName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get photoPath => $composableBuilder(
+    column: $table.photoPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get photoUrl => $composableBuilder(
+    column: $table.photoUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$AddressBookEntryRowsTableOrderingComposer
+    extends Composer<_$AppDatabase, $AddressBookEntryRowsTable> {
+  $$AddressBookEntryRowsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get address => $composableBuilder(
+    column: $table.address,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get resourceName => $composableBuilder(
+    column: $table.resourceName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get photoPath => $composableBuilder(
+    column: $table.photoPath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get photoUrl => $composableBuilder(
+    column: $table.photoUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$AddressBookEntryRowsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $AddressBookEntryRowsTable> {
+  $$AddressBookEntryRowsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get address =>
+      $composableBuilder(column: $table.address, builder: (column) => column);
+
+  GeneratedColumn<String> get resourceName => $composableBuilder(
+    column: $table.resourceName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get photoPath =>
+      $composableBuilder(column: $table.photoPath, builder: (column) => column);
+
+  GeneratedColumn<String> get photoUrl =>
+      $composableBuilder(column: $table.photoUrl, builder: (column) => column);
+}
+
+class $$AddressBookEntryRowsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $AddressBookEntryRowsTable,
+          AddressBookEntry,
+          $$AddressBookEntryRowsTableFilterComposer,
+          $$AddressBookEntryRowsTableOrderingComposer,
+          $$AddressBookEntryRowsTableAnnotationComposer,
+          $$AddressBookEntryRowsTableCreateCompanionBuilder,
+          $$AddressBookEntryRowsTableUpdateCompanionBuilder,
+          (
+            AddressBookEntry,
+            BaseReferences<
+              _$AppDatabase,
+              $AddressBookEntryRowsTable,
+              AddressBookEntry
+            >,
+          ),
+          AddressBookEntry,
+          PrefetchHooks Function()
+        > {
+  $$AddressBookEntryRowsTableTableManager(
+    _$AppDatabase db,
+    $AddressBookEntryRowsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$AddressBookEntryRowsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$AddressBookEntryRowsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$AddressBookEntryRowsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> address = const Value.absent(),
+                Value<String> resourceName = const Value.absent(),
+                Value<String?> photoPath = const Value.absent(),
+                Value<String?> photoUrl = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AddressBookEntryRowsCompanion(
+                address: address,
+                resourceName: resourceName,
+                photoPath: photoPath,
+                photoUrl: photoUrl,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String address,
+                required String resourceName,
+                Value<String?> photoPath = const Value.absent(),
+                Value<String?> photoUrl = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => AddressBookEntryRowsCompanion.insert(
+                address: address,
+                resourceName: resourceName,
+                photoPath: photoPath,
+                photoUrl: photoUrl,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$AddressBookEntryRowsTable, AddressBookEntry>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $AddressBookEntryRowsTable,
+                    AddressBookEntry
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$AddressBookEntryRowsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $AddressBookEntryRowsTable,
+      AddressBookEntry,
+      $$AddressBookEntryRowsTableFilterComposer,
+      $$AddressBookEntryRowsTableOrderingComposer,
+      $$AddressBookEntryRowsTableAnnotationComposer,
+      $$AddressBookEntryRowsTableCreateCompanionBuilder,
+      $$AddressBookEntryRowsTableUpdateCompanionBuilder,
+      (
+        AddressBookEntry,
+        BaseReferences<
+          _$AppDatabase,
+          $AddressBookEntryRowsTable,
+          AddressBookEntry
+        >,
+      ),
+      AddressBookEntry,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -24365,4 +26713,8 @@ class $AppDatabaseManager {
       $$RemindersTableTableManager(_db, _db.reminders);
   $$PlannerEventsTableTableManager get plannerEvents =>
       $$PlannerEventsTableTableManager(_db, _db.plannerEvents);
+  $$TimelyItemsTableTableManager get timelyItems =>
+      $$TimelyItemsTableTableManager(_db, _db.timelyItems);
+  $$AddressBookEntryRowsTableTableManager get addressBookEntryRows =>
+      $$AddressBookEntryRowsTableTableManager(_db, _db.addressBookEntryRows);
 }

@@ -3,14 +3,23 @@ import 'package:flutter/material.dart';
 /// Asks for the user's own name and optional subtitle for a sender (spec
 /// 4.2). A blank name goes back to the name in the mail headers; a blank
 /// subtitle shows none. Returns null when cancelled.
-Future<({String name, String subtitle})?> showEditSenderDialog(BuildContext context, {required String name, required String subtitle, required String address}) =>
-    showDialog<({String name, String subtitle})>(context: context, builder: (_) => _EditSenderDialog(name: name, subtitle: subtitle, address: address));
+Future<({String name, String subtitle})?> showEditSenderDialog(
+  BuildContext context, {
+  required String name,
+  required String subtitle,
+  required List<String> addresses,
+  Future<void> Function(String address)? onSeparate,
+}) =>
+    showDialog<({String name, String subtitle})>(context: context, builder: (_) => _EditSenderDialog(name: name, subtitle: subtitle, addresses: addresses, onSeparate: onSeparate));
 
 class _EditSenderDialog extends StatefulWidget {
-  const _EditSenderDialog({required this.name, required this.subtitle, required this.address});
+  const _EditSenderDialog({required this.name, required this.subtitle, required this.addresses, this.onSeparate});
   final String name;
   final String subtitle;
-  final String address;
+
+  /// The person's addresses, the contact's own first.
+  final List<String> addresses;
+  final Future<void> Function(String address)? onSeparate;
 
   @override
   State<_EditSenderDialog> createState() => _EditSenderDialogState();
@@ -19,6 +28,12 @@ class _EditSenderDialog extends StatefulWidget {
 class _EditSenderDialogState extends State<_EditSenderDialog> {
   late final TextEditingController _name = TextEditingController(text: widget.name)..selection = TextSelection(baseOffset: 0, extentOffset: widget.name.length);
   late final TextEditingController _subtitle = TextEditingController(text: widget.subtitle);
+  late final List<String> _addresses = [...widget.addresses];
+
+  Future<void> _separate(String address) async {
+    await widget.onSeparate?.call(address);
+    if (mounted) setState(() => _addresses.remove(address));
+  }
 
   @override
   void dispose() {
@@ -59,9 +74,19 @@ class _EditSenderDialogState extends State<_EditSenderDialog> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Applies to ${widget.address} and to all future mail from this sender, even if you delete the conversation.',
+              'Applies to all future mail from this sender, even if you delete the conversation.',
               style: theme.textTheme.bodySmall!.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+            const SizedBox(height: 10),
+            for (final (i, address) in _addresses.indexed)
+              Row(
+                children: [
+                  Expanded(child: Text(address, maxLines: 1, overflow: TextOverflow.ellipsis, style: theme.textTheme.bodySmall)),
+                  // The first address names the contact, so it stays.
+                  if (i > 0 && widget.onSeparate != null)
+                    TextButton(key: ValueKey('separate-$address'), onPressed: () => _separate(address), child: const Text('Separate')),
+                ],
+              ),
           ],
         ),
       ),

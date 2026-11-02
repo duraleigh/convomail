@@ -141,7 +141,8 @@ void main() {
     inbox.add(hdr(from: 'a@x.com', subject: 'one'));
     await syncer.syncOnce();
     await syncer.stop(); // disconnected: server ops will throw
-    server.failNextConnect = true;
+    // Down for both the first try and the retry on a fresh connection.
+    server.failConnects = 2;
 
     await container.read(rowActionsProvider).archiveRow('c:a@x.com');
     expect(await db.peopleRows(), isEmpty);

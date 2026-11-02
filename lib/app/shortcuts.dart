@@ -22,9 +22,10 @@ class FocusSearchIntent extends Intent {
 abstract final class AppShortcuts {
   static final Map<ShortcutActivator, Intent> table = {
     const SingleActivator(LogicalKeyboardKey.digit1, control: true): const GoToDestinationIntent(Destination.chats),
-    const SingleActivator(LogicalKeyboardKey.digit2, control: true): const GoToDestinationIntent(Destination.boards),
-    const SingleActivator(LogicalKeyboardKey.digit3, control: true): const GoToDestinationIntent(Destination.planner),
-    const SingleActivator(LogicalKeyboardKey.digit4, control: true): const GoToDestinationIntent(Destination.settings),
+    const SingleActivator(LogicalKeyboardKey.digit2, control: true): const GoToDestinationIntent(Destination.feeds),
+    const SingleActivator(LogicalKeyboardKey.digit3, control: true): const GoToDestinationIntent(Destination.boards),
+    const SingleActivator(LogicalKeyboardKey.digit4, control: true): const GoToDestinationIntent(Destination.planner),
+    const SingleActivator(LogicalKeyboardKey.digit5, control: true): const GoToDestinationIntent(Destination.settings),
     const SingleActivator(LogicalKeyboardKey.keyN, control: true): const ComposeIntent(),
     const SingleActivator(LogicalKeyboardKey.keyF, control: true): const FocusSearchIntent(),
     const SingleActivator(LogicalKeyboardKey.slash): const FocusSearchIntent(),
@@ -32,7 +33,7 @@ abstract final class AppShortcuts {
 
   /// Human-readable list for the Settings screen.
   static const List<(String, String)> descriptions = [
-    ('Ctrl+1 … Ctrl+4', 'Switch to Chats, Boards, Planner, Settings'),
+    ('Ctrl+1 … Ctrl+5', 'Switch to Chats, Feeds, Boards, Planner, Settings'),
     ('Ctrl+N', 'New message'),
     ('Ctrl+F or /', 'Search'),
     ('R / Shift+R / F', 'Reply / Reply all / Forward the selected conversation'),
@@ -75,7 +76,8 @@ class AppShortcutScope extends ConsumerWidget {
             return null;
           }),
           FocusSearchIntent: CallbackAction<FocusSearchIntent>(onInvoke: (_) {
-            ref.read(destinationProvider.notifier).select(Destination.chats);
+            // Feeds has the same search bar; anywhere else goes to Chats.
+            if (ref.read(destinationProvider) != Destination.feeds) ref.read(destinationProvider.notifier).select(Destination.chats);
             ref.read(searchFocusProvider).requestFocus();
             return null;
           }),

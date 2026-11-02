@@ -102,6 +102,11 @@ class Messages extends Table {
   TextColumn get inReplyTo => text().nullable()();
   /// Space-separated Message-IDs from the References header.
   TextColumn get referencesHeader => text().nullable()();
+
+  /// When this message was read for timely information (spec 4.21), and
+  /// whether it held any.
+  DateTimeColumn get timelyCheckedAt => dateTime().nullable()();
+  BoolColumn get hasTimelyItem => boolean().withDefault(const Constant(false))();
   TextColumn get subject => text().withDefault(const Constant(''))();
   /// Normalized sender address (see IdentityResolver.normalize).
   TextColumn get fromAddress => text().withDefault(const Constant(''))();
@@ -313,6 +318,42 @@ class RowSummaries extends Table {
 }
 
 /// Feeds categories (spec 4.11): five defaults plus the user's own.
+/// One email address from the user's Google contacts (spec 4.2), kept so a
+/// sender first seen later still matches without asking Google again.
+@DataClassName('AddressBookEntry')
+class AddressBookEntryRows extends Table {
+  TextColumn get address => text()();
+  TextColumn get resourceName => text()();
+  TextColumn get photoPath => text().nullable()();
+  TextColumn get photoUrl => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {address};
+}
+
+class TimelyItems extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// A [TimelyType] name.
+  TextColumn get type => text()();
+  TextColumn get dedupeKey => text().unique()();
+  IntColumn get messageId => integer().nullable().references(Messages, #id, onDelete: KeyAction.cascade)();
+  IntColumn get accountId => integer().nullable()();
+  TextColumn get contactKey => text().withDefault(const Constant(''))();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get detail => text().withDefault(const Constant(''))();
+  DateTimeColumn get startsAt => dateTime().nullable()();
+  DateTimeColumn get endsAt => dateTime().nullable()();
+  DateTimeColumn get showFrom => dateTime()();
+  DateTimeColumn get hideAfter => dateTime()();
+  TextColumn get actionUrl => text().nullable()();
+  TextColumn get actionLabel => text().nullable()();
+  TextColumn get code => text().nullable()();
+  TextColumn get status => text().nullable()();
+  DateTimeColumn get dismissedAt => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
 class FeedsCategoryRows extends Table {
   @override
   String get tableName => 'feeds_categories';
@@ -497,16 +538,19 @@ class PlannerEvents extends Table {
   Cards,
   CardTags,
   Reminders,
-  PlannerEvents,
-])
+  PlannerEvents, TimelyItems, AddressBookEntryRows])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
+
+  /// Bumped when who-is-who changes (merge, separate). A sync already running
+  /// checks it, so mail it filed under the old rule is filed again.
+  int filingGeneration = 0;
 
   /// In-memory database for tests.
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -610,6 +654,18 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           if (from < 11) {
             await m.addColumn(contacts, contacts.userSubtitle);
           }
+          if (from < 12) {
+            await _seedFeedsCategories();
+          }
+          if (from < 13) {
+            await m.addColumn(messages, messages.timelyCheckedAt);
+            await m.addColumn(messages, messages.hasTimelyItem);
+            await m.createTable(timelyItems);
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_timely ON messages(account_id, timely_checked_at)');
+          }
+          if (from < 14) {
+            await m.createTable(addressBookEntryRows);
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -649,7 +705,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   }
 
   Future<void> _seedFeedsCategories() async {
-    const defaults = ['Newsletter', 'Receipt', 'Notification', 'Social', 'Promotion'];
+    const defaults = ['Newsletter', 'Receipt', 'Notification', 'Social', 'Promotion', 'Updates'];
     for (var i = 0; i < defaults.length; i++) {
       await customStatement("INSERT OR IGNORE INTO feeds_categories(name, builtin, sort_order) VALUES ('${defaults[i]}', 1, $i)");
     }
@@ -657,6 +713,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
 
   Future<void> _createIndexes() async {
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)');
+    await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_timely ON messages(account_id, timely_checked_at)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_from_key ON messages(from_contact_key)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date)');
     await customStatement('CREATE INDEX IF NOT EXISTS idx_participants_message ON message_participants(message_id)');

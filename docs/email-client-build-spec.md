@@ -56,12 +56,12 @@ The Windows framework is **not assumed**: the Phase 1 plan must propose one with
 This is the main/home screen, equivalent to Unibox's contact sidebar and ChatInbox's "Chats" screen.
 
 - **Header**: a Material 3 flexible top app bar — a row of icon buttons (menu icon left for account switching; filter icon and account avatar right) above a large left-aligned headline ("Chats"). Compose is a floating action button (FAB) at the bottom right, not an app-bar icon.
-- **Bottom navigation bar** (Material 3 navigation bar) on every top-level screen with four destinations: Chats, Boards, Planner, Settings. The active destination shows a filled icon inside a pill-shaped indicator.
+- **Bottom navigation bar** (Material 3 navigation bar) on every top-level screen with five destinations: Chats, Feeds, Boards, Planner, Settings (the Windows rail has the same order, with Settings at the bottom; Feeds carries a badge with its unread count, 99+ at most, hidden at zero). The active destination shows a filled icon inside a pill-shaped indicator.
 - **Search bar**: persistent, placeholder text "Search people and mail," always visible at the top of the list.
 - **Filter menu**: the filter icon in the headline row opens a checked menu — All, Unread, Starred, This Week, Sent, Has attachments, From contacts, Snoozed. Exactly one filter active at a time ("All" by default); when a filter other than All is active the icon switches to a filled, primary-colored funnel. No chip row is shown in the list pane (changed Oct 26, 2026: the wrapped chip row took a third of the middle pane).
 - **No pinned-contacts strip.** The reference apps show a horizontal row of avatars above the list; this app does not. Pinning a contact (via swipe action) keeps that contact's row at the top of the main list instead, marked with a small pin icon.
 - **Main contact list**: vertically scrolling list, each row containing:
-  - Circular avatar (contact photo if available via device contacts/synced address book, otherwise colored circle with the contact's initials — color assigned deterministically per contact so it's consistent across sessions)
+  - Circular avatar (photo from the person's Google contact card when Google Contacts is connected in Settings, read through the People API with the user's own OAuth client: `docs/google-contacts-setup.md`; otherwise colored circle with the contact's initials — color assigned deterministically per contact so it's consistent across sessions)
   - Contact display name (bold if unread messages exist). The user can **rename** a sender from the row menu; the new name replaces the header name everywhere the contact is shown, applies to all of the contact's addresses, and persists for all future mail from that sender even if every message is deleted. "Use original name" goes back to the header name. The same dialog takes an optional **subtitle**: a short note in small, quiet type under the name, like a job title on a business card. It is kept the same way as the name and is found by the list's search.
   - **No message text.** A row shows avatar, name, the optional subtitle, (Feeds) category pill, timestamp, unread badge. Subjects and bodies appear only in the conversation pane (changed Oct 29, 2026).
   - **Hover actions never cover the name.** Hovering opens a line of action icons under the name, beside any subtitle. Name, timestamp, and badge stay in view and the row's height does not change (Nov 1, 2026).
@@ -70,6 +70,7 @@ This is the main/home screen, equivalent to Unibox's contact sidebar and ChatInb
   - Each contact appears **exactly once** in this list, regardless of how many messages they've sent — sorted by the recency of the most recent message *that contact sent*. When a new reply arrives in a multi-person thread, only the replier's row moves to the top; the other participants' rows stay where they were.
   - **User-defined group rows** (see 4.19) appear in this same list and behave identically to contact rows: one row, sorted by recency, with an unread badge, swipe actions, and pinning.
   - The app **never auto-generates a group row**. Multi-recipient mail follows the sender-only filing rule unless the user has explicitly created a matching group in Settings.
+- **Merging people**: the same person writing from different addresses can be combined. With two or more people picked, the selection bar offers Merge; a row's menu offers Merge with…, with a person picker. A dialog shows each name and address and asks which name to keep. All their mail becomes one conversation, future mail from any of the addresses files there, and one Undo reverses it. In the edit dialog each extra address has Separate. Nothing merges automatically.
 - **Multi-select**: Ctrl-click toggles a row, Shift-click picks a range (starting from the open row), Ctrl+A picks every visible row, and hovering a row shows a checkbox in place of its avatar. While rows are picked every row shows its checkbox, a plain click toggles, and a bar above the list offers **Move to Feeds** (or Move to People on the Feeds tab; a permanent manual move per 4.11), **Mark as read**, and **Archive**, each with a single Undo. Esc clears the selection.
 - **List behavior**: pull-to-refresh triggers a manual sync; list updates live as new mail arrives (push or periodic poll, see 4.17).
 - **Row actions**: Archive, Delete/Trash all messages from this sender, Mark all as read, Snooze, Pin/Unpin. On Windows these appear as hover-revealed icon buttons at the right edge of the row and in a right-click context menu, with keyboard shortcuts. On Android (Phase 2) they are swipe-to-reveal.
@@ -151,7 +152,11 @@ Tapping a contact opens their dedicated conversation screen.
 
 ### 4.11 People vs. Feeds Auto-Categorization
 
-- A toggle (segmented control) between **People** and **Feeds** views on the main inbox.
+- **People** and **Feeds** are separate destinations, side by side in the navigation: Chats shows the people and Feeds shows the rest, in the same layout, each remembering its own open conversation and search (changed Nov 2, 2026; this replaces a segmented control above the list).
+- **A row of small category pills** sits under the search bar on the Feeds screen only: All, then each category with mail. A row appears under a category when any of its mail is in that category, including a single message filed differently from its sender. Selecting a pill again clears it.
+- **Gmail's Updates** becomes the category Updates unless the subjects or the address say Receipt, Notification, Newsletter or Promotion. Bulk headers alone do not make it a newsletter.
+- **Your own mail does not keep a sender in People.** A Feeds sender appears in Chats only with incoming mail filed there, such as a reply to you; your sent messages stay in its conversation on Feeds.
+- **A greeting is not personal mail** when Gmail files the message outside Primary or it holds timely information (4.21).
 - **People**: the primary, human-to-human conversations — "the inbox that matters."
 - **Feeds**: automatically detected non-human/transactional senders — newsletters, receipts, automated notifications/bots — sorted out of the main People view automatically, each tagged with a category. The Feeds screen uses the same one-row-per-sender layout as People.
 - A visible counter/indicator (e.g., "24 filed to Feeds automatically") communicates how much volume has been auto-sorted, reinforcing the value of the feature.
@@ -265,6 +270,25 @@ The only way a multi-person "row" ever exists is when the user creates one.
 - **Editing a group** re-runs the match against cached mail so the row's contents update immediately; deleting a group returns its messages to sender-only filing.
 - **No auto-creation, ever.** The app must not suggest, infer, or silently create a group from recurring co-recipient patterns. It may show an empty-state hint in Settings → People Groups explaining what groups do.
 
+### 4.21 Timely Information
+
+Researched from Gmail: `docs/gmail-timely-info-research.md`.
+
+- **What it does.** Codes, deliveries and travel go to Feeds with the rest of the automated mail, but the timely detail appears in a compact strip above the list on Chats and Feeds. The strip takes no space when nothing is due. The three most urgent lines show, with the rest behind Show more, and each line has an X. A changed status brings a dismissed line back.
+
+| Type | Shows | Disappears | Action |
+|---|---|---|---|
+| One-time code | On arrival | 15 minutes later | Copy in one click, without opening the mail |
+| Delivery | Within 2 days of arrival, or out for delivery; 4 days when no date can be read | Delivered, or after the expected date | Track |
+| Flight, train, bus | 48 hours before departure | At arrival | Check in, when the mail has a link |
+| Hotel, rental car, event | 24 hours before | When past | Open the mail |
+| Bill | 3 days before the due date | After the due date | Pay, when the mail has a link |
+
+- Clicking a line opens its mail. On Feeds, a sender with a live code also shows a copy pill under its name. Codes are never logged.
+- **Reading mail.** On the device only, in order: schema.org JSON-LD and Microdata the sender embedded (the markup Gmail documents), then rules for mail without it. Nothing guesses: a trip or bill whose date cannot be read yields nothing. Tracking numbers are checked by their check digits where the format has them. Live carrier status is not available, as it would need a third party; the strip shows dates from the mail and links to the carrier's page.
+- **Background reading.** Feeds bodies are otherwise downloaded only when opened, so a pass on the sync connection reads new mail and the last 30 days, in batches, checking for new mail between batches. It reads only mail whose subject could qualify, skips messages over 2 MB, marks nothing read, and leaves alone mail from people in the address book or people the user has written to. Those keep their messages even if a forwarded itinerary is inside.
+- **Filing.** A sender whose mail yields timely information is automated, whatever else it looks like, and goes to Feeds unless the user has written to it or moved it.
+
 ### 4.20 Threading Model
 
 Threading determines which messages the "View thread" control (4.3) shows together. It is **independent of filing**: filing decides which row a message lives in; threading decides which other messages it is related to.
@@ -307,7 +331,7 @@ The mobile screens below and the phone frames in the mockups file remain the ref
 4. **Attachments screen** (per contact): toggle between List and Grid view; featured/most-recent file card at top; full attachment list/grid below.
 5. **Boards (Kanban) screen**: horizontally scrollable columns, each vertically scrollable with draggable cards; column header shows name + count badge.
 6. **Planner (Calendar) screen**: week-strip navigation at top; vertical day-grid below with color-coded event blocks; linked to-do indicators.
-7. **Feeds screen** (via People/Feeds toggle): same visual list style as the main Chats screen but populated with auto-categorized senders, a category pill per row (Newsletter, Receipt, Notification, Social, Promotion, or a user-created category), and a small bell marker on any sender the user has flagged as "counts toward unread."
+7. **Feeds screen** (a navigation destination): same visual list style as the main Chats screen but populated with auto-categorized senders, a category pill per row (Newsletter, Receipt, Notification, Social, Promotion, or a user-created category), and a small bell marker on any sender the user has flagged as "counts toward unread."
 8. **Settings screen**: standard native list-style settings screen, grouped into sections (Accounts, Appearance, Notifications, Privacy, People Groups, Feeds, Groups & Tags).
 9. **Onboarding/account-setup flow**: provider selection or email entry → auto-detect attempt → OAuth handoff or manual configuration form → success confirmation → land on the (initially empty, then syncing) Chats screen.
 10. **Search results screen**: back button, the query in an editable search field, an "Include Feeds" switch (off by default) directly beneath it, then result rows in the same style as the Chats list, with Feeds results (when included) carrying their category pill.
@@ -485,7 +509,7 @@ Swipe a row left/right to reveal: `[Archive] [Trash] [Snooze] [Pin]` action butt
 ┌─────────────────────────────────────┐
 │ ☰        Chats                 ✎     │
 ├─────────────────────────────────────┤
-│ [ People ]  [  Feeds  ]              │  <- segmented control, "People" active
+│ 482913 · First Bank          [Copy] ×│  <- timely strip (4.21), only when something is due
 ├─────────────────────────────────────┤
 │ ↓ 24 filed to Feeds automatically    │  <- when on People tab
 ├─────────────────────────────────────┤
@@ -627,6 +651,14 @@ Product decisions made by the product owner after the original draft. Where any 
 25. A sender can carry an optional **subtitle** under the name, kept like the name (November 1, 2026). — 4.2
 26. **Hover actions sit under the name** instead of covering it (November 1, 2026). — 4.2
 27. The **"filed to Feeds" banner can be dismissed** and stays hidden until the next calendar week, Monday to Sunday (November 1, 2026). — 4.11
+
+28. **Feeds is a navigation destination** with an unread badge, replacing the People/Feeds control above the list. — 4.11, 5.3
+29. Feeds has a **row of category pills**, an exception to the rule against chips above the list. — 4.11
+30. A sender in Feeds no longer shows in Chats because of the user's own sent mail. — 4.11
+31. **Messages open on their own connection.** The connection that waits for new mail cannot serve anything else; sharing it left messages spinning for up to 20 minutes. — plan 1.2
+32. **People can be merged** at the user's request, and addresses separated again. Nothing merges automatically. — 4.2
+33. **A strip of timely information** above the list, researched from Gmail (`docs/gmail-timely-info-research.md`). — 4.21
+34. **Avatars come from Google Contacts** through the People API, with the user's own OAuth client. This replaces "device contacts only, no network lookup" for that one endpoint. — 4.2, 4.18
 
 **Build order**
 20. **Windows first, Android second.** Phase 1 is the Windows desktop app; no Android work until it is signed off. The Windows framework is proposed in the Phase 1 plan with its Phase 2 reuse implications stated. — 0, 2, 4.1, 4.2, 4.17, 4.18, 5.2, 5.3, 6, 7, 8, 9

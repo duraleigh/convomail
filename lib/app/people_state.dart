@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
-import '../store/database.dart';
+import '../store/classification_queries.dart';
+import '../store/database.dart' hide ClassificationRule;
 import '../store/people_queries.dart';
 import 'account_scope.dart';
 import 'destinations.dart';
@@ -10,9 +12,19 @@ final peopleFilterProvider = NotifierProvider<PeopleFilterNotifier, PeopleFilter
 
 class PeopleFilterNotifier extends Notifier<PeopleFilter> {
   @override
-  PeopleFilter build() => PeopleFilter.all;
-  void select(PeopleFilter f) => state = f;
+  PeopleFilter build() => ref.read(_filterMemoryProvider)[ref.watch(inboxModeProvider)] ?? PeopleFilter.all;
+  void select(PeopleFilter f) {
+    ref.read(_filterMemoryProvider)[ref.read(inboxModeProvider)] = f;
+    state = f;
+  }
 }
+
+/// What Chats and Feeds each last had open, so switching between them returns
+/// to where the user was. Kept apart from the notifiers, which rebuild when
+/// the mode changes.
+final _filterMemoryProvider = Provider<Map<InboxMode, PeopleFilter>>((ref) => {});
+final _searchMemoryProvider = Provider<Map<InboxMode, String>>((ref) => {});
+final _selectedMemoryProvider = Provider<Map<InboxMode, String?>>((ref) => {});
 
 /// Live search text typed into the middle-pane search bar.
 final peopleSearchProvider = NotifierProvider<PeopleSearchNotifier, String>(PeopleSearchNotifier.new);
@@ -22,8 +34,11 @@ class PeopleSearchNotifier extends Notifier<String> {
   final String initial;
 
   @override
-  String build() => initial;
-  void set(String s) => state = s;
+  String build() => ref.read(_searchMemoryProvider)[ref.watch(inboxModeProvider)] ?? initial;
+  void set(String s) {
+    ref.read(_searchMemoryProvider)[ref.read(inboxModeProvider)] = s;
+    state = s;
+  }
 }
 
 /// The selected row key (`c:<contact>` or `g:<id>`), or null.
@@ -31,8 +46,21 @@ final selectedRowProvider = NotifierProvider<SelectedRowNotifier, String?>(Selec
 
 class SelectedRowNotifier extends Notifier<String?> {
   @override
-  String? build() => null;
-  void select(String? key) => state = key;
+  String? build() => ref.read(_selectedMemoryProvider)[ref.watch(inboxModeProvider)];
+  void select(String? key) {
+    ref.read(_selectedMemoryProvider)[ref.read(inboxModeProvider)] = key;
+    state = key;
+  }
+}
+
+/// Opens a row from anywhere (a toast, a card, an event), on Feeds when it
+/// belongs there and on Chats otherwise. [read] is `ref.read`. A null key
+/// just goes to Chats.
+Future<void> openRow(T Function<T>(ProviderListenable<T>) read, String? key) async {
+  var destination = Destination.chats;
+  if (key != null && await read(databaseProvider).rowBelongsToFeeds(key)) destination = Destination.feeds;
+  read(destinationProvider.notifier).select(destination);
+  if (key != null) read(selectedRowProvider.notifier).select(key);
 }
 
 /// Rows picked for a bulk action (Ctrl-click, Shift-click, the row
@@ -74,6 +102,21 @@ class MultiSelectNotifier extends Notifier<Set<String>> {
   }
 }
 
+/// The category picked in the pills on the Feeds screen; null is All.
+final feedsCategoryFilterProvider = NotifierProvider<FeedsCategoryFilter, String?>(FeedsCategoryFilter.new);
+
+class FeedsCategoryFilter extends Notifier<String?> {
+  @override
+  String? build() => null;
+  void select(String? category) => state = category;
+}
+
+/// Categories with Feeds mail in the selected account, for those pills.
+final feedsCategoriesInUseProvider = StreamProvider<List<String>>((ref) => ref.watch(databaseProvider).watchCategoriesInUse(accountId: ref.watch(accountScopeProvider)));
+
+/// Unread messages in Feeds for the rail badge, in the selected account.
+final feedsUnreadProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsUnread(accountId: ref.watch(accountScopeProvider)));
+
 /// People rows for the current filter and search, live from the database.
 final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   final db = ref.watch(databaseProvider);
@@ -81,7 +124,8 @@ final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   final search = ref.watch(peopleSearchProvider);
   final mode = ref.watch(inboxModeProvider);
   final scope = ref.watch(accountScopeProvider);
-  return db.watchPeopleRows(filter: filter, search: search, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people, accountId: scope);
+  final category = mode == InboxMode.feeds ? ref.watch(feedsCategoryFilterProvider) : null;
+  return db.watchPeopleRows(filter: filter, search: search, category: category, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people, accountId: scope);
 });
 
 /// Dev/verification aid: when true, the list selects its first row and the

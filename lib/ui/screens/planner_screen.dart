@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/conversation_state.dart';
-import '../../app/destinations.dart';
 import '../../app/people_state.dart';
 import '../../app/search_state.dart';
 import '../../store/database.dart';
@@ -127,12 +126,11 @@ class _SidePane extends ConsumerWidget {
                   onTap: r.rowKey == null
                       ? null
                       : () {
-                          ref.read(selectedRowProvider.notifier).select(r.rowKey);
                           if (r.messageId != null) {
                             ref.read(expandedMessagesProvider.notifier).expand(r.messageId!);
                             ref.read(scrollToMessageProvider.notifier).request(r.messageId!);
                           }
-                          ref.read(destinationProvider.notifier).select(Destination.chats);
+                          openRow(ref.read, r.rowKey);
                         },
                 ),
             ],
@@ -467,10 +465,9 @@ class _DetailPanel extends ConsumerWidget {
                     final m = await db.messageById(event.sourceMessageId!);
                     if (m == null) return;
                     final row = await (db.select(db.messageRowAssignments)..where((r) => r.messageId.equals(m.id))..limit(1)).getSingleOrNull();
-                    ref.read(selectedRowProvider.notifier).select(row?.rowKey);
                     ref.read(expandedMessagesProvider.notifier).expand(m.id);
                     ref.read(scrollToMessageProvider.notifier).request(m.id);
-                    ref.read(destinationProvider.notifier).select(Destination.chats);
+                    await openRow(ref.read, row?.rowKey);
                   },
                   icon: const Icon(Icons.forum_outlined, size: 18),
                   label: const Text('Open conversation'),

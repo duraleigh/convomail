@@ -12,8 +12,14 @@ extension ClassificationQueries on AppDatabase {
   /// counts over messages whose signals are known, list ids, override.
   Future<SenderFacts?> senderFacts(String contactKey) async {
     final c = await (select(contacts)..where((x) => x.key.equals(contactKey))).getSingleOrNull();
-    final addr = await (select(contactAddresses)..where((a) => a.contactKey.equals(contactKey))..limit(1)).getSingleOrNull();
-    final address = addr?.address ?? contactKey;
+    // Domain and local-part rules read one address: the one most of this
+    // person's mail comes from, so a merged contact decides predictably.
+    final mapped = (await (select(contactAddresses)..where((a) => a.contactKey.equals(contactKey))).get()).map((a) => a.address).toList();
+    final top = await customSelect(
+      'SELECT from_address AS a, COUNT(*) AS n FROM messages WHERE from_contact_key = ? AND is_from_me = 0 GROUP BY from_address ORDER BY n DESC, from_address LIMIT 1',
+      variables: [Variable.withString(contactKey)],
+    ).getSingleOrNull();
+    final address = top?.read<String>('a') ?? (mapped.isEmpty ? contactKey : mapped.first);
     final agg = await customSelect(
       '''
       SELECT
@@ -51,6 +57,8 @@ extension ClassificationQueries on AppDatabase {
     ).get();
     return SenderFacts(
       address: address,
+      otherAddresses: [for (final a in mapped) if (a != address) a],
+      messagesWithTimely: await _timelyCount(contactKey),
       name: agg.readNullable<String>('name') ?? c?.displayName ?? '',
       userHasWrittenTo: agg.read<int>('written') > 0,
       inAddressBook: c?.inAddressBook ?? false,
@@ -61,6 +69,14 @@ extension ClassificationQueries on AppDatabase {
       providerCategories: {for (final r in cats) r.read<String>('cat'): r.read<int>('n')},
       subjects: [for (final r in subjects) r.readNullable<String>('subject') ?? ''],
     );
+  }
+
+  Future<int> _timelyCount(String contactKey) async {
+    final r = await customSelect(
+      'SELECT COUNT(*) AS n FROM messages WHERE from_contact_key = ? AND is_from_me = 0 AND has_timely_item = 1',
+      variables: [Variable.withString(contactKey)],
+    ).getSingle();
+    return r.read<int>('n');
   }
 
   // ---- provider categories (Gmail) ---------------------------------------------
@@ -123,6 +139,22 @@ extension ClassificationQueries on AppDatabase {
         "UPDATE contacts SET class_reasons = '' WHERE classification_source <> 'override'",
         updates: {contacts},
       );
+
+  /// Forgets categories the rules chose, so they are chosen again. Categories
+  /// the user set (logged as corrections) stay. Message categories are read
+  /// from history, as the rows themselves do not say who set them.
+  Future<void> resetAutoCategories() async {
+    await customUpdate(
+      "UPDATE contacts SET feeds_category = NULL WHERE classification_source <> 'override' "
+      "AND key NOT IN (SELECT contact_key FROM classification_events WHERE source = 'correction' AND message_id IS NULL AND contact_key IS NOT NULL)",
+      updates: {contacts},
+    );
+    await customUpdate(
+      'UPDATE messages SET feeds_category = NULL WHERE feeds_category IS NOT NULL '
+      "AND id NOT IN (SELECT message_id FROM classification_events WHERE source = 'correction' AND message_id IS NOT NULL)",
+      updates: {messages},
+    );
+  }
 
   /// Message-IDs of mail the user sent, for the reply-to-me exception.
   Future<bool> isReplyToMine(String? inReplyTo) async {
@@ -279,6 +311,25 @@ extension ClassificationQueries on AppDatabase {
         reasons: Value(reasons.join(' · ')),
         source: source,
       ));
+
+  /// Unread incoming messages filed to Feeds (the rail badge).
+  Stream<int> watchFeedsUnread({int? accountId}) => customSelect(
+        "SELECT COUNT(*) AS n FROM messages WHERE classification = 'feeds' AND is_from_me = 0 AND is_deleted = 0 AND is_seen = 0 "
+        "AND folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash')) ${accountId == null ? '' : 'AND account_id = ?'}",
+        variables: [if (accountId != null) Variable.withInt(accountId)],
+        readsFrom: {messages, folders},
+      ).watchSingle().map((r) => r.read<int>('n'));
+
+  /// Whether a row is listed on Feeds and not on Chats: a Feeds sender with
+  /// no incoming mail filed under People (the same rule as the two lists).
+  Future<bool> rowBelongsToFeeds(String rowKey) async {
+    if (!rowKey.startsWith('c:')) return false;
+    final r = await customSelect(
+      'SELECT c.classification AS cls, s.last_people AS last_people FROM contacts c LEFT JOIN row_summaries s ON s.row_key = ? WHERE c.key = ?',
+      variables: [Variable.withString(rowKey), Variable.withString(rowKey.substring(2))],
+    ).getSingleOrNull();
+    return r != null && r.read<String>('cls') == 'feeds' && r.readNullable<int>('last_people') == null;
+  }
 
   /// Messages filed to Feeds since [since] (the "N filed" banner).
   Stream<int> watchFeedsFiledSince(DateTime since) => customSelect(

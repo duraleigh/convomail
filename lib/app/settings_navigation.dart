@@ -10,6 +10,7 @@ enum SettingsSection {
   privacy('Privacy', Icons.shield_outlined),
   peopleGroups('People Groups', Icons.group_outlined),
   feeds('Feeds', Icons.rss_feed_rounded),
+  contacts('Google Contacts', Icons.contacts_outlined),
   tags('Groups & Tags', Icons.label_outline_rounded),
   keyboard('Keyboard', Icons.keyboard_outlined),
   defaultApp('Default mail app', Icons.mail_outline_rounded),

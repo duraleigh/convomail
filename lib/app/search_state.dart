@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../store/database.dart';
 import '../store/search_queries.dart';
 import 'account_scope.dart';
+import 'destinations.dart';
 import 'people_state.dart';
 import 'settings.dart';
 
@@ -39,7 +40,8 @@ final searchHitsProvider = FutureProvider<List<SearchHit>>((ref) async {
   final q = ref.watch(debouncedSearchProvider);
   if (q.trim().isEmpty) return const [];
   final filter = ref.watch(peopleFilterProvider);
-  final includeFeeds = ref.watch(settingsProvider.select((s) => s.searchIncludeFeeds));
+  // Searching from Feeds always covers Feeds; on Chats it is a setting.
+  final includeFeeds = ref.watch(inboxModeProvider) == InboxMode.feeds || ref.watch(settingsProvider.select((s) => s.searchIncludeFeeds));
   return ref.watch(databaseProvider).searchMessages(q, filter: filter, includeFeeds: includeFeeds, accountId: ref.watch(accountScopeProvider));
 });
 

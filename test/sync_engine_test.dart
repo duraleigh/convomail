@@ -1,6 +1,7 @@
 import 'package:convomail/mail/mail_transport.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/store/database.dart';
+import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/sync_queries.dart';
 import 'package:convomail/store/thread_queries.dart';
 import 'package:convomail/sync/sync_engine.dart';
@@ -228,6 +229,120 @@ void main() {
     await syncer.stop();
     await running.timeout(const Duration(seconds: 5));
     expect(syncer.status.phase, SyncPhase.stopped);
+  });
+
+  group('on-demand work has its own connection', () {
+    late FakeMailTransport second;
+    late AccountSyncer two;
+
+    setUp(() {
+      second = server.secondConnection();
+      two = AccountSyncer(
+        db: db,
+        transport: server,
+        onDemandTransport: second,
+        account: account,
+        credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'),
+        onStatus: statuses.add,
+        sleep: (_) async {},
+      );
+    });
+
+    Future<void> untilWaiting() => Future.doWhile(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+          return two.status.phase != SyncPhase.waitingForMail;
+        }).timeout(const Duration(seconds: 5));
+
+    test('opening, flags, archive and delete all work while sync waits for new mail', () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      for (var i = 0; i < 4; i++) {
+        inbox.add(hdr(from: 'a@x.com', subject: 'm$i'), body: RemoteMessageBody(text: 'body $i'));
+      }
+      server.failDuringIdle = true;
+      final running = two.run();
+      await untilWaiting();
+      expect(server.idling, isTrue);
+
+      final msgs = await allMessages();
+      await two.fetchBody(msgs[0].id).timeout(const Duration(seconds: 2));
+      expect((await db.messageById(msgs[0].id))!.bodyText, 'body 0');
+      await two.setFlags(msgs[0].folderId, [msgs[0].uid], flagged: true);
+      await two.trashOnServer(msgs[1].folderId, [msgs[1].uid]);
+      await two.archiveOnServer(msgs[2].folderId, [msgs[2].uid]);
+
+      expect(server.idling, isTrue, reason: 'still waiting for new mail, undisturbed');
+      expect(second.connectCount, 1, reason: 'one connection reused');
+      expect(two.status.phase, isNot(SyncPhase.error));
+      await two.stop();
+      await running.timeout(const Duration(seconds: 5));
+      expect(second.isConnected, isFalse, reason: 'stop closes both');
+    });
+
+    test('operations stay in order, so a folder select and its command stay together', () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      final sent = server.folder('Sent', role: FolderRole.sent);
+      inbox.add(hdr(from: 'a@x.com', subject: 'in'), body: const RemoteMessageBody(text: 'inbox body'));
+      sent.add(hdr(from: 'me@example.com', to: ['a@x.com'], subject: 'out'), body: const RemoteMessageBody(text: 'sent body'));
+      await two.syncOnce();
+      final msgs = await allMessages();
+      final inMsg = msgs.firstWhere((m) => m.subject == 'in');
+      final outMsg = msgs.firstWhere((m) => m.subject == 'out');
+      expect(inMsg.uid, outMsg.uid, reason: 'same UID in two folders: the wrong folder gives the wrong body');
+
+      await Future.wait([two.fetchBody(inMsg.id), two.fetchBody(outMsg.id)]);
+      expect((await db.messageById(inMsg.id))!.bodyText, 'inbox body');
+      expect((await db.messageById(outMsg.id))!.bodyText, 'sent body');
+    });
+
+    test('a dropped connection is replaced once, and a persistent failure reaches the caller', () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      inbox.add(hdr(from: 'a@x.com'), body: const RemoteMessageBody(text: 'one'));
+      inbox.add(hdr(from: 'a@x.com'), body: const RemoteMessageBody(text: 'two'));
+      await two.syncOnce();
+      final msgs = await allMessages();
+
+      second.failFetchBody = 1;
+      await two.fetchBody(msgs[0].id);
+      expect(second.connectCount, 2, reason: 'reconnected for the retry');
+
+      second.failFetchBody = 2;
+      await expectLater(two.fetchBody(msgs[1].id), throwsA(isA<MailTransportException>()));
+      await two.fetchBody(msgs[1].id);
+      expect((await db.messageById(msgs[1].id))!.bodyText, 'two', reason: 'the queue survives a failure');
+    });
+
+    test('a sent copy syncs through the waiting loop, which then goes back to waiting', () async {
+      server.folder('INBOX', role: FolderRole.inbox);
+      final sent = server.folder('Sent', role: FolderRole.sent);
+      server.failDuringIdle = true;
+      final running = two.run();
+      await untilWaiting();
+
+      sent.add(hdr(from: 'me@example.com', to: ['a@x.com'], subject: 'just sent'));
+      expect(await two.storeSentCopy('raw', appendCopy: false), isTrue);
+      expect((await allMessages()).map((m) => m.subject), contains('just sent'));
+
+      await untilWaiting();
+      expect(server.idling, isTrue);
+      await two.stop();
+      await running.timeout(const Duration(seconds: 5));
+    });
+  });
+
+  test('a merge holds across later syncs, and mail synced under the old rule is filed again', () async {
+    final inbox = server.folder('INBOX', role: FolderRole.inbox);
+    inbox.add(hdr(from: 'andrea@one.com', fromName: 'Andrea Johnson', subject: 'first'));
+    inbox.add(hdr(from: 'andrea@two.com', fromName: 'Andrea Johnson', subject: 'second'));
+    await syncer.syncOnce();
+    await syncer.classification.mergePeople('andrea@one.com', ['andrea@two.com']);
+
+    inbox.add(hdr(from: 'andrea@two.com', fromName: 'Andrea Johnson', subject: 'third'));
+    await syncer.syncOnce();
+    await db.refreshDirtyRows();
+
+    final rows = (await db.peopleRows()).where((r) => r.title == 'Andrea Johnson').toList();
+    expect(rows, hasLength(1));
+    expect((await db.messagesForRow('c:andrea@one.com')).map((m) => m.subject).toSet(), {'first', 'second', 'third'});
   });
 
   test('folders that disappear on the server are removed locally', () async {

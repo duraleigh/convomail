@@ -430,6 +430,12 @@ class ImapTransport implements MailTransport {
     }
   }
 
+  @override
+  void interruptIdle() {
+    final pending = _pendingIdle;
+    if (pending != null && !pending.isCompleted) pending.complete(null);
+  }
+
   /// Appends a raw RFC 822 message to a folder. Used by integration tests to
   /// simulate mail arriving from elsewhere; the app's own sending goes
   /// through SMTP and the server's Sent folder in milestone 4.

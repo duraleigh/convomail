@@ -212,6 +212,23 @@ void main() {
       await teardown(tester);
     });
 
+    testWidgets('a body that fails to load shows the error and a Retry button that works', (tester) async {
+      await openSarah(tester);
+      imap.failFetchBody = 100;
+      await tester.tap(find.text('Dashboard shot'));
+      await tester.pumpAndSettle();
+      final retry = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('body-retry-'));
+      expect(retry, findsOneWidget);
+      expect(find.textContaining('simulated dropped connection'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing, reason: 'no endless spinner');
+
+      imap.failFetchBody = 0;
+      await tester.tap(retry);
+      await tester.pumpAndSettle();
+      expect(retry, findsNothing);
+      await teardown(tester);
+    });
+
     testWidgets('tapping an image chip downloads it and opens the quick-look preview with Save as', (tester) async {
       await openSarah(tester);
       await tester.tap(find.text('Dashboard shot'));
@@ -221,11 +238,11 @@ void main() {
       expect(find.descendant(of: chip, matching: find.text('dashboard.png')), findsOneWidget);
 
       // The download writes a file; real I/O only completes inside runAsync.
-      await tester.runAsync(() async {
-        await tester.tap(chip);
-        await tester.pump();
-        await Future<void>.delayed(const Duration(milliseconds: 400));
-      });
+      await tester.tap(chip);
+      for (var i = 0; i < 40 && find.byType(AttachmentPreviewDialog).evaluate().isEmpty; i++) {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 20));
+      }
       await settle(tester);
       expect(find.byType(AttachmentPreviewDialog), findsOneWidget);
       expect(find.byKey(const ValueKey('preview-save-as')), findsOneWidget);

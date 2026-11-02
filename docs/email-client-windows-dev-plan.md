@@ -60,7 +60,7 @@ Key design rules:
 - **Stable message identity.** Every message row carries its RFC Message-ID, account, folder and UID. Filing, threading and all user metadata (tags, snooze, Kanban column, category) key off Message-ID, so a future cross-device sync or a re-sync after UIDVALIDITY change does not orphan user data.
 - **Filing and threading stored separately** (spec 4.20): `message_row_assignment` (which People/Feeds/group row a message lives in) and `thread_membership` are distinct tables. Changing one rule never rewrites the other.
 - **All classification decisions are logged** (`classification_events`: message, rule that fired, user override, timestamp) to satisfy spec 4.15's training-data requirement.
-- **No network call leaves the app except to the user's mail providers and the OAuth endpoints of Google/Microsoft.** Provider auto-configuration uses a bundled snapshot of the open ISPDB data plus DNS SRV lookup, not a live lookup (Open Decision 4).
+- **No network call leaves the app except to the user's mail providers, the OAuth endpoints of Google/Microsoft, and, once the user connects Google Contacts, Google's People API and its photo host.** Provider auto-configuration uses a bundled snapshot of the open ISPDB data plus DNS SRV lookup, not a live lookup (Open Decision 4).
 - **HTML mail is sanitized before rendering:** scripts, forms, external stylesheets and remote `<img>`/CSS-background URLs are stripped; each removed remote host is recorded in `tracker_log`; the placeholder and "Load images" flow (4.13) re-inserts them on demand. The sanitized document renders in WebView2 with navigation disabled and a strict CSP.
 
 ### 1.3 Data model (principal tables)

@@ -141,6 +141,7 @@ class FeedsDetail extends ConsumerWidget {
         'Newsletter' => Icons.newspaper_outlined,
         'Receipt' => Icons.receipt_long_outlined,
         'Notification' => Icons.notifications_none_rounded,
+        'Updates' => Icons.update_rounded,
         'Social' => Icons.people_outline_rounded,
         'Promotion' => Icons.local_offer_outlined,
         _ => Icons.label_outline_rounded,

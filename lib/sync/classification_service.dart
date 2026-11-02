@@ -6,6 +6,7 @@ import '../domain/classifier.dart';
 import '../domain/identity.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart' hide ClassificationRule;
+import '../store/merge_queries.dart';
 import '../store/people_queries.dart';
 import '../store/sync_queries.dart';
 
@@ -21,7 +22,7 @@ class ClassificationService {
 
   /// Bumped when the rules change enough that existing automatic decisions
   /// should be redone. Stored under [versionKey].
-  static const classifierVersion = 3;
+  static const classifierVersion = 4;
   static const versionKey = 'classifier.version';
 
   /// Redoes automatic sender decisions once after a classifier upgrade;
@@ -30,6 +31,8 @@ class ClassificationService {
     final stored = int.tryParse(await db.getSetting(versionKey) ?? '') ?? 1;
     if (stored >= classifierVersion) return false;
     await db.resetAutoClassifications();
+    // Version 4 added Gmail Updates to how categories are chosen.
+    if (stored < 4) await db.resetAutoCategories();
     await db.putSetting(versionKey, '$classifierVersion');
     return true;
   }
@@ -107,6 +110,7 @@ class ClassificationService {
       signals: BulkSignals.decode(m.bulkSignals),
       isReplyToMine: await db.isReplyToMine(m.inReplyTo),
       providerCategory: m.providerCategory,
+      hasTimelyItem: m.hasTimelyItem,
     );
     var bucket = m.isFromMe ? Bucket.people : senderBucket;
     if (bucket == Bucket.feeds && classifier.isPersonalException(facts)) bucket = Bucket.people;
@@ -168,6 +172,25 @@ class ClassificationService {
     await db.setSenderOverride(contactKey, bucket);
     await classifySenders([contactKey], log: false);
     await db.logClassification(contactKey: contactKey, decision: bucket ?? Bucket.people, reasons: [bucket == null ? 'override cleared' : 'manual move'], source: 'override');
+  }
+
+  /// Combines people at the user's request (spec 4.2) and decides the result
+  /// again, as its evidence is now the mail of both.
+  Future<MergeSnapshot> mergePeople(String keepKey, Iterable<String> others) async {
+    final snapshot = await db.mergeContacts(keepKey, others);
+    await classifySenders([keepKey], log: false);
+    return snapshot;
+  }
+
+  Future<void> undoMerge(MergeSnapshot snapshot) async {
+    await db.undoMerge(snapshot);
+    await classifySenders(snapshot.keys, log: false);
+  }
+
+  /// Takes an address back out of a merged person.
+  Future<void> separateAddress(String contactKey, String address) async {
+    await db.separateAddress(address);
+    await classifySenders([contactKey, address], log: false);
   }
 
   Future<void> setCountsTowardUnread(String contactKey, bool on) async {

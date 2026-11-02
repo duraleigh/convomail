@@ -83,4 +83,8 @@ abstract interface class MailTransport {
   /// Waits in IDLE on the selected folder until the server pushes something
   /// or [timeout] elapses (returns null on timeout).
   Future<MailboxEvent?> idle({required Duration timeout});
+
+  /// Ends a pending [idle] early; it returns null, as on a timeout. Does
+  /// nothing when no idle is pending.
+  void interruptIdle();
 }

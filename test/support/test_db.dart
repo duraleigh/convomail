@@ -7,12 +7,12 @@ import 'package:drift/drift.dart' show Value;
 AppDatabase testDatabase() => AppDatabase.memory();
 
 /// Inserts a minimal account row and returns it.
-Future<Account> insertTestAccount(AppDatabase db, {String email = 'me@example.com'}) async {
+Future<Account> insertTestAccount(AppDatabase db, {String email = 'me@example.com', String imapHost = 'imap.example.com', int imapPort = 993, String imapSecurity = 'ssl'}) async {
   final id = await db.into(db.accounts).insert(AccountsCompanion.insert(
         email: email,
-        imapHost: 'imap.example.com',
-        imapPort: 993,
-        imapSecurity: 'ssl',
+        imapHost: imapHost,
+        imapPort: imapPort,
+        imapSecurity: imapSecurity,
         smtpHost: 'smtp.example.com',
         smtpPort: 465,
         smtpSecurity: 'ssl',

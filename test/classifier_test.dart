@@ -157,7 +157,7 @@ void main() {
       final d = classifier.classifySender(const SenderFacts(address: 'mark@vendor.com', messagesWithKnownSignals: 3, providerCategories: {'updates': 3}));
       expect(d.bucket, Bucket.feeds);
       expect(d.reasons.first, contains('Gmail files this sender under Updates'));
-      expect(d.category, FeedsCategories.notification);
+      expect(d.category, FeedsCategories.updates);
       final promo = classifier.classifySender(const SenderFacts(address: 'hello@brand.com', messagesWithKnownSignals: 2, providerCategories: {'promotions': 2}));
       expect(promo.category, FeedsCategories.promotion);
       final receipts = classifier.classifySender(const SenderFacts(

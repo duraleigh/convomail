@@ -35,6 +35,8 @@ class PeopleRow {
     this.muted = false,
     this.accountIds = const {},
     this.subtitle,
+    this.onFeedsTab = false,
+    this.photoPath,
   });
 
   final RowRef ref;
@@ -42,6 +44,12 @@ class PeopleRow {
 
   /// The user's note under the sender's name; null when there is none.
   final String? subtitle;
+
+  /// The sender's photo from their Google contact card, as a local file.
+  final String? photoPath;
+
+  /// This row was listed for the Feeds tab, so it shows its category.
+  final bool onFeedsTab;
 
   /// Key used for the avatar color: the contact key, or `g:<id>` for groups.
   final String identityKey;
@@ -114,7 +122,10 @@ extension PeopleQueries on AppDatabase {
   /// Live People rows for [filter], pinned first, then by activity.
   /// Messages in junk/trash folders and locally deleted messages are
   /// excluded. `search` matches title, address, subject or snippet.
-  Stream<List<PeopleRow>> watchPeopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId}) {
+  ///
+  /// [category] narrows the Feeds list to rows with mail in that category,
+  /// whether it comes from the sender's default or from a single message.
+  Stream<List<PeopleRow>> watchPeopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId, String? category}) {
     final q = customSelect(
       accountId == null ? _listSql : _scopedListSql,
       variables: accountId == null ? const [] : [Variable.withInt(accountId)],
@@ -124,15 +135,45 @@ extension PeopleQueries on AppDatabase {
       // Summaries may be stale right after a migration or a direct write;
       // refreshing here is a no-op when nothing is dirty.
       await refreshDirtyRows();
-      return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab);
+      return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category);
     });
   }
 
-  Future<List<PeopleRow>> peopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId}) async {
+  Future<List<PeopleRow>> peopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId, String? category}) async {
     await refreshDirtyRows();
     final rows = await customSelect(accountId == null ? _listSql : _scopedListSql, variables: accountId == null ? const [] : [Variable.withInt(accountId)]).get();
-    return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab);
+    return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category);
   }
+
+  /// Row keys holding Feeds mail in [category].
+  Future<Set<String>> _rowsInCategory(String category) async {
+    final rows = await customSelect(
+      '''
+      SELECT DISTINCT r.row_key AS k FROM message_row_assignments r
+      JOIN messages m ON m.id = r.message_id
+      LEFT JOIN contacts c ON c.key = m.from_contact_key
+      WHERE m.classification = 'feeds' AND m.is_deleted = 0 AND COALESCE(m.feeds_category, c.feeds_category) = ?
+      ''',
+      variables: [Variable.withString(category)],
+    ).get();
+    return {for (final r in rows) r.read<String>('k')};
+  }
+
+  /// Categories that hold Feeds mail, in their configured order. These are
+  /// the filter pills on the Feeds screen.
+  Stream<List<String>> watchCategoriesInUse({int? accountId}) => customSelect(
+        '''
+        SELECT f.name AS name FROM feeds_categories f
+        WHERE EXISTS (
+          SELECT 1 FROM messages m LEFT JOIN contacts c ON c.key = m.from_contact_key
+          WHERE m.classification = 'feeds' AND m.is_deleted = 0 ${accountId == null ? '' : 'AND m.account_id = ?'}
+            AND COALESCE(m.feeds_category, c.feeds_category) = f.name
+        )
+        ORDER BY f.sort_order, f.name
+        ''',
+        variables: [if (accountId != null) Variable.withInt(accountId)],
+        readsFrom: {feedsCategoryRows, messages, contacts},
+      ).watch().map((rows) => [for (final r in rows) r.read<String>('name')]);
 
   /// Marks rows stale so the next refresh recomputes them.
   /// The user's own name for a sender (spec 4.2). It replaces the name from
@@ -242,7 +283,7 @@ extension PeopleQueries on AppDatabase {
            mp.subject AS pp_subject, mp.snippet AS pp_snippet, mp.is_from_me AS pp_from_me,
            mf.subject AS pf_subject, mf.snippet AS pf_snippet, mf.is_from_me AS pf_from_me,
            COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at, COALESCE(p.muted, 0) AS muted,
-           COALESCE(NULLIF(c.user_label, ''), c.display_name) AS c_name, NULLIF(c.user_subtitle, '') AS c_subtitle, COALESCE(c.in_address_book, 0) AS c_in_book,
+           COALESCE(NULLIF(c.user_label, ''), c.display_name) AS c_name, NULLIF(c.user_subtitle, '') AS c_subtitle, c.photo_path AS c_photo, COALESCE(c.in_address_book, 0) AS c_in_book,
            COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
            g.name AS g_name,
            (SELECT GROUP_CONCAT(DISTINCT mm.account_id) FROM message_row_assignments rr JOIN messages mm ON mm.id = rr.message_id WHERE rr.row_key = s.row_key AND mm.is_deleted = 0) AS account_ids
@@ -298,7 +339,8 @@ extension PeopleQueries on AppDatabase {
     ) s
 ''');
 
-  Future<List<PeopleRow>> _materialize(List<QueryRow> rows, {required PeopleFilter filter, required String search, InboxTab tab = InboxTab.people}) async {
+  Future<List<PeopleRow>> _materialize(List<QueryRow> rows, {required PeopleFilter filter, required String search, InboxTab tab = InboxTab.people, String? category}) async {
+    final inCategory = category == null ? null : await _rowsInCategory(category);
     Map<int, List<(String, String)>>? membersByGroup;
     Future<List<(String, String)>> membersFor(int groupId) async {
       if (membersByGroup == null) {
@@ -325,12 +367,16 @@ extension PeopleQueries on AppDatabase {
       final peopleUnread = (d['people_unread'] as int?) ?? 0;
       final feedsUnread = (d['feeds_unread'] as int?) ?? 0;
       final classification = isGroupRow ? 'people' : ((d['c_class'] as String?) ?? 'people');
-      // Spec 4.11: a row shows under People when it has People messages (a
-      // Feeds sender with a personal exception included) and under Feeds
-      // when it is a Feeds sender with Feeds messages.
-      final inPeople = peopleTotal > 0 || isGroupRow;
-      final inFeeds = !isGroupRow && classification == 'feeds' && feedsTotal > 0;
+      // Spec 4.11: a row shows under People when it has People messages and
+      // under Feeds when it is a Feeds sender. The user's own mail does not
+      // keep a Feeds sender in People: only incoming mail filed there does (a
+      // reply to the user, for example). `last_people` is set only by that.
+      final feedsSender = !isGroupRow && classification == 'feeds';
+      final inboundPeople = d['last_people'] != null;
+      final inPeople = isGroupRow || (feedsSender ? inboundPeople : peopleTotal > 0);
+      final inFeeds = feedsSender && (feedsTotal > 0 || !inPeople);
       if (tab == InboxTab.people ? !inPeople : !inFeeds) continue;
+      if (inCategory != null && !inCategory.contains(rowKey)) continue;
       final feedsTab = tab == InboxTab.feeds;
       final lastReceived = feedsTab ? _dt(d['last_feeds']) : (_dt(d['last_people']) ?? _dt(d['last_received']));
       final lastAny = _dt(d['last_any']);
@@ -383,6 +429,8 @@ extension PeopleQueries on AppDatabase {
         ref: ref,
         title: title,
         subtitle: subtitle,
+        photoPath: ref is ContactRow ? d['c_photo'] as String? : null,
+        onFeedsTab: feedsTab,
         identityKey: identityKey,
         lastActivity: _later(ref is GroupRow ? lastAny : (lastReceived ?? lastAny), resurfacedAt),
         previewSubject: subject,
@@ -395,7 +443,8 @@ extension PeopleQueries on AppDatabase {
         hasAttachments: hasAttachments,
         members: members,
         classification: classification,
-        category: d['c_category'] as String?,
+        // Filtered by a category, the row shows why it is there.
+        category: category ?? d['c_category'] as String?,
         countsTowardUnread: d['c_counts'] == 1,
         peopleUnread: peopleUnread,
         feedsUnread: feedsUnread,

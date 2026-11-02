@@ -3,8 +3,11 @@ import 'package:convomail/mail/transport_factory.dart';
 import 'package:convomail/main.dart';
 import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/database.dart';
+import 'package:convomail/store/merge_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
+import 'package:convomail/store/sync_queries.dart';
+import 'package:convomail/sync/classification_service.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/chats/person_row.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
@@ -248,6 +251,104 @@ void main() {
     expect(find.byType(CountBadge), findsNothing);
     expect(find.byKey(const ValueKey('selection-bar')), findsNothing);
     await teardown(tester);
+  });
+
+  group('merge people', () {
+    Future<void> seedSecondAddress() async {
+      final folder = (await db.select(db.folders).get()).first;
+      final id = await db.into(db.messages).insert(MessagesCompanion.insert(
+            accountId: folder.accountId,
+            folderId: folder.id,
+            uid: 500,
+            subject: const Value('From the other address'),
+            fromAddress: const Value('sarah@work.com'),
+            fromName: const Value('Sarah C'),
+            fromContactKey: const Value('sarah@work.com'),
+            date: Value(DateTime.now()),
+          ));
+      await db.into(db.messageRowAssignments).insert(MessageRowAssignmentsCompanion.insert(messageId: id, rowKey: 'c:sarah@work.com'));
+      await db.into(db.contacts).insert(ContactsCompanion.insert(key: 'sarah@work.com', displayName: const Value('Sarah C')), mode: InsertMode.insertOrIgnore);
+      await db.into(db.contactAddresses).insert(ContactAddressesCompanion.insert(address: 'sarah@work.com', contactKey: 'sarah@work.com'), mode: InsertMode.insertOrIgnore);
+      await db.into(db.contactAddresses).insert(ContactAddressesCompanion.insert(address: 'sarah@x.com', contactKey: 'sarah@x.com'), mode: InsertMode.insertOrIgnore);
+      await db.into(db.rowPrefs).insert(RowPrefsCompanion.insert(rowKey: 'c:sarah@work.com', pinned: const Value(true)));
+      await db.refreshDirtyRows();
+    }
+
+    Future<List<String>> keys() async => (await db.peopleRows()).map((r) => r.rowKey).toList();
+
+    test('rows and messages combine; the kept name stays; a later message from either address files there', () async {
+      await seedSecondAddress();
+      await ClassificationService(db).mergePeople('sarah@x.com', ['sarah@x.com', 'sarah@work.com']);
+      await db.refreshDirtyRows();
+
+      final all = await keys();
+      expect(all, contains('c:sarah@x.com'));
+      expect(all, isNot(contains('c:sarah@work.com')));
+      final row = (await db.peopleRows()).firstWhere((r) => r.rowKey == 'c:sarah@x.com');
+      expect(row.title, 'Sarah Chen');
+      expect(row.pinned, isTrue, reason: 'preferences carry over');
+      expect((await db.messagesForRow('c:sarah@x.com')).map((m) => m.subject), contains('From the other address'));
+      expect((await (db.select(db.contacts)..where((c) => c.key.equals('sarah@work.com'))).get()), isEmpty);
+
+      final identity = await db.loadIdentityResolver();
+      expect(identity.contactKeyFor('sarah@work.com'), 'sarah@x.com', reason: 'future mail resolves to the merged person');
+    });
+
+    test('undo puts everything back', () async {
+      await seedSecondAddress();
+      final service = ClassificationService(db);
+      final snapshot = await service.mergePeople('sarah@x.com', ['sarah@work.com']);
+      await service.undoMerge(snapshot);
+      await db.refreshDirtyRows();
+
+      final rows = await db.peopleRows();
+      expect(rows.map((r) => r.rowKey), containsAll(['c:sarah@x.com', 'c:sarah@work.com']));
+      expect(rows.firstWhere((r) => r.rowKey == 'c:sarah@work.com').pinned, isTrue);
+      expect((await db.messagesForRow('c:sarah@work.com')).single.subject, 'From the other address');
+    });
+
+    test('separating an address restores filing, named from its mail', () async {
+      await seedSecondAddress();
+      final service = ClassificationService(db);
+      await service.mergePeople('sarah@x.com', ['sarah@work.com']);
+      expect(await db.addressesOf('sarah@x.com'), ['sarah@x.com', 'sarah@work.com']);
+      await service.separateAddress('sarah@x.com', 'sarah@work.com');
+      await db.refreshDirtyRows();
+
+      final rows = await db.peopleRows();
+      expect(rows.firstWhere((r) => r.rowKey == 'c:sarah@work.com').title, 'Sarah C');
+      expect((await db.messagesForRow('c:sarah@x.com')).map((m) => m.subject), isNot(contains('From the other address')));
+    });
+
+    testWidgets('picking two rows offers Merge; a dialog picks the name; Undo works', (tester) async {
+      await seedSecondAddress();
+      tester.view.physicalSize = const Size(1400, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(app());
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.tap(find.text('Sarah Chen'));
+      await tester.pump();
+      expect(find.byKey(const ValueKey('bulk-merge')), findsNothing, reason: 'one row cannot merge');
+      await tester.tap(find.text('Sarah C'));
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('bulk-merge')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('merge-dialog')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('merge-keep-sarah@work.com')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('merge-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sarah Chen'), findsNothing);
+      expect(find.descendant(of: find.byType(PersonRow), matching: find.text('Sarah C')), findsOneWidget);
+      expect(find.textContaining('Merged 2 people into Sarah C'), findsOneWidget);
+      await teardown(tester);
+    });
   });
 
   testWidgets('hover actions never cover the name, and leave the time and the row height alone', (tester) async {

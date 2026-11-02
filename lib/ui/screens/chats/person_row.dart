@@ -7,13 +7,17 @@ import '../../../store/people_queries.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'people_list_pane.dart';
+import 'timely_strip.dart';
 
 /// One People-list row (spec 4.2): avatar, name, the user's optional
 /// subtitle, time, unread badge, pin marker; no message text. Hovering opens
 /// a line of action buttons under the name, so the name, time and badge stay
 /// in view; right-click opens the same actions as a context menu.
 class PersonRow extends ConsumerStatefulWidget {
-  const PersonRow({super.key, required this.row, required this.selected, required this.onAction, this.checked = false, this.selectionMode = false, this.onCheck});
+  const PersonRow({super.key, required this.row, required this.selected, required this.onAction, this.checked = false, this.selectionMode = false, this.onCheck, this.liveCode});
+
+  /// A one-time code from this sender still in date, offered for copying.
+  final String? liveCode;
 
   final PeopleRow row;
   final bool selected;
@@ -67,6 +71,8 @@ class _PersonRowState extends ConsumerState<PersonRow> {
         ),
         if (!widget.row.isGroup && widget.row.identityKey != 'me')
           const PopupMenuItem(value: RowAction.rename, child: ListTile(leading: Icon(Icons.drive_file_rename_outline_rounded), title: Text('Edit name and subtitle…'), dense: true)),
+        if (!widget.row.isGroup && widget.row.identityKey != 'me')
+          const PopupMenuItem(value: RowAction.mergeWith, child: ListTile(leading: Icon(Icons.merge_rounded), title: Text('Merge with…'), dense: true)),
         if (!widget.row.isGroup) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
@@ -177,7 +183,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                                     style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500, height: 1.2),
                                   ),
                                 ),
-                                if (row.isFeeds && row.category != null) ...[
+                                if (row.onFeedsTab && row.category != null) ...[
                                   const SizedBox(width: 8),
                                   // Never more than half the room, so it cannot
                                   // squeeze the name out or overflow the row.
@@ -211,10 +217,14 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                       duration: const Duration(milliseconds: 110),
                       curve: Curves.easeOut,
                       alignment: Alignment.topCenter,
-                      child: subtitle == null && !_hover
+                      child: subtitle == null && !_hover && widget.liveCode == null
                           ? const SizedBox(width: double.infinity)
                           : Row(
                               children: [
+                                if (widget.liveCode != null) ...[
+                                  TimelyCodePill(key: ValueKey('row-code-${row.rowKey}'), code: widget.liveCode!),
+                                  const SizedBox(width: 6),
+                                ],
                                 Expanded(
                                   child: subtitle == null
                                       ? const SizedBox.shrink()

@@ -75,10 +75,21 @@ class FakeFolder {
 }
 
 class FakeMailTransport implements MailTransport {
-  FakeMailTransport({this.password = 'secret'});
+  FakeMailTransport({this.password = 'secret', Map<String, FakeFolder>? folders}) : folders = folders ?? {};
+
+  /// A second connection to the same mailbox, with its own selected folder.
+  FakeMailTransport secondConnection() => FakeMailTransport(password: password, folders: folders);
 
   final String password;
-  final Map<String, FakeFolder> folders = {};
+  final Map<String, FakeFolder> folders;
+
+  /// True while [idle] is pending. With [failDuringIdle], any other use then
+  /// fails loudly, because a real connection would leave the call hanging.
+  bool idling = false;
+  bool failDuringIdle = false;
+
+  /// Makes the next this many fetchBody calls fail, as a dropped connection would.
+  int failFetchBody = 0;
   final StreamController<MailboxEvent> _events = StreamController.broadcast();
 
   bool _connected = false;
@@ -86,6 +97,9 @@ class FakeMailTransport implements MailTransport {
   int connectCount = 0;
   int fetchHeaderCalls = 0;
   bool failNextConnect = false;
+
+  /// Makes this many connects in a row fail, for a server that stays down.
+  int failConnects = 0;
   List<String> log = [];
 
   FakeFolder folder(String path, {FolderRole role = FolderRole.other}) => folders.putIfAbsent(path, () => FakeFolder(path, role: role));
@@ -106,8 +120,9 @@ class FakeMailTransport implements MailTransport {
   Future<void> connect(ServerConfig server, MailCredentials credentials) async {
     connectCount++;
     log.add('connect ${server.host}');
-    if (failNextConnect) {
+    if (failNextConnect || failConnects > 0) {
       failNextConnect = false;
+      if (failConnects > 0) failConnects--;
       throw const MailTransportException('simulated network failure');
     }
     if (credentials.password != password) {
@@ -169,6 +184,10 @@ class FakeMailTransport implements MailTransport {
 
   @override
   Future<RemoteMessageBody> fetchBody(int uid) async {
+    if (failFetchBody > 0) {
+      failFetchBody--;
+      throw const MailTransportException('simulated dropped connection');
+    }
     _requireConnected();
     return _sel.bodies[uid] ?? const RemoteMessageBody(text: '');
   }
@@ -297,11 +316,22 @@ class FakeMailTransport implements MailTransport {
   Future<MailboxEvent?> idle({required Duration timeout}) async {
     _requireConnected();
     log.add('idle');
-    return _events.stream.first.timeout(timeout, onTimeout: () => const NewMailEvent());
+    idling = true;
+    try {
+      return await _events.stream.first.timeout(timeout, onTimeout: () => const NewMailEvent());
+    } finally {
+      idling = false;
+    }
+  }
+
+  @override
+  void interruptIdle() {
+    if (idling) _events.add(const NewMailEvent());
   }
 
   void _requireConnected() {
     if (!_connected) throw const MailTransportException('Not connected');
+    if (failDuringIdle && idling) throw StateError('This connection was used while it was waiting for new mail');
   }
 }
 

@@ -1,6 +1,7 @@
 @Tags(['integration'])
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:convomail/mail/imap_transport.dart';
@@ -99,6 +100,37 @@ void main() {
 
     await t.disconnect();
     expect(t.isConnected, isFalse);
+  }, skip: launcher == null ? 'pymap not installed' : false, timeout: const Timeout(Duration(minutes: 2)));
+
+  test('a message opens at once while sync is waiting for new mail', () async {
+    final t = ImapTransport();
+    final account = await insertTestAccount(db, email: 'demouser@example.com', imapHost: '127.0.0.1', imapPort: port, imapSecurity: 'none');
+    final waiting = Completer<void>();
+    final syncer = AccountSyncer(
+      db: db,
+      transport: t,
+      onDemandTransport: ImapTransport(),
+      account: account,
+      credentials: () async => const MailCredentials(username: 'demouser', password: 'demopass'),
+      onStatus: (s) {
+        if (s.phase == SyncPhase.waitingForMail && !waiting.isCompleted) waiting.complete();
+      },
+      idleTimeout: const Duration(seconds: 40),
+      sleep: (_) async {},
+    );
+    final running = syncer.run();
+    await waiting.future.timeout(const Duration(seconds: 30));
+    // Past the moment IDLE was sent, so the connection is really waiting.
+    await Future<void>.delayed(const Duration(seconds: 1));
+
+    final first = (await db.select(db.messages).get()).first;
+    final clock = Stopwatch()..start();
+    await syncer.fetchBody(first.id);
+    expect(clock.elapsed, lessThan(const Duration(seconds: 2)));
+    expect((await db.messageById(first.id))!.bodyFetchedAt, isNotNull);
+
+    await syncer.stop();
+    await running;
   }, skip: launcher == null ? 'pymap not installed' : false, timeout: const Timeout(Duration(minutes: 2)));
 
   test('a wrong password is reported as an authentication failure', () async {

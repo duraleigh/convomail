@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/conversation_state.dart';
-import '../../app/destinations.dart';
 import '../../app/people_state.dart';
 import '../../store/board_queries.dart';
 import '../../store/database.dart';
@@ -343,10 +342,7 @@ class _CardPanel extends ConsumerWidget {
                 Expanded(child: Text(card.title, style: text.titleMedium, maxLines: 2, overflow: TextOverflow.ellipsis)),
                 if (card.rowKey != null)
                   TextButton.icon(
-                    onPressed: () {
-                      ref.read(selectedRowProvider.notifier).select(card.rowKey);
-                      ref.read(destinationProvider.notifier).select(Destination.chats);
-                    },
+                    onPressed: () => openRow(ref.read, card.rowKey),
                     icon: const Icon(Icons.open_in_new_rounded, size: 18),
                     label: const Text('Open in Chats'),
                   ),

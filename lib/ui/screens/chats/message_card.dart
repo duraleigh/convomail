@@ -87,7 +87,17 @@ class MessageCard extends ConsumerWidget {
           error: (e, _) => Container(
             padding: const EdgeInsets.all(AppSpace.md),
             decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(AppShapes.md)),
-            child: Text('$e'.replaceFirst('Bad state: ', ''), style: text.bodyMedium!.copyWith(color: scheme.onErrorContainer)),
+            child: Row(
+              children: [
+                Expanded(child: Text('$e'.replaceFirst('Bad state: ', '').replaceFirst('MailTransportException: ', ''), style: text.bodyMedium!.copyWith(color: scheme.onErrorContainer))),
+                const SizedBox(width: AppSpace.sm),
+                TextButton(
+                  key: ValueKey('body-retry-${message.id}'),
+                  onPressed: () => ref.invalidate(messageBodyProvider(message.id)),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
           ),
           data: (r) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

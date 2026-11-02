@@ -78,8 +78,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // A clicked toast opens its row.
     ref.listen<OutgoingNotification?>(notificationClickProvider, (prev, next) {
       if (next == null) return;
-      if (next.rowKey != null) ref.read(selectedRowProvider.notifier).select(next.rowKey);
-      ref.read(destinationProvider.notifier).select(Destination.chats);
+      unawaited(openRow(ref.read, next.rowKey));
       ref.read(windowsIntegrationProvider)?.showWindow();
       ref.read(notificationClickProvider.notifier).clear();
     });
@@ -96,10 +95,7 @@ class _AppShellState extends ConsumerState<AppShell> {
               ? null
               : SnackBarAction(
                   label: 'Open',
-                  onPressed: () {
-                    ref.read(selectedRowProvider.notifier).select(n.rowKey);
-                    ref.read(destinationProvider.notifier).select(Destination.chats);
-                  },
+                  onPressed: () => openRow(ref.read, n.rowKey),
                 ),
         ));
         ref.read(appNoticesProvider.notifier).remove(n.id);
@@ -119,7 +115,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return AppShortcutScope(
       onCompose: () {
-        ref.read(destinationProvider.notifier).select(Destination.chats);
+        // Feeds has the same compose pane; anywhere else goes to Chats.
+        if (ref.read(destinationProvider) != Destination.feeds) ref.read(destinationProvider.notifier).select(Destination.chats);
         ref.read(composeProvider.notifier).open();
       },
       child: Scaffold(
@@ -132,7 +129,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                 duration: const Duration(milliseconds: 200),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
-                child: KeyedSubtree(key: ValueKey(destination), child: _content(destination)),
+                // Chats and Feeds share one layout, so its widths and state
+                // carry across, and switching does not fade the whole pane.
+                child: KeyedSubtree(key: ValueKey(destination == Destination.feeds ? Destination.chats : destination), child: _content(destination)),
               ),
             ),
           ],
@@ -142,11 +141,31 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _content(Destination d) => switch (d) {
-        Destination.chats => const ChatsScreen(),
+        Destination.chats || Destination.feeds => const ChatsScreen(),
         Destination.boards => const BoardsScreen(),
         Destination.planner => const PlannerScreen(),
         Destination.settings => const SettingsScreen(),
       };
+}
+
+/// The Feeds icon, with the number of unread Feeds messages.
+class _FeedsRailIcon extends ConsumerWidget {
+  const _FeedsRailIcon({required this.icon});
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(feedsUnreadProvider).value ?? 0;
+    final scheme = Theme.of(context).colorScheme;
+    return Badge(
+      key: const ValueKey('feeds-badge'),
+      isLabelVisible: n > 0,
+      backgroundColor: scheme.primary,
+      textColor: scheme.onPrimary,
+      label: Text(n > 99 ? '99+' : '$n'),
+      child: Icon(icon),
+    );
+  }
 }
 
 class _Rail extends ConsumerWidget {
@@ -173,8 +192,8 @@ class _Rail extends ConsumerWidget {
       destinations: [
         for (final d in Destination.rail)
           NavigationRailDestination(
-            icon: Icon(d.icon),
-            selectedIcon: Icon(d.selectedIcon),
+            icon: d == Destination.feeds ? _FeedsRailIcon(icon: d.icon) : Icon(d.icon),
+            selectedIcon: d == Destination.feeds ? _FeedsRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon),
             label: Text(d.label),
           ),
       ],
@@ -201,6 +220,8 @@ class _Rail extends ConsumerWidget {
 
 /// Settings lives at the bottom of the rail, drawn with the same pill
 /// indicator as the NavigationRail destinations above it.
+///
+/// See also [_FeedsRailIcon], the one rail icon with a badge.
 class _SettingsRailItem extends ConsumerWidget {
   const _SettingsRailItem({required this.selected});
   final bool selected;

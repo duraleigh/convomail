@@ -11,6 +11,7 @@ import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
 import 'classification_service.dart';
+import 'contacts_sync.dart';
 import 'notification_center.dart';
 import 'sync_engine.dart';
 
@@ -56,6 +57,8 @@ class SyncController {
         // Best effort; the sync engine's backfill pass retries.
       }
     }());
+    // Photos and address-book status, when Google Contacts is connected.
+    unawaited(_ref.read(contactsSyncProvider.future).then((s) => s.start()).catchError((Object _) {}));
     unawaited(_db.rebuildMissingThreads(batch: 500).catchError((Object e) {
       // Threading backfill is best effort; new mail is threaded as it syncs.
       return 0;
@@ -77,6 +80,7 @@ class SyncController {
     final syncer = AccountSyncer(
       db: _db,
       transport: _ref.read(transportFactoryProvider)(),
+      onDemandTransport: _ref.read(transportFactoryProvider)(),
       account: account,
       credentials: () async {
         // Brief grace period: the credential write and the accounts stream

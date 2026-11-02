@@ -53,7 +53,11 @@ final messageBodyProvider = FutureProvider.family<Message, int>((ref, messageId)
   // storeBody updated the row; the stream above delivers it on the next
   // build. Return the fresh row now so the first render has the body.
   return (await ref.read(databaseProvider).messageById(messageId))!;
-});
+}, retry: _noAutomaticRetry);
+
+/// A failed load shows its error and a Retry button straight away. Automatic
+/// retries would keep the spinner up, each one possibly a full timeout.
+Duration? _noAutomaticRetry(int count, Object error) => null;
 
 /// Attachments of a message.
 final messageAttachmentsProvider = StreamProvider.family<List<Attachment>, int>((ref, messageId) {
@@ -89,7 +93,7 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid), highlight: highlight);
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
   return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain);
-});
+}, retry: _noAutomaticRetry);
 
 /// Thread messages across all participants (spec 4.20), oldest first.
 final threadMessagesProvider = StreamProvider.family<List<Message>, String>((ref, threadKey) {

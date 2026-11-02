@@ -79,7 +79,7 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('Ctrl+2 jumps to Boards and Ctrl+1 back to Chats', (tester) async {
+  testWidgets('Ctrl+3 jumps to Boards and Ctrl+1 back to Chats', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -88,7 +88,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit2);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(find.text('No cards yet'), findsOneWidget);
@@ -101,7 +101,7 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('People/Feeds button group switches the empty state', (tester) async {
+  testWidgets('Feeds sits in the rail after Chats, with no People/Feeds switch on the list', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -109,10 +109,18 @@ void main() {
     await tester.pumpWidget(_app(InMemorySettingsStore()));
     await tester.pumpAndSettle();
 
+    expect(Destination.rail, [Destination.chats, Destination.feeds, Destination.boards, Destination.planner]);
+    expect(find.text('People'), findsNothing);
     expect(find.text('No conversations yet'), findsOneWidget);
-    await tester.tap(find.widgetWithText(InkWell, 'Feeds'));
+    await tester.tap(find.text('Feeds').first);
     await tester.pumpAndSettle();
     expect(find.text('Nothing in Feeds'), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('No conversations yet'), findsOneWidget);
     await _teardown(tester);
   });
 
@@ -157,15 +165,15 @@ void main() {
     await _teardown(tester);
   });
 
-  test('startup args pick the initial destination and inbox mode', () {
-    final a = StartupArgs.parse(['--destination=settings', '--inbox=feeds']);
+  test('startup args pick the initial destination', () {
+    final a = StartupArgs.parse(['--destination=settings']);
     expect(a.destination, Destination.settings);
-    expect(a.inbox, InboxMode.feeds);
-    expect(a.overrides.length, 2);
+    expect(a.overrides.length, 1);
+    expect(StartupArgs.parse(['--inbox=feeds']).destination, Destination.feeds);
+    expect(StartupArgs.parse(['--destination=feeds']).destination, Destination.feeds);
 
     final b = StartupArgs.parse(['--destination=nonsense', 'other']);
     expect(b.destination, isNull);
-    expect(b.inbox, isNull);
     expect(b.overrides, isEmpty);
   });
 

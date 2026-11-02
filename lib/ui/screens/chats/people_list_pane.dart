@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,24 +12,27 @@ import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../app/settings_navigation.dart';
 import '../../../app/shortcuts.dart';
+import '../../../app/timely_state.dart';
 import '../../../domain/classifier.dart';
 import '../../../domain/filing.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
+import '../../../store/merge_queries.dart';
 import '../../../store/people_queries.dart';
 import '../../../store/planner_queries.dart';
 import '../../../sync/classification_service.dart';
 import '../../../sync/row_actions.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/connected_button_group.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import '../planner/event_dialogs.dart';
 import 'edit_sender_dialog.dart';
+import 'merge_people_dialog.dart';
 import 'person_row.dart';
 import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
+import 'timely_strip.dart';
 
 /// The middle pane of the Chats destination (spec 5.3): headline, search,
 /// filter menu behind the tune icon, People/Feeds group, and the grouped People list with
@@ -125,6 +130,8 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
           }),
         ));
         if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
+      case BulkAction.merge:
+        await _merge([for (final r in rows) if (r.ref case ContactRow(:final contactKey)) if (contactKey != 'me') (contactKey, r.title)]);
       case BulkAction.markRead:
         for (final r in rows) {
           await actions.markRowRead(r.rowKey);
@@ -150,6 +157,30 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         ));
         if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
     }
+  }
+
+  /// Asks which name to keep, merges, and offers one Undo.
+  Future<void> _merge(List<(String, String)> people) async {
+    if (people.length < 2) return;
+    final db = ref.read(databaseProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    final candidates = [for (final (key, name) in people) MergeCandidate(contactKey: key, name: name, addresses: await db.addressesOf(key))];
+    if (!mounted) return;
+    final keep = await showMergePeopleDialog(context, candidates);
+    if (keep == null || !mounted) return;
+    final service = ref.read(classificationServiceProvider);
+    final name = candidates.firstWhere((c) => c.contactKey == keep).name;
+    final snapshot = await service.mergePeople(keep, [for (final c in candidates) c.contactKey]);
+    if (!mounted) return;
+    final selected = ref.read(selectedRowProvider);
+    if (selected != null && candidates.any((c) => 'c:${c.contactKey}' == selected)) ref.read(selectedRowProvider.notifier).select('c:$keep');
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text('Merged ${candidates.length} people into $name'),
+      behavior: SnackBarBehavior.floating,
+      width: 480,
+      action: SnackBarAction(label: 'Undo', onPressed: () => service.undoMerge(snapshot)),
+    ));
   }
 
   /// R / Shift+R / F: open the inline composer on the row's newest message.
@@ -214,11 +245,36 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         if (ref.read(selectedRowProvider) == row.rowKey && until != SnoozeChoice.unsnooze) ref.read(selectedRowProvider.notifier).select(null);
       case RowAction.rename:
         if (row.ref case ContactRow(:final contactKey)) {
-          final edit = await showEditSenderDialog(context, name: row.title, subtitle: row.subtitle ?? '', address: row.identityKey);
-          if (edit == null) return;
           final db = ref.read(databaseProvider);
+          final service = ref.read(classificationServiceProvider);
+          final addresses = await db.addressesOf(contactKey);
+          if (!mounted) return;
+          final edit = await showEditSenderDialog(
+            context,
+            name: row.title,
+            subtitle: row.subtitle ?? '',
+            addresses: addresses,
+            onSeparate: (address) => service.separateAddress(contactKey, address),
+          );
+          if (edit == null) return;
           await db.setContactLabel(contactKey, edit.name);
           await db.setContactSubtitle(contactKey, edit.subtitle);
+        }
+      case RowAction.mergeWith:
+        if (row.ref case ContactRow(:final contactKey)) {
+          final db = ref.read(databaseProvider);
+          final all = [...await db.peopleRows(), ...await db.peopleRows(tab: InboxTab.feeds)];
+          final others = <String, MergeCandidate>{};
+          for (final r in all) {
+            if (r.ref case ContactRow(:final contactKey) when contactKey != row.identityKey && contactKey != 'me') {
+              others[contactKey] = MergeCandidate(contactKey: contactKey, name: r.title, addresses: [contactKey]);
+            }
+          }
+          if (!mounted) return;
+          final people = others.values.toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+          final picked = await showMergePickerDialog(context, forName: row.title, people: people);
+          if (picked == null || !mounted) return;
+          await _merge([(contactKey, row.title), (picked.contactKey, picked.name)]);
         }
       case RowAction.category:
         if (row.ref case ContactRow(:final contactKey)) {
@@ -267,6 +323,18 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     final selected = ref.watch(selectedRowProvider);
     final searchFocus = ref.watch(searchFocusProvider);
     final picked = ref.watch(multiSelectProvider);
+    final liveCodes = {
+      for (final i in timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now()).reversed)
+        if (i.code != null) 'c:${i.contactKey}': i.code!,
+    };
+
+    // Chats and Feeds share this pane: each keeps its own search text, and
+    // picked rows do not carry across.
+    ref.listen(inboxModeProvider, (_, _) {
+      ref.read(multiSelectProvider.notifier).clear();
+      final search = ref.read(peopleSearchProvider);
+      if (_searchController.text != search) _searchController.text = search;
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -280,12 +348,12 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   final scope = ref.watch(accountScopeProvider);
                   final accounts = ref.watch(accountsProvider).value ?? const [];
                   final current = accounts.where((a) => a.id == scope).firstOrNull;
-                  if (current == null) return Text('Chats', style: text.headlineMedium);
+                  if (current == null) return Text(mode == InboxMode.feeds ? 'Feeds' : 'Chats', style: text.headlineMedium);
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text('Chats', style: text.headlineMedium),
+                      Text(mode == InboxMode.feeds ? 'Feeds' : 'Chats', style: text.headlineMedium),
                       const SizedBox(width: 10),
                       Flexible(
                         child: InputChip(
@@ -350,21 +418,9 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
             onSubmitted: (_) => _listFocus.requestFocus(),
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-          child: ConnectedButtonGroup<InboxMode>(
-            selected: mode,
-            onSelected: (m) {
-              ref.read(multiSelectProvider.notifier).clear();
-              ref.read(inboxModeProvider.notifier).select(m);
-            },
-            items: const [
-              ButtonGroupItem(value: InboxMode.people, label: 'People', icon: Icons.person_outline_rounded),
-              ButtonGroupItem(value: InboxMode.feeds, label: 'Feeds', icon: Icons.rss_feed_rounded),
-            ],
-          ),
-        ),
-        if (picked.isNotEmpty) _SelectionBar(count: picked.length, mode: mode, onAction: (a) => _bulk(a, rows.value ?? const []), onClear: () => ref.read(multiSelectProvider.notifier).clear()),
+        if (!ref.watch(searchActiveProvider)) const TimelyStrip(),
+        if (mode == InboxMode.feeds && !ref.watch(searchActiveProvider)) const _FeedsCategoryPills(),
+        if (picked.isNotEmpty) _SelectionBar(count: picked.length, mode: mode, canMerge: (rows.value ?? const <PeopleRow>[]).where((r) => picked.contains(r.rowKey) && !r.isGroup && r.identityKey != 'me').length >= 2, onAction: (a) => _bulk(a, rows.value ?? const []), onClear: () => ref.read(multiSelectProvider.notifier).clear()),
         Expanded(
           child: rows.when(
             loading: () => const Center(child: CircularProgressIndicator()),
@@ -437,6 +493,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   return KeyEventResult.ignored;
                 },
                 child: ListView.builder(
+                  key: PageStorageKey(mode),
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                   itemCount: list.length + 1,
                   itemBuilder: (context, i) {
@@ -450,6 +507,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                         onTap: () => _onRowTap(row, list),
                         child: PersonRow(
                           row: row,
+                          liveCode: mode == InboxMode.feeds ? liveCodes['c:${row.identityKey}'] : null,
                           selected: row.rowKey == selected,
                           onAction: (a) => _act(row, a),
                           checked: picked.contains(row.rowKey),
@@ -469,7 +527,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   }
 
   Widget _empty(PeopleFilter filter) {
-    if (filter != PeopleFilter.all || _searchController.text.isNotEmpty) {
+    if (filter != PeopleFilter.all || _searchController.text.isNotEmpty || ref.read(feedsCategoryFilterProvider) != null) {
       return const EmptyState(icon: Icons.filter_list_off_rounded, title: 'Nothing matches', message: 'Try another filter or search.');
     }
     return EmptyState(
@@ -491,7 +549,8 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
 
 /// Shown while rows are picked: the count and the bulk actions.
 class _SelectionBar extends StatelessWidget {
-  const _SelectionBar({required this.count, required this.mode, required this.onAction, required this.onClear});
+  const _SelectionBar({required this.count, required this.mode, required this.canMerge, required this.onAction, required this.onClear});
+  final bool canMerge;
   final int count;
   final InboxMode mode;
   final ValueChanged<BulkAction> onAction;
@@ -510,23 +569,91 @@ class _SelectionBar extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppShapes.md),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
-          child: Wrap(
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 6,
-            runSpacing: 4,
+          child: Row(
             children: [
               IconButton(tooltip: 'Clear selection (Esc)', icon: const Icon(Icons.close_rounded, size: 20), onPressed: onClear),
-              Text('$count selected', style: text.labelLarge!.copyWith(color: scheme.onSecondaryContainer)),
-              const SizedBox(width: 4),
-              FilledButton.icon(
+              Expanded(child: Text('$count selected', maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge!.copyWith(color: scheme.onSecondaryContainer))),
+              IconButton(
                 key: const ValueKey('bulk-move'),
+                tooltip: toFeeds ? 'Move to Feeds' : 'Move to People',
+                icon: Icon(toFeeds ? Icons.rss_feed_rounded : Icons.person_outline_rounded, size: 20),
                 onPressed: () => onAction(toFeeds ? BulkAction.moveToFeeds : BulkAction.moveToPeople),
-                icon: Icon(toFeeds ? Icons.rss_feed_rounded : Icons.person_outline_rounded, size: 18),
-                label: Text(toFeeds ? 'Move to Feeds' : 'Move to People'),
               ),
+              if (canMerge)
+                IconButton(key: const ValueKey('bulk-merge'), tooltip: 'Merge into one person', icon: const Icon(Icons.merge_rounded, size: 20), onPressed: () => onAction(BulkAction.merge)),
               IconButton(key: const ValueKey('bulk-read'), tooltip: 'Mark as read', icon: const Icon(Icons.mark_email_read_outlined, size: 20), onPressed: () => onAction(BulkAction.markRead)),
               IconButton(key: const ValueKey('bulk-archive'), tooltip: 'Archive', icon: const Icon(Icons.archive_outlined, size: 20), onPressed: () => onAction(BulkAction.archive)),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small pills under the search bar on Feeds: All, then each category with
+/// mail. Scrolls sideways when the pane is narrow.
+class _FeedsCategoryPills extends ConsumerWidget {
+  const _FeedsCategoryPills();
+
+  static String _label(String category) => switch (category) {
+        'Newsletter' => 'Newsletters',
+        'Receipt' => 'Receipts',
+        'Notification' => 'Notifications',
+        'Promotion' => 'Promotions',
+        _ => category,
+      };
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final categories = ref.watch(feedsCategoriesInUseProvider).value ?? const <String>[];
+    final selected = ref.watch(feedsCategoryFilterProvider);
+    // The picked category was renamed, deleted or emptied: back to All.
+    if (selected != null && ref.watch(feedsCategoriesInUseProvider).hasValue && !categories.contains(selected)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(feedsCategoryFilterProvider.notifier).select(null));
+    }
+    if (categories.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Row(
+          children: [
+            _FeedsPill(key: const ValueKey('feeds-pill-all'), label: 'All', selected: selected == null, onTap: () => ref.read(feedsCategoryFilterProvider.notifier).select(null)),
+            for (final c in categories) ...[
+              const SizedBox(width: 6),
+              _FeedsPill(key: ValueKey('feeds-pill-$c'), label: _label(c), selected: selected == c, onTap: () => ref.read(feedsCategoryFilterProvider.notifier).select(selected == c ? null : c)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FeedsPill extends StatelessWidget {
+  const _FeedsPill({super.key, required this.label, required this.selected, required this.onTap});
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final style = Theme.of(context).textTheme.labelMedium!;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? scheme.secondaryContainer : scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppShapes.full),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            child: Text(label, style: style.copyWith(color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant, fontWeight: selected ? FontWeight.w600 : FontWeight.w500, letterSpacing: 0)),
           ),
         ),
       ),
@@ -578,7 +705,7 @@ class _FeedsBanner extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AppShapes.md),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => ref.read(inboxModeProvider.notifier).select(InboxMode.feeds),
+          onTap: () => ref.read(destinationProvider.notifier).select(Destination.feeds),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
             child: Row(
@@ -607,10 +734,10 @@ class _FeedsBanner extends ConsumerWidget {
 final feedsFiledThisWeekProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsFiledSince(DateTime.now().subtract(const Duration(days: 7))));
 
 /// Small helper so both the row and the pane agree on action names.
-enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze, mute, rename }
+enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze, mute, rename, mergeWith }
 
 /// Actions on every picked row at once.
-enum BulkAction { moveToFeeds, moveToPeople, markRead, archive }
+enum BulkAction { moveToFeeds, moveToPeople, merge, markRead, archive }
 
 /// Relative timestamp per spec 4.2: time today, "Yesterday", weekday this
 /// week, date otherwise.
@@ -639,7 +766,10 @@ extension on TimeOfDay {
 /// Avatar for a row: stacked for groups, tonal circle otherwise.
 Widget rowAvatar(PeopleRow row, {double size = 40}) {
   if (row.isGroup) return StackedAvatars(members: row.members, size: size);
-  return TonalAvatar(identityKey: row.identityKey, name: row.title, size: size);
+  final photo = row.photoPath;
+  // Initials if the file is gone; the next contacts sync restores it.
+  final image = photo != null && File(photo).existsSync() ? FileImage(File(photo)) : null;
+  return TonalAvatar(identityKey: row.identityKey, name: row.title, size: size, image: image);
 }
 
 /// Space reserved so the FAB never covers the last row.

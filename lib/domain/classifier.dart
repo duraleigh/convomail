@@ -108,6 +108,8 @@ class BulkSignals {
 class SenderFacts {
   const SenderFacts({
     required this.address,
+    this.otherAddresses = const [],
+    this.messagesWithTimely = 0,
     this.name = '',
     this.userHasWrittenTo = false,
     this.inAddressBook = false,
@@ -118,6 +120,13 @@ class SenderFacts {
     this.providerCategories = const {},
     this.subjects = const [],
   });
+
+  /// Messages from this sender holding a code, delivery, trip or bill.
+  final int messagesWithTimely;
+
+  /// The contact's other addresses, when it is several addresses of one
+  /// person. A rule on any of them applies.
+  final List<String> otherAddresses;
 
   final String address;
   final String name;
@@ -160,7 +169,11 @@ class MessageFacts {
     this.signals = BulkSignals.none,
     this.isReplyToMine = false,
     this.providerCategory,
+    this.hasTimelyItem = false,
   });
+
+  /// A code, delivery, trip or bill was read from this message (spec 4.21).
+  final bool hasTimelyItem;
   final String from;
   final String fromName;
   final String subject;
@@ -192,7 +205,7 @@ class ClassificationRule {
     final p = pattern.toLowerCase();
     switch (field) {
       case 'sender':
-        return s.address.toLowerCase() == p;
+        return s.address.toLowerCase() == p || s.otherAddresses.any((a) => a.toLowerCase() == p);
       case 'domain':
         return s.domain == p || s.domain.endsWith('.$p');
       case 'listId':
@@ -252,7 +265,8 @@ abstract final class FeedsCategories {
   static const notification = 'Notification';
   static const social = 'Social';
   static const promotion = 'Promotion';
-  static const defaults = [newsletter, receipt, notification, social, promotion];
+  static const updates = 'Updates';
+  static const defaults = [newsletter, receipt, notification, updates, social, promotion];
 }
 
 class Classifier {
@@ -390,7 +404,10 @@ class Classifier {
     if (subjectsAutomated) reasons.add('Subjects look automated (${(subjectShare * 100).round()}% $subjectCat)');
     if (nameAutomated) reasons.add('Automated sender name (${s.name})');
 
-    final strong = bulkByHeaders || hardLocal || sendingSub || domainHit;
+    // Sends codes, shipping or travel: automated, whatever else it looks like.
+    final sendsTimely = s.messagesWithTimely > 0;
+    if (sendsTimely) reasons.add('Sends codes, shipping or travel updates');
+    final strong = bulkByHeaders || hardLocal || sendingSub || domainHit || sendsTimely;
     final providerTotal = s.providerPrimary + s.providerBulk;
 
     // People signals. The address book always wins. Having written to a
@@ -490,6 +507,11 @@ class Classifier {
     if (RegExp(r'receipt|order|billing|invoice|statement|payment').hasMatch(lp)) return FeedsCategories.receipt;
     if (RegExp(r'newsletter|digest|news|weekly|daily').hasMatch(lp)) return FeedsCategories.newsletter;
     if (RegExp(r'marketing|promo|offers?|deals?|sales?').hasMatch(lp)) return FeedsCategories.promotion;
+    // Gmail's Updates is automated mail about the user's own accounts and
+    // orders. Bulk headers do not make that a newsletter.
+    if (providerTop == 'updates') {
+      return RegExp(r'notif|alert|security|verif|no-?reply|do-?not-?reply|account|password').hasMatch(lp) ? FeedsCategories.notification : FeedsCategories.updates;
+    }
     if (s.listIds.isNotEmpty || s.messagesWithBulkHeaders > 0 && !hardLocal) return FeedsCategories.newsletter;
     return FeedsCategories.notification;
   }
@@ -499,6 +521,9 @@ class Classifier {
   bool isPersonalException(MessageFacts m) {
     if (m.isReplyToMine) return true;
     if (m.signals.any) return false;
+    // "Hi Clay, your order shipped" is not personal mail, and Gmail filing it
+    // outside Primary says the same.
+    if (m.hasTimelyItem || const {'updates', 'promotions', 'social', 'forums'}.contains(m.providerCategory)) return false;
     return greetsUserByName(m.snippet);
   }
 

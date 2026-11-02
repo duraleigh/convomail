@@ -46,6 +46,7 @@ dependencies:
   html: ^0.15.7
   webview_windows: ^0.4.0
   url_launcher: ^6.3.2
+  crypto: ^3.0.6
   sqlite3: ^3.6.0
   appflowy_editor: ^6.2.0
   file_selector: ^1.1.0
