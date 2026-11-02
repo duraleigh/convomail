@@ -6,6 +6,7 @@ import 'package:convomail/store/database.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
+import 'package:convomail/ui/screens/chats/person_row.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:convomail/ui/widgets/tonal_avatar.dart';
 import 'package:drift/drift.dart' show InsertMode, Value;
@@ -249,11 +250,75 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('hover actions never cover the name, and leave the time and the row height alone', (tester) async {
+    await db.setContactLabel('sarah@x.com', 'A Rather Long Sender Name That Fills The Row');
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(app());
+    await tester.pumpAndSettle();
+
+    final name = find.byKey(const ValueKey('row-name-c:sarah@x.com'));
+    final before = tester.getRect(name);
+    final rowBefore = tester.getRect(find.ancestor(of: name, matching: find.byType(PersonRow)));
+    final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await gesture.addPointer(location: Offset.zero);
+    addTearDown(gesture.removePointer);
+    await gesture.moveTo(tester.getCenter(name));
+    await tester.pumpAndSettle();
+
+    final actions = find.byKey(const ValueKey('row-actions-c:sarah@x.com'));
+    expect(actions, findsOneWidget);
+    expect(find.descendant(of: actions, matching: find.byType(IconButton)), findsNWidgets(5));
+    final after = tester.getRect(name);
+    expect(after.width, before.width, reason: 'the name keeps all its room');
+    expect(after.overlaps(tester.getRect(actions)), isFalse);
+    expect(tester.getRect(find.ancestor(of: name, matching: find.byType(PersonRow))).height, rowBefore.height);
+    final row = find.ancestor(of: name, matching: find.byType(PersonRow));
+    expect(find.descendant(of: row, matching: find.byType(CountBadge)), findsOneWidget, reason: 'the unread badge stays');
+    await gesture.moveTo(Offset.zero);
+    await tester.pumpAndSettle();
+    expect(actions, findsNothing);
+    await teardown(tester);
+  });
+
+  testWidgets('A subtitle is optional, shows under the name, survives deleting all mail, and is searchable', (tester) async {
+    await pumpList(tester);
+    const subtitleKey = ValueKey('row-subtitle-c:sarah@x.com');
+    expect(find.byKey(subtitleKey), findsNothing, reason: 'none until the user adds one');
+
+    await tester.tap(find.text('Sarah Chen'), buttons: kSecondaryButton);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit name and subtitle…'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('subtitle-field')), '  Talent agent  ');
+    await tester.tap(find.byKey(const ValueKey('rename-save')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Talent agent'), findsOneWidget);
+    expect((await contact('sarah@x.com')).userSubtitle, 'Talent agent');
+    expect((await contact('sarah@x.com')).userLabel, 'Sarah Chen');
+    final name = tester.getRect(find.byKey(const ValueKey('row-name-c:sarah@x.com')));
+    final sub = tester.getRect(find.byKey(subtitleKey));
+    expect(sub.top, greaterThanOrEqualTo(name.bottom), reason: 'under the name');
+    expect(tester.widget<Text>(find.byKey(subtitleKey)).style!.fontSize, lessThan(tester.widget<Text>(find.byKey(const ValueKey('row-name-c:sarah@x.com'))).style!.fontSize!));
+
+    expect((await db.peopleRows(search: 'talent')).map((r) => r.rowKey), ['c:sarah@x.com']);
+
+    await (db.delete(db.messages)..where((m) => m.fromAddress.equals('sarah@x.com'))).go();
+    await db.refreshDirtyRows();
+    expect((await contact('sarah@x.com')).userSubtitle, 'Talent agent');
+
+    await db.setContactSubtitle('sarah@x.com', ' ');
+    expect((await contact('sarah@x.com')).userSubtitle, isNull, reason: 'blank removes it');
+    await teardown(tester);
+  });
+
   testWidgets('Rename a sender from the row menu; the name sticks after deleting all mail and for new mail', (tester) async {
     await pumpList(tester);
     await tester.tap(find.text('Sarah Chen'), buttons: kSecondaryButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Rename…'));
+    await tester.tap(find.text('Edit name and subtitle…'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('rename-dialog')), findsOneWidget);
     await tester.enterText(find.byKey(const ValueKey('rename-field')), 'Sarah C.');

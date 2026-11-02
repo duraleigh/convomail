@@ -181,6 +181,10 @@ class Contacts extends Table {
   /// A name the user gave this sender; shown instead of [displayName]
   /// everywhere and kept for all future mail from any of its addresses.
   TextColumn get userLabel => text().nullable()();
+
+  /// A short note the user put under this sender's name in the chat list,
+  /// such as a job title. Optional; kept like [userLabel].
+  TextColumn get userSubtitle => text().nullable()();
   TextColumn get photoPath => text().nullable()();
   BoolColumn get isMe => boolean().withDefault(const Constant(false))();
   BoolColumn get inAddressBook => boolean().withDefault(const Constant(false))();
@@ -502,7 +506,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -602,6 +606,9 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await m.addColumn(messages, messages.providerCategory);
             await m.addColumn(contacts, contacts.userLabel);
             await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_provider_category ON messages(folder_id, provider_category)');
+          }
+          if (from < 11) {
+            await m.addColumn(contacts, contacts.userSubtitle);
           }
         },
         beforeOpen: (details) async {

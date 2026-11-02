@@ -8,9 +8,10 @@ import '../../theme/tokens.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'people_list_pane.dart';
 
-/// One People-list row (spec 4.2): avatar, name, time, unread badge, pin
-/// marker; one line, no message text. Hover reveals action buttons; right-click opens the
-/// same actions as a context menu.
+/// One People-list row (spec 4.2): avatar, name, the user's optional
+/// subtitle, time, unread badge, pin marker; no message text. Hovering opens
+/// a line of action buttons under the name, so the name, time and badge stay
+/// in view; right-click opens the same actions as a context menu.
 class PersonRow extends ConsumerStatefulWidget {
   const PersonRow({super.key, required this.row, required this.selected, required this.onAction, this.checked = false, this.selectionMode = false, this.onCheck});
 
@@ -36,6 +37,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
   /// and row state, so the row reads as one item.
   static String semanticLabel(PeopleRow row) => [
         row.title,
+        if (row.subtitle != null) row.subtitle!,
         if (row.unread > 0) '${row.unread} unread',
         if (row.pinned) 'pinned',
         if (row.muted) 'muted',
@@ -64,7 +66,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
           ),
         ),
         if (!widget.row.isGroup && widget.row.identityKey != 'me')
-          const PopupMenuItem(value: RowAction.rename, child: ListTile(leading: Icon(Icons.drive_file_rename_outline_rounded), title: Text('Rename…'), dense: true)),
+          const PopupMenuItem(value: RowAction.rename, child: ListTile(leading: Icon(Icons.drive_file_rename_outline_rounded), title: Text('Edit name and subtitle…'), dense: true)),
         if (!widget.row.isGroup) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
@@ -99,6 +101,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
     final text = Theme.of(context).textTheme;
     final row = widget.row;
     final unread = row.unread > 0;
+    final subtitle = row.subtitle;
 
     return Semantics(
       button: true,
@@ -110,7 +113,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
       child: GestureDetector(
         onSecondaryTapUp: (d) => _showMenu(d.globalPosition),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 9, 10, 9),
+          padding: const EdgeInsets.fromLTRB(14, 7, 10, 7),
           child: Row(
             children: [
               if (widget.onCheck != null && (widget.selectionMode || _hover))
@@ -127,7 +130,12 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                 rowAvatar(row, size: 36),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
+                child: ConstrainedBox(
+                  // Tall enough for name plus actions, so hovering never
+                  // changes the row's height.
+                  constraints: const BoxConstraints(minHeight: 44),
+                  child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -157,43 +165,84 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                           const SizedBox(width: 4),
                         ],
                         Expanded(
-                          child: Text(
-                            row.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500),
-                          ),
-                        ),
-                        if (row.isFeeds && row.category != null) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            key: ValueKey('category-pill-${row.rowKey}'),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-                            decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
-                            child: Text(row.category!, style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, letterSpacing: 0)),
-                          ),
-                        ],
-                        if (!_hover) ...[
-                          const SizedBox(width: 10),
-                          Text(
-                            relativeTime(row.lastActivity),
-                            style: text.labelSmall!.copyWith(
-                              color: unread ? scheme.primary : scheme.onSurfaceVariant,
-                              fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                              letterSpacing: 0,
+                          child: LayoutBuilder(
+                            builder: (context, box) => Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    row.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    key: ValueKey('row-name-${row.rowKey}'),
+                                    style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500, height: 1.2),
+                                  ),
+                                ),
+                                if (row.isFeeds && row.category != null) ...[
+                                  const SizedBox(width: 8),
+                                  // Never more than half the room, so it cannot
+                                  // squeeze the name out or overflow the row.
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(maxWidth: box.maxWidth / 2),
+                                    child: Container(
+                                      key: ValueKey('category-pill-${row.rowKey}'),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                                      decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
+                                      child: Text(row.category!, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, letterSpacing: 0)),
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
                           ),
-                          if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
-                        ],
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          relativeTime(row.lastActivity),
+                          style: text.labelSmall!.copyWith(
+                            color: unread ? scheme.primary : scheme.onSurfaceVariant,
+                            fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                        if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
                       ],
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 110),
+                      curve: Curves.easeOut,
+                      alignment: Alignment.topCenter,
+                      child: subtitle == null && !_hover
+                          ? const SizedBox(width: double.infinity)
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: subtitle == null
+                                      ? const SizedBox.shrink()
+                                      : Padding(
+                                          padding: const EdgeInsets.only(top: 1),
+                                          child: Text(
+                                            subtitle,
+                                            key: ValueKey('row-subtitle-${row.rowKey}'),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: text.bodySmall!.copyWith(
+                                              fontSize: 11.5,
+                                              height: 1.25,
+                                              letterSpacing: 0.2,
+                                              fontWeight: FontWeight.w400,
+                                              color: scheme.onSurfaceVariant,
+                                            ),
+                                          ),
+                                        ),
+                                ),
+                                if (_hover) _HoverActions(row: row, onAction: widget.onAction),
+                              ],
+                            ),
                     ),
                   ],
                 ),
+                ),
               ),
-              if (_hover) ...[
-                const SizedBox(width: 6),
-                _HoverActions(row: row, onAction: widget.onAction),
-              ],
             ],
           ),
         ),
@@ -213,24 +262,23 @@ class _HoverActions extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     Widget btn(IconData icon, String tip, RowAction a) => IconButton(
           tooltip: tip,
-          icon: Icon(icon, size: 20),
-          visualDensity: VisualDensity.compact,
-          style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, minimumSize: const Size(32, 32)),
+          icon: Icon(icon),
+          iconSize: 17,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+          style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
           onPressed: () => onAction(a),
         );
-    return Container(
-      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppShapes.full)),
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          btn(Icons.archive_outlined, 'Archive all (E)', RowAction.archive),
-          btn(Icons.delete_outline_rounded, 'Delete… (Del)', RowAction.trash),
-          btn(Icons.mark_email_read_outlined, 'Mark all as read', RowAction.markRead),
-          btn(Icons.snooze_outlined, 'Snooze… (S)', RowAction.snooze),
-          btn(row.pinned ? Icons.push_pin : Icons.push_pin_outlined, row.pinned ? 'Unpin (P)' : 'Pin (P)', RowAction.pin),
-        ],
-      ),
+    return Row(
+      key: ValueKey('row-actions-${row.rowKey}'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        btn(Icons.archive_outlined, 'Archive all (E)', RowAction.archive),
+        btn(Icons.delete_outline_rounded, 'Delete… (Del)', RowAction.trash),
+        btn(Icons.mark_email_read_outlined, 'Mark all as read', RowAction.markRead),
+        btn(Icons.snooze_outlined, 'Snooze… (S)', RowAction.snooze),
+        btn(row.pinned ? Icons.push_pin : Icons.push_pin_outlined, row.pinned ? 'Unpin (P)' : 'Pin (P)', RowAction.pin),
+      ],
     );
   }
 }

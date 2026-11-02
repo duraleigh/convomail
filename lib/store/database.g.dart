@@ -4898,6 +4898,17 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _userSubtitleMeta = const VerificationMeta(
+    'userSubtitle',
+  );
+  @override
+  late final GeneratedColumn<String> userSubtitle = GeneratedColumn<String>(
+    'user_subtitle',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _photoPathMeta = const VerificationMeta(
     'photoPath',
   );
@@ -5027,6 +5038,7 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     key,
     displayName,
     userLabel,
+    userSubtitle,
     photoPath,
     isMe,
     inAddressBook,
@@ -5071,6 +5083,15 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
       context.handle(
         _userLabelMeta,
         userLabel.isAcceptableOrUnknown(data['user_label']!, _userLabelMeta),
+      );
+    }
+    if (data.containsKey('user_subtitle')) {
+      context.handle(
+        _userSubtitleMeta,
+        userSubtitle.isAcceptableOrUnknown(
+          data['user_subtitle']!,
+          _userSubtitleMeta,
+        ),
       );
     }
     if (data.containsKey('photo_path')) {
@@ -5178,6 +5199,10 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
         DriftSqlType.string,
         data['${effectivePrefix}user_label'],
       ),
+      userSubtitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_subtitle'],
+      ),
       photoPath: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}photo_path'],
@@ -5234,6 +5259,10 @@ class Contact extends DataClass implements Insertable<Contact> {
   /// A name the user gave this sender; shown instead of [displayName]
   /// everywhere and kept for all future mail from any of its addresses.
   final String? userLabel;
+
+  /// A short note the user put under this sender's name in the chat list,
+  /// such as a job title. Optional; kept like [userLabel].
+  final String? userSubtitle;
   final String? photoPath;
   final bool isMe;
   final bool inAddressBook;
@@ -5255,6 +5284,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     required this.key,
     required this.displayName,
     this.userLabel,
+    this.userSubtitle,
     this.photoPath,
     required this.isMe,
     required this.inAddressBook,
@@ -5273,6 +5303,9 @@ class Contact extends DataClass implements Insertable<Contact> {
     map['display_name'] = Variable<String>(displayName);
     if (!nullToAbsent || userLabel != null) {
       map['user_label'] = Variable<String>(userLabel);
+    }
+    if (!nullToAbsent || userSubtitle != null) {
+      map['user_subtitle'] = Variable<String>(userSubtitle);
     }
     if (!nullToAbsent || photoPath != null) {
       map['photo_path'] = Variable<String>(photoPath);
@@ -5298,6 +5331,9 @@ class Contact extends DataClass implements Insertable<Contact> {
       userLabel: userLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(userLabel),
+      userSubtitle: userSubtitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userSubtitle),
       photoPath: photoPath == null && nullToAbsent
           ? const Value.absent()
           : Value(photoPath),
@@ -5324,6 +5360,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       key: serializer.fromJson<String>(json['key']),
       displayName: serializer.fromJson<String>(json['displayName']),
       userLabel: serializer.fromJson<String?>(json['userLabel']),
+      userSubtitle: serializer.fromJson<String?>(json['userSubtitle']),
       photoPath: serializer.fromJson<String?>(json['photoPath']),
       isMe: serializer.fromJson<bool>(json['isMe']),
       inAddressBook: serializer.fromJson<bool>(json['inAddressBook']),
@@ -5345,6 +5382,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       'key': serializer.toJson<String>(key),
       'displayName': serializer.toJson<String>(displayName),
       'userLabel': serializer.toJson<String?>(userLabel),
+      'userSubtitle': serializer.toJson<String?>(userSubtitle),
       'photoPath': serializer.toJson<String?>(photoPath),
       'isMe': serializer.toJson<bool>(isMe),
       'inAddressBook': serializer.toJson<bool>(inAddressBook),
@@ -5362,6 +5400,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     String? key,
     String? displayName,
     Value<String?> userLabel = const Value.absent(),
+    Value<String?> userSubtitle = const Value.absent(),
     Value<String?> photoPath = const Value.absent(),
     bool? isMe,
     bool? inAddressBook,
@@ -5376,6 +5415,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     key: key ?? this.key,
     displayName: displayName ?? this.displayName,
     userLabel: userLabel.present ? userLabel.value : this.userLabel,
+    userSubtitle: userSubtitle.present ? userSubtitle.value : this.userSubtitle,
     photoPath: photoPath.present ? photoPath.value : this.photoPath,
     isMe: isMe ?? this.isMe,
     inAddressBook: inAddressBook ?? this.inAddressBook,
@@ -5396,6 +5436,9 @@ class Contact extends DataClass implements Insertable<Contact> {
           ? data.displayName.value
           : this.displayName,
       userLabel: data.userLabel.present ? data.userLabel.value : this.userLabel,
+      userSubtitle: data.userSubtitle.present
+          ? data.userSubtitle.value
+          : this.userSubtitle,
       photoPath: data.photoPath.present ? data.photoPath.value : this.photoPath,
       isMe: data.isMe.present ? data.isMe.value : this.isMe,
       inAddressBook: data.inAddressBook.present
@@ -5431,6 +5474,7 @@ class Contact extends DataClass implements Insertable<Contact> {
           ..write('key: $key, ')
           ..write('displayName: $displayName, ')
           ..write('userLabel: $userLabel, ')
+          ..write('userSubtitle: $userSubtitle, ')
           ..write('photoPath: $photoPath, ')
           ..write('isMe: $isMe, ')
           ..write('inAddressBook: $inAddressBook, ')
@@ -5450,6 +5494,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     key,
     displayName,
     userLabel,
+    userSubtitle,
     photoPath,
     isMe,
     inAddressBook,
@@ -5468,6 +5513,7 @@ class Contact extends DataClass implements Insertable<Contact> {
           other.key == this.key &&
           other.displayName == this.displayName &&
           other.userLabel == this.userLabel &&
+          other.userSubtitle == this.userSubtitle &&
           other.photoPath == this.photoPath &&
           other.isMe == this.isMe &&
           other.inAddressBook == this.inAddressBook &&
@@ -5484,6 +5530,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   final Value<String> key;
   final Value<String> displayName;
   final Value<String?> userLabel;
+  final Value<String?> userSubtitle;
   final Value<String?> photoPath;
   final Value<bool> isMe;
   final Value<bool> inAddressBook;
@@ -5499,6 +5546,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     this.key = const Value.absent(),
     this.displayName = const Value.absent(),
     this.userLabel = const Value.absent(),
+    this.userSubtitle = const Value.absent(),
     this.photoPath = const Value.absent(),
     this.isMe = const Value.absent(),
     this.inAddressBook = const Value.absent(),
@@ -5515,6 +5563,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     required String key,
     this.displayName = const Value.absent(),
     this.userLabel = const Value.absent(),
+    this.userSubtitle = const Value.absent(),
     this.photoPath = const Value.absent(),
     this.isMe = const Value.absent(),
     this.inAddressBook = const Value.absent(),
@@ -5531,6 +5580,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     Expression<String>? key,
     Expression<String>? displayName,
     Expression<String>? userLabel,
+    Expression<String>? userSubtitle,
     Expression<String>? photoPath,
     Expression<bool>? isMe,
     Expression<bool>? inAddressBook,
@@ -5547,6 +5597,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
       if (key != null) 'key': key,
       if (displayName != null) 'display_name': displayName,
       if (userLabel != null) 'user_label': userLabel,
+      if (userSubtitle != null) 'user_subtitle': userSubtitle,
       if (photoPath != null) 'photo_path': photoPath,
       if (isMe != null) 'is_me': isMe,
       if (inAddressBook != null) 'in_address_book': inAddressBook,
@@ -5567,6 +5618,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     Value<String>? key,
     Value<String>? displayName,
     Value<String?>? userLabel,
+    Value<String?>? userSubtitle,
     Value<String?>? photoPath,
     Value<bool>? isMe,
     Value<bool>? inAddressBook,
@@ -5583,6 +5635,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
       key: key ?? this.key,
       displayName: displayName ?? this.displayName,
       userLabel: userLabel ?? this.userLabel,
+      userSubtitle: userSubtitle ?? this.userSubtitle,
       photoPath: photoPath ?? this.photoPath,
       isMe: isMe ?? this.isMe,
       inAddressBook: inAddressBook ?? this.inAddressBook,
@@ -5608,6 +5661,9 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     }
     if (userLabel.present) {
       map['user_label'] = Variable<String>(userLabel.value);
+    }
+    if (userSubtitle.present) {
+      map['user_subtitle'] = Variable<String>(userSubtitle.value);
     }
     if (photoPath.present) {
       map['photo_path'] = Variable<String>(photoPath.value);
@@ -5653,6 +5709,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
           ..write('key: $key, ')
           ..write('displayName: $displayName, ')
           ..write('userLabel: $userLabel, ')
+          ..write('userSubtitle: $userSubtitle, ')
           ..write('photoPath: $photoPath, ')
           ..write('isMe: $isMe, ')
           ..write('inAddressBook: $inAddressBook, ')
@@ -17884,6 +17941,7 @@ typedef $$ContactsTableCreateCompanionBuilder = ContactsCompanion Function({
   required String key,
   Value<String> displayName,
   Value<String?> userLabel,
+  Value<String?> userSubtitle,
   Value<String?> photoPath,
   Value<bool> isMe,
   Value<bool> inAddressBook,
@@ -17900,6 +17958,7 @@ typedef $$ContactsTableUpdateCompanionBuilder = ContactsCompanion Function({
   Value<String> key,
   Value<String> displayName,
   Value<String?> userLabel,
+  Value<String?> userSubtitle,
   Value<String?> photoPath,
   Value<bool> isMe,
   Value<bool> inAddressBook,
@@ -17959,6 +18018,11 @@ class $$ContactsTableFilterComposer
 
   ColumnFilters<String> get userLabel => $composableBuilder(
     column: $table.userLabel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userSubtitle => $composableBuilder(
+    column: $table.userSubtitle,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18062,6 +18126,11 @@ class $$ContactsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get userSubtitle => $composableBuilder(
+    column: $table.userSubtitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get photoPath => $composableBuilder(
     column: $table.photoPath,
     builder: (column) => ColumnOrderings(column),
@@ -18132,6 +18201,11 @@ class $$ContactsTableAnnotationComposer
 
   GeneratedColumn<String> get userLabel =>
       $composableBuilder(column: $table.userLabel, builder: (column) => column);
+
+  GeneratedColumn<String> get userSubtitle => $composableBuilder(
+    column: $table.userSubtitle,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get photoPath =>
       $composableBuilder(column: $table.photoPath, builder: (column) => column);
@@ -18236,6 +18310,7 @@ class $$ContactsTableTableManager
                 Value<String> key = const Value.absent(),
                 Value<String> displayName = const Value.absent(),
                 Value<String?> userLabel = const Value.absent(),
+                Value<String?> userSubtitle = const Value.absent(),
                 Value<String?> photoPath = const Value.absent(),
                 Value<bool> isMe = const Value.absent(),
                 Value<bool> inAddressBook = const Value.absent(),
@@ -18251,6 +18326,7 @@ class $$ContactsTableTableManager
                 key: key,
                 displayName: displayName,
                 userLabel: userLabel,
+                userSubtitle: userSubtitle,
                 photoPath: photoPath,
                 isMe: isMe,
                 inAddressBook: inAddressBook,
@@ -18268,6 +18344,7 @@ class $$ContactsTableTableManager
                 required String key,
                 Value<String> displayName = const Value.absent(),
                 Value<String?> userLabel = const Value.absent(),
+                Value<String?> userSubtitle = const Value.absent(),
                 Value<String?> photoPath = const Value.absent(),
                 Value<bool> isMe = const Value.absent(),
                 Value<bool> inAddressBook = const Value.absent(),
@@ -18283,6 +18360,7 @@ class $$ContactsTableTableManager
                 key: key,
                 displayName: displayName,
                 userLabel: userLabel,
+                userSubtitle: userSubtitle,
                 photoPath: photoPath,
                 isMe: isMe,
                 inAddressBook: inAddressBook,

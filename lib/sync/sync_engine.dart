@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../app/app_log.dart';
+
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../store/classification_queries.dart';
@@ -144,6 +146,8 @@ class AccountSyncer {
       }
       await _backfillSignals(targets);
       if (!_stopRequested) await _backfillProviderCategories(targets);
+      // Anything an interrupted pass left undecided is finished here.
+      while (!_stopRequested && await classification.classifyPending() > 0) {}
       if (!_stopRequested) await planner.recentPass(this);
       await db.setAccountSyncResult(account.id);
       _consecutiveFailures = 0;
@@ -183,17 +187,19 @@ class AccountSyncer {
 
   /// Reads the provider category of UIDs `lo..hi` in the selected [folderId]
   /// and stores it. Returns the senders whose messages were updated.
-  Future<Set<String>> _readProviderCategories(int folderId, (int, int) range) async {
+  Future<Set<String>> _readProviderCategories(int folderId, (int, int) range, {bool redecide = false}) async {
     final (lo, hi) = range;
     final found = <String, Set<int>>{};
     for (final c in providerCategoryNames) {
       found[c] = await transport.searchUids('UID $lo:$hi X-GM-RAW "category:$c"');
     }
-    return db.storeProviderCategories(folderId, range, found);
+    return db.storeProviderCategories(folderId, range, found, redecide: redecide);
   }
 
   /// Messages stored before categories were read get them once, and their
-  /// senders are classified again.
+  /// senders are classified again. Those senders are marked undecided in the
+  /// same transaction, so a pass cut short is finished later instead of
+  /// leaving decisions made without the categories.
   Future<void> _backfillProviderCategories(List<Folder> folders) async {
     if (!_hasProviderCategories) return;
     for (final folder in folders) {
@@ -203,8 +209,8 @@ class AccountSyncer {
       if (range == null) continue;
       _emit(_status.copyWith(message: 'reading Gmail categories in ${folder.path}'));
       await transport.selectFolder(folder.path);
-      final senders = await _readProviderCategories(folder.id, range);
-      await classification.classifySenders(senders);
+      final senders = await _readProviderCategories(folder.id, range, redecide: true);
+      await classification.classifySenders(senders, log: false);
     }
   }
 
@@ -422,7 +428,8 @@ class AccountSyncer {
         _emit(_status.copyWith(phase: SyncPhase.error, error: e.message));
         await transport.disconnect();
         await _backoff();
-      } catch (e) {
+      } catch (e, st) {
+        AppLog.current?.error('sync failed', AppLog.scrub(e), st);
         _consecutiveFailures++;
         _emit(_status.copyWith(phase: SyncPhase.error, error: e.toString()));
         await transport.disconnect();

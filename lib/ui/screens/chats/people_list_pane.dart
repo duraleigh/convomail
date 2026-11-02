@@ -24,8 +24,8 @@ import '../../widgets/empty_state.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import '../planner/event_dialogs.dart';
+import 'edit_sender_dialog.dart';
 import 'person_row.dart';
-import 'rename_sender_dialog.dart';
 import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
 
@@ -214,9 +214,11 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         if (ref.read(selectedRowProvider) == row.rowKey && until != SnoozeChoice.unsnooze) ref.read(selectedRowProvider.notifier).select(null);
       case RowAction.rename:
         if (row.ref case ContactRow(:final contactKey)) {
-          final name = await showRenameSenderDialog(context, current: row.title, address: row.identityKey);
-          if (name == null) return;
-          await ref.read(databaseProvider).setContactLabel(contactKey, name);
+          final edit = await showEditSenderDialog(context, name: row.title, subtitle: row.subtitle ?? '', address: row.identityKey);
+          if (edit == null) return;
+          final db = ref.read(databaseProvider);
+          await db.setContactLabel(contactKey, edit.name);
+          await db.setContactSubtitle(contactKey, edit.subtitle);
         }
       case RowAction.category:
         if (row.ref case ContactRow(:final contactKey)) {
@@ -532,15 +534,40 @@ class _SelectionBar extends StatelessWidget {
   }
 }
 
+/// The calendar week [now] falls in, named by its Monday (local time).
+String feedsBannerWeek(DateTime now) {
+  final monday = DateTime(now.year, now.month, now.day - (now.weekday - DateTime.monday));
+  return '${monday.year}-${monday.month.toString().padLeft(2, '0')}-${monday.day.toString().padLeft(2, '0')}';
+}
+
+const feedsBannerDismissedKey = 'feedsBanner.dismissedWeek';
+
+/// The week the user last dismissed the Feeds banner, from the database so
+/// the choice survives a restart.
+final feedsBannerDismissedProvider = AsyncNotifierProvider<FeedsBannerDismissed, String?>(FeedsBannerDismissed.new);
+
+class FeedsBannerDismissed extends AsyncNotifier<String?> {
+  @override
+  Future<String?> build() => ref.read(databaseProvider).getSetting(feedsBannerDismissedKey);
+
+  Future<void> dismiss(DateTime now) async {
+    final week = feedsBannerWeek(now);
+    state = AsyncData(week);
+    await ref.read(databaseProvider).putSetting(feedsBannerDismissedKey, week);
+  }
+}
+
 /// "N filed to Feeds this week" (spec 4.11): shows how much was sorted
-/// out of People, and jumps to the Feeds tab.
+/// out of People, and jumps to the Feeds tab. Dismissing it hides it until
+/// the next calendar week.
 class _FeedsBanner extends ConsumerWidget {
   const _FeedsBanner();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final n = ref.watch(feedsFiledThisWeekProvider).value ?? 0;
-    if (n == 0) return const SizedBox.shrink();
+    final dismissed = ref.watch(feedsBannerDismissedProvider);
+    if (n == 0 || dismissed.isLoading || dismissed.value == feedsBannerWeek(DateTime.now())) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return Padding(
@@ -553,13 +580,21 @@ class _FeedsBanner extends ConsumerWidget {
         child: InkWell(
           onTap: () => ref.read(inboxModeProvider.notifier).select(InboxMode.feeds),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+            padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
             child: Row(
               children: [
                 Icon(Icons.rss_feed_rounded, size: 18, color: scheme.onTertiaryContainer),
                 const SizedBox(width: 8),
                 Expanded(child: Text('$n message${n == 1 ? '' : 's'} filed to Feeds this week', style: text.labelLarge!.copyWith(color: scheme.onTertiaryContainer))),
-                Icon(Icons.chevron_right_rounded, size: 20, color: scheme.onTertiaryContainer),
+                IconButton(
+                  key: const ValueKey('feeds-banner-dismiss'),
+                  tooltip: 'Dismiss until next week',
+                  iconSize: 18,
+                  visualDensity: VisualDensity.compact,
+                  color: scheme.onTertiaryContainer,
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: () => ref.read(feedsBannerDismissedProvider.notifier).dismiss(DateTime.now()),
+                ),
               ],
             ),
           ),

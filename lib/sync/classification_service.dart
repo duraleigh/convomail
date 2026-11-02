@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/app_log.dart';
 import '../domain/classifier.dart';
 import '../domain/identity.dart';
 import '../store/classification_queries.dart';
@@ -20,7 +21,7 @@ class ClassificationService {
 
   /// Bumped when the rules change enough that existing automatic decisions
   /// should be redone. Stored under [versionKey].
-  static const classifierVersion = 2;
+  static const classifierVersion = 3;
   static const versionKey = 'classifier.version';
 
   /// Redoes automatic sender decisions once after a classifier upgrade;
@@ -60,21 +61,35 @@ class ClassificationService {
     final classifier = await _classifier();
     var changed = 0;
     for (final key in keys) {
-      final before = await (db.select(db.contacts)..where((c) => c.key.equals(key))).getSingleOrNull();
-      if (before == null) continue;
-      final facts = await db.senderFacts(key);
-      if (facts == null) continue;
-      final decision = classifier.classifySender(facts);
-      await db.writeSenderDecision(key, decision, keepSource: before.classificationSource == 'override');
-      final senderDefault = (await (db.select(db.contacts)..where((c) => c.key.equals(key))).getSingle()).feedsCategory;
-      await _classifyMessagesOf(key, decision.bucket, classifier, senderDefault: senderDefault);
-      if (before.classification != decision.bucket.name) changed++;
-      if (log && (before.classification != decision.bucket.name || before.classReasons.isEmpty)) {
-        await db.logClassification(contactKey: key, decision: decision.bucket, category: decision.category, reasons: decision.reasons, source: decision.source);
+      // One sender's failure must not stop the others; it stays undecided
+      // when it was undecided, and is retried by the next pending pass.
+      try {
+        // A transaction, so facts and decision cannot straddle new facts
+        // being stored by the sync engine.
+        final didChange = await db.transaction(() => _classifySender(key, classifier, log: log));
+        if (didChange) changed++;
+      } catch (e, st) {
+        AppLog.current?.error('classifying a sender failed', AppLog.scrub(e), st);
       }
     }
     await db.refreshDirtyRows();
     return changed;
+  }
+
+  Future<bool> _classifySender(String key, Classifier classifier, {required bool log}) async {
+    final before = await (db.select(db.contacts)..where((c) => c.key.equals(key))).getSingleOrNull();
+    if (before == null) return false;
+    final facts = await db.senderFacts(key);
+    if (facts == null) return false;
+    final decision = classifier.classifySender(facts);
+    await db.writeSenderDecision(key, decision, keepSource: before.classificationSource == 'override');
+    final senderDefault = (await (db.select(db.contacts)..where((c) => c.key.equals(key))).getSingle()).feedsCategory;
+    await _classifyMessagesOf(key, decision.bucket, classifier, senderDefault: senderDefault);
+    final bucketChanged = before.classification != decision.bucket.name;
+    if (log && (bucketChanged || before.classReasons.isEmpty)) {
+      await db.logClassification(contactKey: key, decision: decision.bucket, category: decision.category, reasons: decision.reasons, source: decision.source);
+    }
+    return bucketChanged;
   }
 
   Future<void> _classifyMessagesOf(String key, Bucket senderBucket, Classifier classifier, {String? senderDefault}) async {
@@ -135,12 +150,15 @@ class ClassificationService {
     await db.refreshDirtyRows();
   }
 
-  /// Senders never classified yet, in batches (startup backfill).
+  /// Senders never classified yet, in batches (startup backfill). Returns
+  /// how many got a decision, so a loop over it ends even when some senders
+  /// keep failing.
   Future<int> classifyPending({int limit = 200}) async {
     final pending = await db.unclassifiedSenders(limit: limit);
     if (pending.isEmpty) return 0;
     await classifySenders(pending, log: false);
-    return pending.length;
+    final left = (await db.unclassifiedSenders(limit: limit)).toSet();
+    return pending.where((k) => !left.contains(k)).length;
   }
 
   // ---- user actions ------------------------------------------------------------

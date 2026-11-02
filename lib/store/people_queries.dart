@@ -34,10 +34,14 @@ class PeopleRow {
     this.snoozedUntil,
     this.muted = false,
     this.accountIds = const {},
+    this.subtitle,
   });
 
   final RowRef ref;
   final String title;
+
+  /// The user's note under the sender's name; null when there is none.
+  final String? subtitle;
 
   /// Key used for the avatar color: the contact key, or `g:<id>` for groups.
   final String identityKey;
@@ -140,6 +144,13 @@ extension PeopleQueries on AppDatabase {
     await (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(userLabel: Value(v == null || v.isEmpty ? null : v)));
   }
 
+  /// The user's optional note under a sender's name (spec 4.2). Null or
+  /// blank removes it. Kept like the name: contacts outlive their messages.
+  Future<void> setContactSubtitle(String contactKey, String? subtitle) async {
+    final v = subtitle?.trim();
+    await (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(userSubtitle: Value(v == null || v.isEmpty ? null : v)));
+  }
+
   Future<void> markRowsDirty(Iterable<String> rowKeys) async {
     for (final k in rowKeys) {
       await customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) VALUES (?)', [k]);
@@ -231,7 +242,7 @@ extension PeopleQueries on AppDatabase {
            mp.subject AS pp_subject, mp.snippet AS pp_snippet, mp.is_from_me AS pp_from_me,
            mf.subject AS pf_subject, mf.snippet AS pf_snippet, mf.is_from_me AS pf_from_me,
            COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at, COALESCE(p.muted, 0) AS muted,
-           COALESCE(NULLIF(c.user_label, ''), c.display_name) AS c_name, COALESCE(c.in_address_book, 0) AS c_in_book,
+           COALESCE(NULLIF(c.user_label, ''), c.display_name) AS c_name, NULLIF(c.user_subtitle, '') AS c_subtitle, COALESCE(c.in_address_book, 0) AS c_in_book,
            COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
            g.name AS g_name,
            (SELECT GROUP_CONCAT(DISTINCT mm.account_id) FROM message_row_assignments rr JOIN messages mm ON mm.id = rr.message_id WHERE rr.row_key = s.row_key AND mm.is_deleted = 0) AS account_ids
@@ -362,14 +373,16 @@ extension PeopleQueries on AppDatabase {
       final previewPrefix = feedsTab ? 'pf' : (isGroupRow ? 'p' : 'pp');
       final subject = (d['${previewPrefix}_subject'] as String?) ?? (d['p_subject'] as String?) ?? '';
       final snippet = (d['${previewPrefix}_snippet'] as String?) ?? (d['p_snippet'] as String?) ?? '';
+      final subtitle = ref is ContactRow ? d['c_subtitle'] as String? : null;
       if (search.isNotEmpty) {
-        final hay = '${title.toLowerCase()} ${identityKey.toLowerCase()} ${subject.toLowerCase()} ${snippet.toLowerCase()}';
+        final hay = '${title.toLowerCase()} ${(subtitle ?? '').toLowerCase()} ${identityKey.toLowerCase()} ${subject.toLowerCase()} ${snippet.toLowerCase()}';
         if (!hay.contains(search)) continue;
       }
 
       out.add(PeopleRow(
         ref: ref,
         title: title,
+        subtitle: subtitle,
         identityKey: identityKey,
         lastActivity: _later(ref is GroupRow ? lastAny : (lastReceived ?? lastAny), resurfacedAt),
         previewSubject: subject,

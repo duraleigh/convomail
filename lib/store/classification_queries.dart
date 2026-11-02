@@ -82,7 +82,9 @@ extension ClassificationQueries on AppDatabase {
   /// maps a category to the UIDs the provider returned for it; every other
   /// message in `lo..hi` that is still unread gets `''` (searched, none).
   /// Returns the senders whose messages changed.
-  Future<Set<String>> storeProviderCategories(int folderId, (int, int) range, Map<String, Set<int>> byCategory) async {
+  /// With [redecide] the range's senders are marked undecided as well, in
+  /// the same transaction (manual moves excepted).
+  Future<Set<String>> storeProviderCategories(int folderId, (int, int) range, Map<String, Set<int>> byCategory, {bool redecide = false}) async {
     final (lo, hi) = range;
     final senders = <String>{};
     await transaction(() async {
@@ -103,6 +105,14 @@ extension ClassificationQueries on AppDatabase {
         variables: [Variable.withInt(folderId), Variable.withInt(lo), Variable.withInt(hi)],
       ).get();
       senders.addAll(rows.map((r) => r.read<String>('k')));
+      if (redecide) {
+        await customUpdate(
+          "UPDATE contacts SET class_reasons = '' WHERE classification_source <> 'override' "
+          'AND key IN (SELECT from_contact_key FROM messages WHERE folder_id = ? AND uid BETWEEN ? AND ? AND is_from_me = 0)',
+          variables: [Variable.withInt(folderId), Variable.withInt(lo), Variable.withInt(hi)],
+          updates: {contacts},
+        );
+      }
     });
     return senders;
   }

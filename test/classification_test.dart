@@ -12,6 +12,7 @@ import 'package:convomail/sync/classification_service.dart';
 import 'package:convomail/sync/sync_controller.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
+import 'package:convomail/ui/screens/chats/people_list_pane.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/gestures.dart';
@@ -189,6 +190,24 @@ void main() {
       expect(imap.log.where((l) => l.startsWith('search ')).length, lessThan(searches), reason: 'nothing left to backfill');
     });
 
+    test('a re-decision cut short is finished by the next sync, without touching manual moves', () async {
+      imap.capabilities = const ['X-GM-EXT-1'];
+      await sync();
+      final service = ClassificationService(db);
+      await service.moveSender('hello@dailybrief.com', Bucket.people);
+      // What storing categories for the backfill leaves behind when the pass
+      // after it never runs.
+      final inbox = (await db.select(db.folders).get()).firstWhere((f) => f.role == 'inbox');
+      final uids = (await (db.select(db.messages)..where((m) => m.folderId.equals(inbox.id))).get()).map((m) => m.uid).toList()..sort();
+      await db.storeProviderCategories(inbox.id, (uids.first, uids.last), {'updates': uids.toSet()}, redecide: true);
+      expect((await contact('sarah@x.com')).classReasons, isEmpty);
+      expect((await contact('hello@dailybrief.com')).classReasons, 'Moved by you');
+
+      await sync();
+      expect((await contact('sarah@x.com')).classReasons, isNotEmpty);
+      expect((await contact('hello@dailybrief.com')).classification, 'people');
+    });
+
     test('a classifier upgrade redoes automatic decisions once and keeps manual moves', () async {
       await sync();
       final service = ClassificationService(db);
@@ -281,6 +300,32 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 50));
     }
+
+    testWidgets('the filed banner can be dismissed until next week, and that survives a restart', (tester) async {
+      await pumpApp(tester);
+      expect(find.byKey(const ValueKey('feeds-banner')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('feeds-banner-dismiss')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('feeds-banner')), findsNothing);
+      expect(await db.getSetting(feedsBannerDismissedKey), feedsBannerWeek(DateTime.now()));
+
+      await teardown(tester);
+      await pumpApp(tester);
+      expect(find.byKey(const ValueKey('feeds-banner')), findsNothing, reason: 'same week, still dismissed');
+
+      await teardown(tester);
+      await db.putSetting(feedsBannerDismissedKey, '2020-01-06');
+      await pumpApp(tester);
+      expect(find.byKey(const ValueKey('feeds-banner')), findsOneWidget, reason: 'a new week brings it back');
+      await teardown(tester);
+    });
+
+    test('banner weeks run Monday to Sunday', () {
+      expect(feedsBannerWeek(DateTime(2026, 11, 1, 23)), '2026-10-26', reason: 'a Sunday belongs to the week before');
+      expect(feedsBannerWeek(DateTime(2026, 11, 2, 0, 1)), '2026-11-02');
+      expect(feedsBannerWeek(DateTime(2026, 11, 8)), '2026-11-02');
+      expect(feedsBannerWeek(DateTime(2027, 1, 1)), '2026-12-28', reason: 'across a year end');
+    });
 
     testWidgets('People tab hides feeds senders and shows the filed banner; Feeds tab shows pills', (tester) async {
       final container = await pumpApp(tester);

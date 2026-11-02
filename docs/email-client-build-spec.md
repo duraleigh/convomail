@@ -62,8 +62,9 @@ This is the main/home screen, equivalent to Unibox's contact sidebar and ChatInb
 - **No pinned-contacts strip.** The reference apps show a horizontal row of avatars above the list; this app does not. Pinning a contact (via swipe action) keeps that contact's row at the top of the main list instead, marked with a small pin icon.
 - **Main contact list**: vertically scrolling list, each row containing:
   - Circular avatar (contact photo if available via device contacts/synced address book, otherwise colored circle with the contact's initials — color assigned deterministically per contact so it's consistent across sessions)
-  - Contact display name (bold if unread messages exist). The user can **rename** a sender from the row menu; the new name replaces the header name everywhere the contact is shown, applies to all of the contact's addresses, and persists for all future mail from that sender even if every message is deleted. "Use original name" goes back to the header name.
-  - **No message text.** A row is one line: avatar, name, (Feeds) category pill, timestamp, unread badge. Subjects and bodies appear only in the conversation pane (changed Oct 29, 2026).
+  - Contact display name (bold if unread messages exist). The user can **rename** a sender from the row menu; the new name replaces the header name everywhere the contact is shown, applies to all of the contact's addresses, and persists for all future mail from that sender even if every message is deleted. "Use original name" goes back to the header name. The same dialog takes an optional **subtitle**: a short note in small, quiet type under the name, like a job title on a business card. It is kept the same way as the name and is found by the list's search.
+  - **No message text.** A row shows avatar, name, the optional subtitle, (Feeds) category pill, timestamp, unread badge. Subjects and bodies appear only in the conversation pane (changed Oct 29, 2026).
+  - **Hover actions never cover the name.** Hovering opens a line of action icons under the name, beside any subtitle. Name, timestamp, and badge stay in view and the row's height does not change (Nov 1, 2026).
   - Timestamp of the most recent message, right-aligned (relative format: "9:41 AM" for today, "Yesterday," weekday name for this week, date for older)
   - Unread count badge (colored circle with number) if applicable
   - Each contact appears **exactly once** in this list, regardless of how many messages they've sent — sorted by the recency of the most recent message *that contact sent*. When a new reply arrives in a multi-person thread, only the replier's row moves to the top; the other participants' rows stay where they were.
@@ -623,6 +624,9 @@ Product decisions made by the product owner after the original draft. Where any 
 22. Chat rows show **the sender only**, with no message text. — 4.2, 5.5
 23. Rows support **multi-select** (Ctrl/Shift-click, checkbox, Ctrl+A) with bulk Move to Feeds / People, Mark as read, and Archive. — 4.2
 24. The user can **rename a sender**; the name persists for all future mail from that contact, even after its conversation is deleted. — 4.2
+25. A sender can carry an optional **subtitle** under the name, kept like the name (November 1, 2026). — 4.2
+26. **Hover actions sit under the name** instead of covering it (November 1, 2026). — 4.2
+27. The **"filed to Feeds" banner can be dismissed** and stays hidden until the next calendar week, Monday to Sunday (November 1, 2026). — 4.11
 
 **Build order**
 20. **Windows first, Android second.** Phase 1 is the Windows desktop app; no Android work until it is signed off. The Windows framework is proposed in the Phase 1 plan with its Phase 2 reuse implications stated. — 0, 2, 4.1, 4.2, 4.17, 4.18, 5.2, 5.3, 6, 7, 8, 9

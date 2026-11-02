@@ -91,7 +91,14 @@ class AppLog {
 
   /// Routes framework and uncaught asynchronous errors into [log]. Debug
   /// builds keep the console output too.
+  /// The installed log; null in tests and before startup finishes.
+  static AppLog? current;
+
+  /// Exception text with mail addresses removed, safe for the log.
+  static String scrub(Object error) => error.toString().replaceAll(RegExp(r'[\w.%+-]+@[\w.-]+'), '<address>');
+
   static void install(AppLog log) {
+    current = log;
     final previous = FlutterError.onError;
     FlutterError.onError = (details) {
       log.error('flutter', details.exceptionAsString(), details.stack);
