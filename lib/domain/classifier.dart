@@ -109,6 +109,10 @@ class SenderFacts {
   const SenderFacts({
     required this.address,
     this.otherAddresses = const [],
+    this.messagesReceived = 1,
+    this.messagesSentTo = 0,
+    this.repliesToAutomated = 0,
+    this.recipientNames = const [],
     this.messagesWithTimely = 0,
     this.name = '',
     this.userHasWrittenTo = false,
@@ -127,6 +131,16 @@ class SenderFacts {
   /// The contact's other addresses, when it is several addresses of one
   /// person. A rule on any of them applies.
   final List<String> otherAddresses;
+
+  /// Messages received from this contact, and messages the user sent it.
+  final int messagesReceived;
+  final int messagesSentTo;
+
+  /// The user's messages to this contact that answer mail filed in Feeds.
+  final int repliesToAutomated;
+
+  /// Names the user's own mail gave this address, when it never wrote back.
+  final List<String> recipientNames;
 
   final String address;
   final String name;
@@ -415,6 +429,19 @@ class Classifier {
     // files nearly all of its mail as bulk and the mail itself says so.
     // (Replies to the user's own mail still show in People per message.)
     if (s.inAddressBook) return const SenderDecision(Bucket.people, reasons: ['In your contacts'], source: 'people-signal');
+
+    // Someone the user only ever wrote to: a chat only for a real person
+    // (spec 4.11). Bounce and reply tokens, mailing platforms and answers to
+    // automated mail are not people, whoever wrote first.
+    if (s.messagesReceived == 0 && s.messagesSentTo > 0) {
+      final machine = [s.address, ...s.otherAddresses].map(machineAddressReason).whereType<String>().firstOrNull;
+      if (machine != null) return SenderDecision(Bucket.feeds, reasons: ['Automated address ($machine)']);
+      if (s.repliesToAutomated * 2 >= s.messagesSentTo) return const SenderDecision(Bucket.feeds, reasons: ['Your mail to it answered automated mail']);
+      if (s.recipientNames.isNotEmpty && s.recipientNames.every((n) => _automatedName.hasMatch(n))) {
+        return const SenderDecision(Bucket.feeds, reasons: ['Your mail to it used an automated name']);
+      }
+      return const SenderDecision(Bucket.people, reasons: ['You wrote to this person'], source: 'people-signal');
+    }
     if (s.userHasWrittenTo) {
       final plainlyMailer = providerTotal > 0 && s.providerBulk / providerTotal >= 0.8 && (bulkByHeaders || hardLocal || sendingSub);
       if (!plainlyMailer) return const SenderDecision(Bucket.people, reasons: ['You have written to this address'], source: 'people-signal');
@@ -473,6 +500,43 @@ class Classifier {
   }
 
   /// A bundled sending platform, or a dedicated sending subdomain.
+  /// ESPs and delivery services whose addresses are never a person's.
+  static const _sendingPlatforms = {
+    'mailchimp.com', 'list-manage.com', 'mcsv.net', 'rsgsv.net', 'sendgrid.net', 'sendgrid.me', 'amazonses.com', 'mailgun.org', 'mailgun.net',
+    'constantcontact.com', 'ccsend.com', 'createsend.com', 'exacttarget.com', 'sailthru.com', 'klaviyomail.com', 'hubspotemail.net', 'hs-send.com',
+    'sparkpostmail.com', 'postmarkapp.com', 'mandrillapp.com', 'customeriomail.com', 'customer.io', 'mktomail.com', 'pardot.com', 'emarsys.net',
+    'responsys.net', 'mailjet.com', 'mailtrack.io', 'intercom-mail.com', 'zendesk.com', 'freshdesk.com', 'hubspot.com',
+  };
+
+  static final _bounceToken = RegExp(r'^(bounces?|bnc|prvs|srs[01]|btv1|msprvs1|return|reply|replies)[+=_.-]', caseSensitive: false);
+  static final _plusToken = RegExp(r'\+[a-z0-9_.=-]*\d[a-z0-9_.=-]{6,}$', caseSensitive: false);
+
+  /// Why [address] is a machine's and not a person's, or null when it may be
+  /// a person's. Reads the address only; the classifier weighs the rest.
+  static String? machineAddressReason(String address) {
+    final a = address.toLowerCase();
+    final at = a.lastIndexOf('@');
+    if (at < 1) return null;
+    final local = a.substring(0, at);
+    final domain = a.substring(at + 1);
+    final labels = domain.split('.');
+    if (_bulkLocalParts.hasMatch(local)) return 'automated name ${local.length > 20 ? 'part' : local}@';
+    if (local.contains('=') || _bounceToken.hasMatch(local) || _plusToken.hasMatch(local)) return 'bounce or reply token';
+    final alnum = local.replaceAll(RegExp(r'[^a-z0-9]'), '');
+    if ((alnum.length >= 24 && RegExp(r'\d').hasMatch(alnum)) || RegExp(r'^\d[a-z0-9]{15,}$').hasMatch(local)) return 'random token';
+    if (labels.length > 2 && labels.sublist(0, labels.length - 2).any((l) => l.contains('bounce') || l == 'bnc' || l == 'mta' || l == 'smtp')) return 'bounce domain';
+    if (_sendingPlatforms.any((p) => domain == p || domain.endsWith('.$p'))) return 'mailing platform';
+    if (labels.length >= 3) {
+      final first = labels.first;
+      const sharedWithPeople = {'mail', 'email', 'm', 's', 'go', 't', 'e'};
+      if ((sendingSubdomainLabels.contains(first) && !sharedWithPeople.contains(first)) ||
+          const {'service', 'services', 'notice', 'notices', 'mailings', 'subscriptions', 'e', 'em', 't', 'tr', 'tx', 's', 'go'}.contains(first)) {
+        return 'sending domain $domain';
+      }
+    }
+    return null;
+  }
+
   static bool isBulkDomain(String domain) => isListedSendingDomain(domain) || isSendingSubdomain(domain);
 
   static bool isListedSendingDomain(String domain) {

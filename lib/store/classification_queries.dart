@@ -59,6 +59,26 @@ extension ClassificationQueries on AppDatabase {
       address: address,
       otherAddresses: [for (final a in mapped) if (a != address) a],
       messagesWithTimely: await _timelyCount(contactKey),
+      messagesReceived: (await customSelect('SELECT COUNT(*) AS n FROM messages WHERE from_contact_key = ? AND is_from_me = 0', variables: [Variable.withString(contactKey)]).getSingle()).read<int>('n'),
+      messagesSentTo: (await customSelect(
+        "SELECT COUNT(DISTINCT m.id) AS n FROM messages m JOIN message_participants p ON p.message_id = m.id WHERE m.is_from_me = 1 AND p.contact_key = ? AND p.role IN ('to','cc','bcc')",
+        variables: [Variable.withString(contactKey)],
+      ).getSingle()).read<int>('n'),
+      repliesToAutomated: (await customSelect(
+        '''
+        SELECT COUNT(DISTINCT m.id) AS n FROM messages m JOIN message_participants p ON p.message_id = m.id
+        WHERE m.is_from_me = 1 AND p.contact_key = ? AND p.role IN ('to','cc','bcc') AND m.in_reply_to IS NOT NULL
+          AND EXISTS (SELECT 1 FROM messages o WHERE o.message_id = m.in_reply_to AND o.is_from_me = 0 AND o.classification = 'feeds')
+        ''',
+        variables: [Variable.withString(contactKey)],
+      ).getSingle()).read<int>('n'),
+      recipientNames: [
+        for (final r in await customSelect(
+          "SELECT DISTINCT p.name AS name FROM message_participants p JOIN messages m ON m.id = p.message_id WHERE m.is_from_me = 1 AND p.contact_key = ? AND p.name <> '' LIMIT 10",
+          variables: [Variable.withString(contactKey)],
+        ).get())
+          r.read<String>('name'),
+      ],
       name: agg.readNullable<String>('name') ?? c?.displayName ?? '',
       userHasWrittenTo: agg.read<int>('written') > 0,
       inAddressBook: c?.inAddressBook ?? false,
@@ -185,8 +205,13 @@ extension ClassificationQueries on AppDatabase {
     final rows = await customSelect(
       '''
       SELECT c.key AS key FROM contacts c
-      WHERE c.is_me = 0 AND c.class_reasons = ''
-        AND EXISTS (SELECT 1 FROM messages m WHERE m.from_contact_key = c.key AND m.bulk_signals IS NOT NULL)
+      WHERE c.is_me = 0 AND c.class_reasons = '' AND c.key <> 'me'
+        AND (EXISTS (SELECT 1 FROM messages m WHERE m.from_contact_key = c.key AND m.bulk_signals IS NOT NULL)
+          -- Addresses the user only wrote to are decided too: a chat only
+          -- for a real person.
+          OR (NOT EXISTS (SELECT 1 FROM messages m WHERE m.from_contact_key = c.key AND m.is_from_me = 0)
+              AND EXISTS (SELECT 1 FROM message_participants p JOIN messages m ON m.id = p.message_id
+                          WHERE p.contact_key = c.key AND m.is_from_me = 1 AND p.role IN ('to','cc','bcc'))))
       ORDER BY c.last_seen_at DESC LIMIT ?
       ''',
       variables: [Variable.withInt(limit)],

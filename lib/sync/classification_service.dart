@@ -22,7 +22,7 @@ class ClassificationService {
 
   /// Bumped when the rules change enough that existing automatic decisions
   /// should be redone. Stored under [versionKey].
-  static const classifierVersion = 4;
+  static const classifierVersion = 5;
   static const versionKey = 'classifier.version';
 
   /// Redoes automatic sender decisions once after a classifier upgrade;

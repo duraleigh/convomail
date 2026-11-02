@@ -22,11 +22,15 @@ import 'thread_actions.dart';
 /// strip when remote content was blocked, the sanitized body, attachment
 /// chips, and the inline action bar.
 class MessageCard extends ConsumerWidget {
-  const MessageCard({super.key, required this.message, this.showViewThread = true, this.threadCount = 1, this.onViewThread});
+  const MessageCard({super.key, required this.message, this.showViewThread = true, this.threadCount = 1, this.inChat = 1, this.onViewThread});
 
   final Message message;
   final bool showViewThread;
   final int threadCount;
+
+  /// How many of the thread's messages this chat holds; the rest belong to
+  /// other people's chats and open with "N more in this thread".
+  final int inChat;
   final VoidCallback? onViewThread;
 
   @override
@@ -137,12 +141,13 @@ class MessageCard extends ConsumerWidget {
               icon: const Icon(Icons.forward_rounded, size: 18),
               label: const Text('Forward'),
             ),
-            if (showViewThread && threadCount > 1) ...[
+            if (showViewThread && threadCount > inChat) ...[
               const SizedBox(width: 4),
-              FilledButton.tonalIcon(
+              TextButton.icon(
+                key: ValueKey('more-in-thread-${message.id}'),
                 onPressed: onViewThread,
                 icon: const Icon(Icons.forum_outlined, size: 18),
-                label: Text('View thread · $threadCount'),
+                label: Text('${threadCount - inChat} more in this thread'),
               ),
             ],
             const Spacer(),

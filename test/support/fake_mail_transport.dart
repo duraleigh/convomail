@@ -179,8 +179,17 @@ class FakeMailTransport implements MailTransport {
   @override
   Future<Set<int>> fetchExistingUids({required int maxUid}) async {
     _requireConnected();
+    final wrong = wrongExistingOnce;
+    if (wrong != null) {
+      wrongExistingOnce = null;
+      return {for (final uid in wrong) if (uid <= maxUid) uid};
+    }
     return {for (final uid in _sel.messages.keys) if (uid <= maxUid) uid};
   }
+
+  /// Answers the next existing-UIDs read with this set, as a read that
+  /// landed on the wrong folder would.
+  Set<int>? wrongExistingOnce;
 
   @override
   Future<RemoteMessageBody> fetchBody(int uid) async {
@@ -347,9 +356,11 @@ RemoteMessageHeader hdr({
   DateTime? date,
   bool seen = false,
   bool flagged = false,
+  BulkSignals signals = BulkSignals.none,
 }) =>
     RemoteMessageHeader(
       uid: 0,
+      signals: signals,
       from: RemoteAddress(from, fromName),
       to: [for (final a in to) RemoteAddress(a)],
       cc: [for (final a in cc) RemoteAddress(a)],

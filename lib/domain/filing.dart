@@ -2,8 +2,13 @@
 ///
 /// Spec 4.3 and 4.19; decisions 1, 2, 5, 6. Pure Dart, no I/O.
 ///
-/// - A received message files under its sender only.
-/// - A message the user sent files under each recipient.
+/// - A received message files under its sender only. Being on CC never
+///   files a message with the CC'd person.
+/// - A reply the user sent files with the person it answers: the sender of
+///   the message it replies to, or, when that message is not stored, the
+///   first To address (where Gmail and Outlook put that person).
+/// - A new message the user sent files under its To recipients only (CC
+///   when there is no To). Never under people on CC.
 /// - If the participant set (sender + To + CC, minus the user) exactly
 ///   equals a user-defined group's members, the message files in that
 ///   group row only, for received and sent mail alike.
@@ -71,10 +76,19 @@ class MessageEnvelope {
     required this.from,
     this.to = const [],
     this.cc = const [],
+    this.isReply = false,
+    this.repliedToSender,
   });
   final String from;
   final List<String> to;
   final List<String> cc;
+
+  /// The message answers another (it has In-Reply-To).
+  final bool isReply;
+
+  /// Contact key of whoever wrote the message this one answers, when that
+  /// message is stored and was not the user's own.
+  final String? repliedToSender;
 }
 
 class FilingResult {
@@ -105,9 +119,19 @@ class FilingRule {
     }
 
     if (sender.isMe) {
-      // Sent mail: one row per recipient (decision 5). A message to only
-      // yourself files under "me" so it is not lost.
-      final recipients = identity.participantKeys([...m.to, ...m.cc]);
+      // Sent mail files with the person the user was writing to (decision
+      // 35), never with everyone copied.
+      final answered = m.repliedToSender;
+      if (answered != null && answered != IdentityResolver.me) {
+        return FilingResult(rows: {ContactRow(answered)}, isFromMe: true, participantKeys: participants);
+      }
+      final to = identity.participantKeys(m.to);
+      if (m.isReply && to.isNotEmpty) {
+        final first = m.to.map(identity.resolve).firstWhere((r) => !r.isMe);
+        return FilingResult(rows: {ContactRow(first.contactKey)}, isFromMe: true, participantKeys: participants);
+      }
+      final recipients = to.isNotEmpty ? to : identity.participantKeys(m.cc);
+      // A message to only yourself files under "me" so it is not lost.
       final rows = recipients.isEmpty ? {const ContactRow(IdentityResolver.me)} : {for (final k in recipients) ContactRow(k)};
       return FilingResult(rows: rows, isFromMe: true, participantKeys: participants);
     }

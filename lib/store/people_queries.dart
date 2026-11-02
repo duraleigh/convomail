@@ -374,7 +374,9 @@ extension PeopleQueries on AppDatabase {
       final feedsSender = !isGroupRow && classification == 'feeds';
       final inboundPeople = d['last_people'] != null;
       final inPeople = isGroupRow || (feedsSender ? inboundPeople : peopleTotal > 0);
-      final inFeeds = feedsSender && (feedsTotal > 0 || !inPeople);
+      // A Feeds contact the user only wrote to (a bounce address, say) is
+      // nobody's conversation: it shows in neither list.
+      final inFeeds = feedsSender && (feedsTotal > 0 || (!inPeople && d['last_received'] != null));
       if (tab == InboxTab.people ? !inPeople : !inFeeds) continue;
       if (inCategory != null && !inCategory.contains(rowKey)) continue;
       final feedsTab = tab == InboxTab.feeds;

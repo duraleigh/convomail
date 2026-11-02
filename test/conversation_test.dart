@@ -87,7 +87,10 @@ void main() {
     db = AppDatabase.memory();
     final account = await insertTestAccount(db);
     final inbox = await db.into(db.folders).insert(FoldersCompanion.insert(accountId: account.id, path: 'INBOX', name: 'INBOX', role: const Value('inbox')));
-    final now = DateTime.now();
+    // Yesterday afternoon, so the thread never straddles midnight whatever
+    // time the tests run.
+    final today = DateTime.now();
+    final now = DateTime(today.year, today.month, today.day).subtract(const Duration(hours: 6));
     // A thread: Sarah → me, I reply, Sarah replies (with a tracking pixel and a remote image).
     await seedMessage(accountId: account.id, folderId: inbox, uid: 1, from: 'sarah@x.com', fromName: 'Sarah Chen', subject: 'Design review', date: now.subtract(const Duration(hours: 5)), messageId: '<a@x>', html: '<p>The mockups are ready for review.</p>');
     await seedMessage(accountId: account.id, folderId: inbox, uid: 2, from: 'me@example.com', fromName: 'Me', subject: 'Re: Design review', date: now.subtract(const Duration(hours: 4)), messageId: '<b@x>', inReplyTo: '<a@x>', text: 'Looks great, shipping it.', fromMe: true, to: ['sarah@x.com']);
@@ -160,14 +163,22 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('View thread opens the overlay with every participant, including my reply', (tester) async {
+  testWidgets('"N more in this thread" opens the whole thread: every participant, including my reply', (tester) async {
+    // Tom joins the thread; his message lives in his own chat, not Sarah's.
+    final folder = (await db.select(db.folders).get()).first;
+    final base = (await db.select(db.messages).get()).firstWhere((m) => m.messageId == '<a@x>').date!;
+    await seedMessage(accountId: folder.accountId, folderId: folder.id, uid: 9, from: 'tom@x.com', fromName: 'Tom', subject: 'Re: Design review', date: base.add(const Duration(minutes: 30)), messageId: '<t@x>', inReplyTo: '<a@x>', text: 'Count me in');
+    await db.rebuildMissingThreads();
     await openSarah(tester);
+    expect(find.textContaining('more in this thread'), findsNothing, reason: 'collapsed');
     await tester.tap(find.descendant(of: find.byType(ConversationPane), matching: find.text('Re: Design review')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('View thread · 3').first);
+    expect(find.text('1 more in this thread'), findsWidgets, reason: "only Tom's message is outside Sarah's chat");
+    await tester.tap(find.textContaining('more in this thread').first);
     await tester.pumpAndSettle();
 
     expect(find.byType(ThreadViewPanel), findsOneWidget);
+    expect(find.descendant(of: find.byType(ThreadViewPanel), matching: find.textContaining('Count me in')), findsWidgets);
     expect(find.descendant(of: find.byType(ThreadViewPanel), matching: find.textContaining('Looks great, shipping it')), findsWidgets, reason: 'my reply is visible in the thread view');
     expect(find.descendant(of: find.byType(ThreadViewPanel), matching: find.textContaining('The mockups are ready')), findsWidgets);
     expect(find.text('You'), findsWidgets);

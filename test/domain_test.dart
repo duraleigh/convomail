@@ -55,10 +55,25 @@ void main() {
       expect(f.rows, {const ContactRow('sarah@x.com')});
     });
 
-    test('sent mail files under each recipient', () {
+    test('mail the user sends files with the person written to, never with people on CC', () {
       final f = rule.file(const MessageEnvelope(from: 'me@example.com', to: ['sarah@x.com'], cc: ['tom@x.com']));
-      expect(f.rows, {const ContactRow('sarah@x.com'), const ContactRow('tom@x.com')});
+      expect(f.rows, {const ContactRow('sarah@x.com')});
       expect(f.isFromMe, isTrue);
+    });
+
+    test('a new message to two people files under both; CC only when there is no To', () {
+      expect(rule.file(const MessageEnvelope(from: 'me@example.com', to: ['sarah@x.com', 'tom@x.com'], cc: ['gina@x.com'])).rows, {const ContactRow('sarah@x.com'), const ContactRow('tom@x.com')});
+      expect(rule.file(const MessageEnvelope(from: 'me@example.com', cc: ['gina@x.com'])).rows, {const ContactRow('gina@x.com')});
+    });
+
+    test('a reply files with the person it answers, whoever else is on To or CC', () {
+      final f = rule.file(const MessageEnvelope(from: 'me@example.com', to: ['johnny@x.com', 'gina@x.com'], cc: ['tom@x.com'], isReply: true, repliedToSender: 'gina@x.com'));
+      expect(f.rows, {const ContactRow('gina@x.com')});
+    });
+
+    test('a reply whose original is not stored files under the first To', () {
+      final f = rule.file(const MessageEnvelope(from: 'me@example.com', to: ['me@example.com', 'gina@x.com', 'johnny@x.com'], cc: ['tom@x.com'], isReply: true));
+      expect(f.rows, {const ContactRow('gina@x.com')});
     });
 
     test('mail to only myself files under me', () {

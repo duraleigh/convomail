@@ -39,7 +39,9 @@ class WindowsCredentialStore implements CredentialStore {
       final ok = CredRead(target, CRED_TYPE_GENERIC, 0, out) != 0;
       if (!ok) {
         final err = GetLastError();
-        if (err == _errorNotFound) return null;
+        // The FFI call can report 0 for a missing entry; either way there is
+        // nothing stored under that name.
+        if (err == _errorNotFound || err == 0) return null;
         throw CredentialStoreException('CredRead failed ($err)');
       }
       final cred = out.value;

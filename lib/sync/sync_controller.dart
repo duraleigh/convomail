@@ -33,6 +33,10 @@ final syncControllerProvider = Provider<SyncController>((ref) {
   return c;
 });
 
+/// Bumped when filing rules change; existing mail is filed again once.
+const filingVersion = 2;
+const filingVersionKey = 'filing.version';
+
 class SyncController {
   SyncController(this._ref);
   final Ref _ref;
@@ -57,6 +61,21 @@ class SyncController {
         // Best effort; the sync engine's backfill pass retries.
       }
     }());
+    // Sent mail filed by the rule before version 2 went to everyone copied.
+    // Everything is filed once more by the current rule.
+    unawaited(() async {
+      try {
+        if (await _db.getSetting(filingVersionKey) == '$filingVersion') return;
+        for (final a in await _db.allAccounts()) {
+          await _db.refileAccount(a.id);
+        }
+        await _db.putSetting(filingVersionKey, '$filingVersion');
+      } catch (e) {
+        // Tried again at the next start.
+      }
+    }());
+    // Events read out of mail that is gone (an earlier fault lost rows).
+    unawaited(_db.pruneOrphanEvents().catchError((Object _) => 0));
     // Photos and address-book status, when Google Contacts is connected.
     unawaited(_ref.read(contactsSyncProvider.future).then((s) => s.start()).catchError((Object _) {}));
     unawaited(_db.rebuildMissingThreads(batch: 500).catchError((Object e) {

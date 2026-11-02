@@ -85,7 +85,7 @@ Tapping a contact opens their dedicated conversation screen.
 - **Expanded message view** shows: sender name and avatar, "To:" and "CC:" recipient(s) in full, full timestamp, folder/label context (e.g., "Inbox"), complete message body (rendered HTML where safe, with remote images blocked by default — see 4.13), and any attachments displayed as inline preview cards (thumbnail, filename, file size).
 - **Filing rule**: a message appears in the conversation of the person who **sent** it, and nowhere else (unless it matches a user-defined group — see 4.19). If Simon emails the user, Sarah, and Joann, that message lives under Simon. If Sarah replies, her reply lives under Sarah. Simon's and Joann's rows are not touched by Sarah's reply.
 - **Multi-participant threads and the "View thread" control**: any message that belongs to a thread containing more than one message shows a **"View thread (N)"** control (N = message count). Tapping it opens a **thread view** listing every message in that thread from every participant, including the user, in chronological order, regardless of which contact rows those messages are filed under. The thread view is read/reply-capable like the conversation view. Thread membership is determined by the threading model in 4.20 and is independent of filing.
-- **The user's own sent messages** appear inline in each recipient's conversation (a message the user sent to Simon and Joann appears in both Simon's and Joann's rows), with the same "View thread" control.
+- **The user's own sent messages** appear in the conversation with the person they were written to (changed Nov 2, 2026). A reply files with the person it answers: the sender of the message it replies to, or the first To address when that message is not stored. A new message files under its To recipients, or its CC recipients when there is no To. Nobody gets a message because they were copied on it, so a person's chat holds what they wrote and what the user wrote to them. Inside a chat, a thread shows that chat's messages; "N more in this thread" opens the whole thread with every participant.
 - **Inline action bar** under each expanded message: Reply, Forward, Star/Favorite, View thread (when applicable), and an overflow (⋯) for Delete, Mark unread, Move, etc.
 - **Composing a reply** happens inline at the point of the message — no separate popup window (matching Unibox's single-window philosophy).
 
@@ -155,6 +155,7 @@ Tapping a contact opens their dedicated conversation screen.
 - **People** and **Feeds** are separate destinations, side by side in the navigation: Chats shows the people and Feeds shows the rest, in the same layout, each remembering its own open conversation and search (changed Nov 2, 2026; this replaces a segmented control above the list).
 - **A row of small category pills** sits under the search bar on the Feeds screen only: All, then each category with mail. A row appears under a category when any of its mail is in that category, including a single message filed differently from its sender. Selecting a pill again clears it.
 - **Gmail's Updates** becomes the category Updates unless the subjects or the address say Receipt, Notification, Newsletter or Promotion. Bulk headers alone do not make it a newsletter.
+- **Real people only.** Addresses the user only wrote to are judged too: bounce and reply tokens (`bounces+…`, `msprvs1=…`, `SRS0=`), random-token addresses, mailing platforms, sending subdomains and automated names are not people and get no chat in either list, as is any address whose only mail from the user answered automated mail. Everyone else the user writes to gets a chat, from the first email.
 - **Your own mail does not keep a sender in People.** A Feeds sender appears in Chats only with incoming mail filed there, such as a reply to you; your sent messages stay in its conversation on Feeds.
 - **A greeting is not personal mail** when Gmail files the message outside Primary or it holds timely information (4.21).
 - **People**: the primary, human-to-human conversations — "the inbox that matters."
@@ -623,7 +624,7 @@ Product decisions made by the product owner after the original draft. Where any 
 2. The app **never auto-creates a group row**. Default is one row per contact. — 4.2, 4.19
 3. Any message in a multi-message thread shows a **"View thread (N)"** control that opens the full thread with every participant's messages. — 4.3, 4.20
 4. When a reply arrives in a multi-person thread, **only the replier's row** moves to the top of the People list. — 4.2
-5. The user's **sent mail appears inline in each recipient's conversation**, with the same View thread control. — 4.3, 4.7
+5. ~~The user's sent mail appears inline in each recipient's conversation.~~ Replaced by 35. — 4.3, 4.7
 6. **User-defined groups** are created in Settings. A message files into a group row only when sender + To + CC, minus the user, exactly equals the group's members. It then does **not** also appear in members' rows. — 4.19
 7. A group row **behaves like a contact row** for ordering, unread badges, swipe actions, and pinning. — 4.2, 4.19
 8. All the user's aliases resolve to **"me"**; a contact's several addresses resolve to **one identity**. Resolution runs before the group match. — 4.14
@@ -659,6 +660,8 @@ Product decisions made by the product owner after the original draft. Where any 
 32. **People can be merged** at the user's request, and addresses separated again. Nothing merges automatically. — 4.2
 33. **A strip of timely information** above the list, researched from Gmail (`docs/gmail-timely-info-research.md`). — 4.21
 34. **Avatars come from Google Contacts** through the People API, with the user's own OAuth client. This replaces "device contacts only, no network lookup" for that one endpoint. — 4.2, 4.18
+35. **Sent mail files with the person written to**, never with people on CC: a reply with the person it answers, a new message with its To recipients. Existing mail was filed again once. — 4.3
+36. **Chats holds real people only**, in both directions. Someone the user only wrote to gets a chat unless the address is a machine's (bounce and reply tokens, random tokens, mailing platforms, sending subdomains, automated names) or the user's mail to it answered automated mail. A first email to a new person still gets a chat. — 4.11
 
 **Build order**
 20. **Windows first, Android second.** Phase 1 is the Windows desktop app; no Android work until it is signed off. The Windows framework is proposed in the Phase 1 plan with its Phase 2 reuse implications stated. — 0, 2, 4.1, 4.2, 4.17, 4.18, 5.2, 5.3, 6, 7, 8, 9

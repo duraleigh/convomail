@@ -84,6 +84,35 @@ extension SyncQueries on AppDatabase {
     await refreshDirtyRows();
   }
 
+  /// Contact key of whoever wrote the message [inReplyTo] names, when it is
+  /// stored and is not the user's own.
+  Future<String?> answeredSender(String? inReplyTo) async {
+    if (inReplyTo == null || inReplyTo.isEmpty) return null;
+    final r = await customSelect(
+      'SELECT from_contact_key AS k FROM messages WHERE message_id = ? AND is_from_me = 0 LIMIT 1',
+      variables: [Variable.withString(inReplyTo)],
+    ).getSingleOrNull();
+    return r?.read<String>('k');
+  }
+
+  /// Files again the user's replies to [messageIds], now that the messages
+  /// they answer are stored (Sent can sync before the mail it answers).
+  Future<void> refileRepliesTo(Iterable<String> messageIds, FilingRule filing) async {
+    final ids = messageIds.toList();
+    if (ids.isEmpty) return;
+    for (var i = 0; i < ids.length; i += 500) {
+      final chunk = ids.sublist(i, i + 500 > ids.length ? ids.length : i + 500);
+      final replies = await (select(messages)..where((m) => m.isFromMe.equals(true) & m.inReplyTo.isIn(chunk))).get();
+      if (replies.isEmpty) continue;
+      await transaction(() async {
+        for (final m in replies) {
+          await refileMessage(m, filing);
+        }
+      });
+    }
+    await refreshDirtyRows();
+  }
+
   /// Re-resolves one message's participants and sender and rewrites its row
   /// assignments when the filing outcome changed. Call inside a transaction.
   Future<void> refileMessage(Message m, FilingRule filing) async {
@@ -103,7 +132,13 @@ extension SyncQueries on AppDatabase {
     if (sender.contactKey != m.fromContactKey || sender.isMe != m.isFromMe) {
       await (update(messages)..where((x) => x.id.equals(m.id))).write(MessagesCompanion(fromContactKey: Value(sender.contactKey), isFromMe: Value(sender.isMe)));
     }
-    final filed = filing.file(MessageEnvelope(from: m.fromAddress, to: to, cc: cc));
+    final filed = filing.file(MessageEnvelope(
+      from: m.fromAddress,
+      to: to,
+      cc: cc,
+      isReply: m.inReplyTo != null,
+      repliedToSender: sender.isMe ? await answeredSender(m.inReplyTo) : null,
+    ));
     final current = (await (select(messageRowAssignments)..where((r) => r.messageId.equals(m.id))).get()).map((r) => r.rowKey).toSet();
     final wanted = filed.rows.map((r) => r.key).toSet();
     if (current.length != wanted.length || !current.containsAll(wanted)) {
@@ -186,9 +221,15 @@ extension SyncQueries on AppDatabase {
     var inserted = 0;
     await transaction(() async {
       for (final h in headers) {
-        final env = MessageEnvelope(from: h.from.address, to: [for (final a in h.to) a.address], cc: [for (final a in h.cc) a.address]);
-        final filed = filing.file(env);
         final sender = filing.identity.resolve(h.from.address);
+        final env = MessageEnvelope(
+          from: h.from.address,
+          to: [for (final a in h.to) a.address],
+          cc: [for (final a in h.cc) a.address],
+          isReply: h.inReplyTo != null,
+          repliedToSender: sender.isMe ? await answeredSender(h.inReplyTo) : null,
+        );
+        final filed = filing.file(env);
 
         final existing = await (select(messages)..where((m) => m.folderId.equals(folderId) & m.uid.equals(h.uid))).getSingleOrNull();
         final companion = MessagesCompanion(
@@ -295,6 +336,20 @@ extension SyncQueries on AppDatabase {
 
   /// Removes local messages in [folderId] whose UID is in [lowUid]..[highUid]
   /// but no longer on the server. Returns how many were removed.
+  /// Planner events read out of mail that is no longer stored. Events the
+  /// user made have no source message and are never touched.
+  Future<int> pruneOrphanEvents() => customUpdate(
+        'DELETE FROM planner_events WHERE source_message_id IS NOT NULL AND source_message_id NOT IN (SELECT id FROM messages)',
+        updates: {plannerEvents},
+        updateKind: UpdateKind.delete,
+      );
+
+  /// Every UID stored for [folderId] up to [maxUid].
+  Future<Set<int>> localUids(int folderId, {required int maxUid}) async {
+    final rows = await customSelect('SELECT uid FROM messages WHERE folder_id = ? AND uid <= ?', variables: [Variable.withInt(folderId), Variable.withInt(maxUid)]).get();
+    return {for (final r in rows) r.read<int>('uid')};
+  }
+
   Future<int> deleteVanished(int folderId, Set<int> serverUids, {required int lowUid, required int highUid}) async {
     final local = await (select(messages)
           ..where((m) => m.folderId.equals(folderId) & m.uid.isBiggerOrEqualValue(lowUid) & m.uid.isSmallerOrEqualValue(highUid)))
@@ -302,6 +357,7 @@ extension SyncQueries on AppDatabase {
     final gone = [for (final m in local) if (!serverUids.contains(m.uid)) m.id];
     if (gone.isEmpty) return 0;
     await (delete(messages)..where((m) => m.id.isIn(gone))).go();
+    await pruneOrphanEvents();
     await refreshDirtyRows();
     return gone.length;
   }

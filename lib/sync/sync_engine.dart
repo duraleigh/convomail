@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../app/app_log.dart';
+import '../domain/filing.dart';
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../store/classification_queries.dart';
@@ -357,6 +358,9 @@ class AccountSyncer {
         // sender; Sent syncs after INBOX, so re-check once the originals land.
         final mine = [for (final h in headers) if (h.messageId != null && filing.identity.resolve(h.from.address).isMe) h.messageId!];
         if (mine.isNotEmpty) await classification.reclassifyRepliesTo(mine);
+        // The user's replies to mail that just arrived file with its sender.
+        final theirs = [for (final h in headers) if (h.messageId != null && !filing.identity.resolve(h.from.address).isMe) h.messageId!];
+        if (theirs.isNotEmpty) await db.refileRepliesTo(theirs, filing);
         if (highWater > 0 && newIds.isNotEmpty && _roleOf(folder) == FolderRole.inbox) onNewMessages?.call(newIds);
         // Record progress so an interrupted first sync resumes where it left
         // off; the high-water mark only advances once the top page is stored.
@@ -371,8 +375,30 @@ class AccountSyncer {
 
     // --- reconcile deletions and flags for what we already had.
     if (highWater > 0) {
-      final existing = await transport.fetchExistingUids(maxUid: highWater);
-      await db.deleteVanished(folderId, existing, lowUid: 1, highUid: highWater);
+      var existing = await transport.fetchExistingUids(maxUid: highWater);
+      final local = await db.localUids(folderId, maxUid: highWater);
+      var trustDeletions = true;
+      final gone = local.difference(existing).length;
+      if (gone > massVanishMin && gone * 5 > local.length) {
+        // Much of the folder seems gone at once. That is what a list read from
+        // the wrong folder looks like, so it is read again on a fresh select
+        // and believed only if both reads agree.
+        await transport.selectFolder(folder.path);
+        final again = await transport.fetchExistingUids(maxUid: highWater);
+        trustDeletions = again.length == existing.length && again.containsAll(existing);
+        if (!trustDeletions) {
+          AppLog.current?.warn('sync: ${folder.role} folder list disagreed between two reads; nothing deleted');
+          existing = again;
+        }
+      }
+      if (trustDeletions) await db.deleteVanished(folderId, existing, lowUid: 1, highUid: highWater);
+      // Mail the server has that is missing here (for instance rows lost to
+      // an earlier fault) is downloaded again, quietly.
+      final missing = existing.difference(local).toList()..sort();
+      if (missing.isNotEmpty && trustDeletions) {
+        fetched += await _fetchMissing(folder, missing, filing, readCategories: readCategories);
+        await transport.selectFolder(folder.path);
+      }
       final flags = await transport.fetchFlags(maxUid: highWater, changedSinceModSeq: folder.highestModSeq);
       await db.applyFlagUpdates(folderId, flags);
     }
@@ -387,7 +413,45 @@ class AccountSyncer {
     );
     // People were merged or separated while this pass was filing mail.
     if (db.filingGeneration != filingAtStart) await db.refileAccount(account.id);
+    // Addresses first seen in this pass (recipients of sent mail included)
+    // are decided now, so no undecided address sits in Chats.
+    while (!_stopRequested && await classification.classifyPending() > 0) {}
     _emit(_status.copyWith(messagesFetched: _status.messagesFetched, message: '$fetched new in ${folder.path}'));
+  }
+
+  /// A folder losing more than this many messages, and more than a fifth of
+  /// them, in one sync is double-checked before anything is deleted.
+  static const massVanishMin = 50;
+
+  /// Downloads headers for UIDs the server has below the high-water mark but
+  /// this database lacks. Runs of consecutive server UIDs are fetched as one
+  /// range. No notifications: this is old mail.
+  Future<int> _fetchMissing(Folder folder, List<int> missing, FilingRule filing, {required bool readCategories}) async {
+    _emit(_status.copyWith(message: 'restoring ${missing.length} messages in ${folder.path}'));
+    var stored = 0;
+    var i = 0;
+    while (i < missing.length && !_stopRequested) {
+      final start = missing[i];
+      var end = start;
+      var count = 1;
+      while (i + count < missing.length && count < pageSize && missing[i + count] == missing[i + count - 1] + 1) {
+        end = missing[i + count];
+        count++;
+      }
+      // Gaps between missing UIDs that the server also lacks are fine to span.
+      while (i + count < missing.length && count < pageSize) {
+        end = missing[i + count];
+        count++;
+      }
+      final headers = await transport.fetchHeaders(fromUid: start, toUid: end);
+      final wanted = missing.sublist(i, i + count).toSet();
+      final fresh = [for (final h in headers) if (wanted.contains(h.uid)) h];
+      stored += await db.upsertHeaders(account.id, folder.id, fresh, filing);
+      if (readCategories && fresh.isNotEmpty) await _readProviderCategories(folder.id, (start, end));
+      await classification.classifySenders({for (final h in fresh) filing.identity.resolve(h.from.address).contactKey});
+      i += count;
+    }
+    return stored;
   }
 
   /// Fetches and stores a message body on demand.

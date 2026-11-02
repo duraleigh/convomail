@@ -1,3 +1,4 @@
+import 'package:convomail/domain/classifier.dart';
 import 'package:convomail/mail/mail_transport.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/store/database.dart';
@@ -343,6 +344,124 @@ void main() {
     final rows = (await db.peopleRows()).where((r) => r.title == 'Andrea Johnson').toList();
     expect(rows, hasLength(1));
     expect((await db.messagesForRow('c:andrea@one.com')).map((m) => m.subject).toSet(), {'first', 'second', 'third'});
+  });
+
+  group('filing the user\'s mail', () {
+    test("Johnny's case: a thread with Gina, Johnny on CC, never reaches Johnny's chat; his own mail does", () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      final sent = server.folder('Sent', role: FolderRole.sent);
+      inbox.add(hdr(from: 'gina@x.com', fromName: 'Gina Orr', to: ['me@example.com'], cc: ['johnny@x.com'], subject: 'Plans', messageId: '<g1@x>'));
+      sent.add(hdr(from: 'me@example.com', to: ['gina@x.com'], cc: ['johnny@x.com'], subject: 'Re: Plans', messageId: '<m1@x>', inReplyTo: '<g1@x>'));
+      sent.add(hdr(from: 'me@example.com', to: ['gina@x.com'], cc: ['johnny@x.com'], subject: 'New idea', messageId: '<m2@x>'));
+      inbox.add(hdr(from: 'johnny@x.com', fromName: 'Johnny Wright', to: ['me@example.com', 'gina@x.com'], subject: 'Re: Plans', messageId: '<j1@x>', inReplyTo: '<m1@x>'));
+      sent.add(hdr(from: 'me@example.com', to: ['johnny@x.com', 'gina@x.com'], subject: 'Re: Plans', messageId: '<m3@x>', inReplyTo: '<j1@x>'));
+      await syncer.syncOnce();
+      await db.refreshDirtyRows();
+
+      final johnny = (await db.messagesForRow('c:johnny@x.com')).map((m) => m.messageId).toSet();
+      expect(johnny, {'<j1@x>', '<m3@x>'}, reason: 'what he wrote, and the answer to him');
+      final gina = (await db.messagesForRow('c:gina@x.com')).map((m) => m.messageId).toSet();
+      expect(gina, {'<g1@x>', '<m1@x>', '<m2@x>'});
+    });
+
+    test('a reply synced before the mail it answers is filed again when that mail arrives', () async {
+      final sent = server.folder('Sent', role: FolderRole.sent);
+      sent.add(hdr(from: 'me@example.com', to: ['someone@else.com', 'gina@x.com'], subject: 'Re: Old', messageId: '<m9@x>', inReplyTo: '<g9@x>'));
+      await syncer.syncOnce();
+      expect((await db.messagesForRow('c:someone@else.com')).map((m) => m.messageId), ['<m9@x>'], reason: 'first To until the original is known');
+
+      server.folder('Archive', role: FolderRole.archive).add(hdr(from: 'gina@x.com', to: ['me@example.com'], subject: 'Old', messageId: '<g9@x>'));
+      await syncer.syncOnce();
+      await db.refreshDirtyRows();
+      expect((await db.messagesForRow('c:gina@x.com')).map((m) => m.messageId), containsAll(['<m9@x>']));
+      expect(await db.messagesForRow('c:someone@else.com'), isEmpty);
+    });
+
+    test('machine addresses the user wrote to get no chat; a first email to a person does', () async {
+      final sent = server.folder('Sent', role: FolderRole.sent);
+      sent.add(hdr(from: 'me@example.com', to: ['3lvdfzhakdwmhpphmfqx7k2q@scoutcamp.bounces.google.com'], subject: 'Re: Return to sender'));
+      sent.add(hdr(from: 'me@example.com', to: ['bounces+20442786-ca12@em.sendgrid.net'], subject: 'Unsubscribe'));
+      sent.add(hdr(from: 'me@example.com', to: ['msprvs1=19963nkdjii2=bounces-123@bounces.example.com'], subject: 'x'));
+      sent.add(hdr(from: 'me@example.com', to: ['nyt@service.newyorktimes.com'], subject: 'Stop'));
+      sent.add(hdr(from: 'me@example.com', to: ['new.person@company.com'], subject: 'Hello for the first time'));
+      sent.add(hdr(from: 'me@example.com', to: ['friend@gmail.com'], subject: 'Lunch?'));
+      await syncer.syncOnce();
+      await db.refreshDirtyRows();
+
+      final chats = (await db.peopleRows()).map((r) => r.rowKey).toSet();
+      expect(chats, {'c:new.person@company.com', 'c:friend@gmail.com'});
+      expect((await db.peopleRows(tab: InboxTab.feeds)), isEmpty, reason: 'nobody\'s conversation in Feeds either');
+      final why = (await (db.select(db.contacts)..where((c) => c.key.equals('nyt@service.newyorktimes.com'))).getSingle()).classReasons;
+      expect(why, contains('Automated address'));
+    });
+
+    test('a reply to automated mail sits with that sender, not in Chats; a manual move to Chats wins', () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      final sent = server.folder('Sent', role: FolderRole.sent);
+      inbox.add(hdr(from: 'noreply@shop.example', to: ['me@example.com'], subject: 'Your receipt', messageId: '<r1@x>', signals: const BulkSignals(listUnsubscribe: true, listId: true)));
+      sent.add(hdr(from: 'me@example.com', to: ['help.desk.person@shop.example'], subject: 'Re: Your receipt', messageId: '<m5@x>', inReplyTo: '<r1@x>'));
+      sent.add(hdr(from: 'me@example.com', to: ['bounces+123456abc@em.sendgrid.net'], subject: 'Unsubscribe'));
+      await syncer.syncOnce();
+      await db.refreshDirtyRows();
+      expect((await db.peopleRows()).map((r) => r.rowKey), isEmpty);
+      expect((await db.messagesForRow('c:noreply@shop.example')).map((m) => m.messageId), containsAll(['<r1@x>', '<m5@x>']));
+
+      await syncer.classification.moveSender('bounces+123456abc@em.sendgrid.net', Bucket.people);
+      await db.refreshDirtyRows();
+      expect((await db.peopleRows()).map((r) => r.rowKey), contains('c:bounces+123456abc@em.sendgrid.net'));
+    });
+  });
+
+  group('reconciliation', () {
+    test('a list read from the wrong folder deletes nothing', () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      for (var i = 0; i < 80; i++) {
+        inbox.add(hdr(from: 'a$i@x.com'));
+      }
+      await syncer.syncOnce();
+      expect(await allMessages(), hasLength(80));
+
+      server.wrongExistingOnce = {1, 2, 3};
+      await syncer.syncOnce();
+      expect(await allMessages(), hasLength(80));
+    });
+
+    test('a real mass deletion on the server is confirmed and applied', () async {
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      for (var i = 0; i < 80; i++) {
+        inbox.add(hdr(from: 'a$i@x.com'));
+      }
+      await syncer.syncOnce();
+      inbox.messages.removeWhere((uid, _) => uid > 10);
+      await syncer.syncOnce();
+      expect(await allMessages(), hasLength(10));
+    });
+
+    test('rows lost locally are downloaded again, without notifications', () async {
+      final notified = <int>[];
+      final s = AccountSyncer(
+        db: db,
+        transport: server,
+        account: account,
+        credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'),
+        pageSize: 3,
+        sleep: (_) async {},
+        onNewMessages: notified.addAll,
+      );
+      final inbox = server.folder('INBOX', role: FolderRole.inbox);
+      for (var i = 0; i < 12; i++) {
+        inbox.add(hdr(from: 'a$i@x.com', subject: 's$i'));
+      }
+      await s.syncOnce();
+      await db.customStatement('DELETE FROM messages WHERE uid BETWEEN 2 AND 10');
+      expect(await allMessages(), hasLength(3));
+
+      await s.syncOnce();
+      final msgs = await allMessages();
+      expect(msgs, hasLength(12));
+      expect(msgs.map((m) => m.subject).toSet(), {for (var i = 0; i < 12; i++) 's$i'});
+      expect(notified, isEmpty, reason: 'restored mail is not new mail');
+    });
   });
 
   test('folders that disappear on the server are removed locally', () async {

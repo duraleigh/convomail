@@ -383,11 +383,13 @@ class _ThreadCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    if (threadCount > 1)
+                    // How many of this chat's messages the card holds; the
+                    // rest of the thread is other people's.
+                    if (messages.length > 1)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
-                        child: Text('$threadCount', style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w700, letterSpacing: 0)),
+                        child: Text('${messages.length}', style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, fontWeight: FontWeight.w700, letterSpacing: 0)),
                       ),
                     if (unread && !expanded) ...[const SizedBox(width: 8), const CountBadge(1)],
                     const SizedBox(width: 8),
@@ -406,7 +408,7 @@ class _ThreadCard extends StatelessWidget {
                   children: [
                     for (var i = messages.length - 1; i >= 0; i--) ...[
                       if (i != messages.length - 1) Divider(height: 24, color: scheme.outlineVariant),
-                      MessageCard(message: messages[i], threadCount: threadCount, onViewThread: onViewThread),
+                      MessageCard(message: messages[i], threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread),
                     ],
                   ],
                 ),
