@@ -198,8 +198,15 @@ void main() {
     await settle(tester);
     expect(find.byType(ComposeForm), findsOneWidget);
     expect(find.byKey(const ValueKey('chip-To-sarah@x.com')), findsOneWidget);
+    expect(find.byKey(const ValueKey('compose-subject')), findsNothing, reason: 'a reply keeps its subject out of the way');
+    await tester.tap(find.byKey(const ValueKey('compose-show-subject')));
+    await settle(tester);
     expect((tester.widget(find.byKey(const ValueKey('compose-subject'))) as TextField).controller!.text, 'Re: Figma access');
-    expect(find.text('Include quoted message'), findsOneWidget);
+    expect(find.byKey(const ValueKey('format-bar')), findsNothing, reason: 'formatting is out of the way until asked for');
+    await tester.tap(find.byKey(const ValueKey('compose-formatting')));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('format-bar')), findsOneWidget);
+    expect(find.byKey(const ValueKey('compose-quote')), findsOneWidget);
     expect(find.byKey(const ValueKey('compose-from')), findsNothing, reason: 'single identity: no From row in the compact composer');
 
     await tester.tap(find.byKey(const ValueKey('compose-send')));
@@ -235,7 +242,7 @@ void main() {
     await settle(tester);
     expect(find.byKey(const ValueKey('chip-To-sarah@x.com')), findsNothing);
     expect((tester.widget(find.byKey(const ValueKey('compose-subject'))) as TextField).controller!.text, 'Fwd: Figma access');
-    expect(find.text('Include quoted message'), findsNothing);
+    expect(find.byKey(const ValueKey('compose-quote')), findsNothing);
     await teardown(tester);
   });
 

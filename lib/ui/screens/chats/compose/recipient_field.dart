@@ -86,7 +86,7 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
             padding: const EdgeInsets.only(top: 12),
             child: SizedBox(
               width: 64,
-              child: Text(widget.label, style: text.labelLarge!.copyWith(color: scheme.onSurfaceVariant)),
+              child: Text(widget.label, style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
             ),
           ),
           Expanded(
@@ -126,8 +126,10 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                           for (final r in widget.recipients)
                             InputChip(
                               key: ValueKey('chip-${widget.label}-${r.address}'),
-                              avatar: TonalAvatar(identityKey: r.address.toLowerCase(), name: r.name.isEmpty ? r.address : r.name, size: 24),
-                              label: Text(r.name.isEmpty ? r.address : r.name),
+                              avatar: TonalAvatar(identityKey: r.address.toLowerCase(), name: r.name.isEmpty ? r.address : r.name, size: 20),
+                              label: Text(r.name.isEmpty ? r.address : r.name, style: text.labelLarge!.copyWith(fontWeight: FontWeight.w500)),
+                              side: BorderSide(color: scheme.outlineVariant),
+                              backgroundColor: scheme.surfaceContainerLow,
                               tooltip: r.address,
                               onDeleted: () => _remove(r),
                               visualDensity: VisualDensity.compact,
@@ -140,10 +142,15 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                                 controller: controller,
                                 focusNode: focusNode,
                                 autofocus: widget.autofocus,
+                                style: text.bodyMedium,
                                 decoration: InputDecoration(
                                   isDense: true,
                                   filled: false,
+                                  // No underline of its own: the field's rule
+                                  // is the thin line under the whole row.
                                   border: InputBorder.none,
+                                  enabledBorder: InputBorder.none,
+                                  focusedBorder: InputBorder.none,
                                   hintText: widget.recipients.isEmpty ? 'Name or address' : '',
                                   contentPadding: const EdgeInsets.symmetric(vertical: 12),
                                 ),

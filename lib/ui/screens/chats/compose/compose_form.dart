@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:enough_mail/enough_mail.dart' show MediaType;
-import 'package:file_selector/file_selector.dart' show openFiles;
+import 'package:file_selector/file_selector.dart' show XTypeGroup, openFiles;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -71,6 +71,12 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
   bool _showCcBcc = false;
   final List<OutgoingAttachment> _attachments = [];
   bool _includeQuote = true;
+
+  /// The formatting bar is out of the way until asked for.
+  bool _formatting = false;
+
+  /// Replies keep their subject; it opens for editing on request.
+  bool _showSubject = false;
   int? _accountId;
   int? _identityId;
   int? _draftId;
@@ -326,6 +332,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     final progress = ref.watch(sendProgressProvider)[_token];
     final inFlight = _sending && (progress?.inFlight ?? true);
     final showQuoteToggle = _original != null && _kind != 'forward';
+    final subjectVisible = !_kind.startsWith('reply') || _showSubject || !widget.compact;
 
     final fields = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -339,9 +346,13 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
             setState(() => _to = v);
             _touched();
           },
-          trailing: _showCcBcc
-              ? null
-              : TextButton(onPressed: () => setState(() => _showCcBcc = true), child: const Text('Cc/Bcc')),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!_showCcBcc) _fieldLink('Cc/Bcc', () => setState(() => _showCcBcc = true), scheme, text),
+              if (!subjectVisible) _fieldLink('Subject', () => setState(() => _showSubject = true), scheme, text, key: const ValueKey('compose-show-subject')),
+            ],
+          ),
         ),
         if (_showCcBcc) ...[
           _line(scheme),
@@ -355,18 +366,26 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
             _touched();
           }),
         ],
+        if (subjectVisible) ...[
         _line(scheme),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             children: [
-              SizedBox(width: 64, child: Text('Subject', style: text.labelLarge!.copyWith(color: scheme.onSurfaceVariant))),
+              SizedBox(width: fieldLabelWidth, child: Text('Subject', style: fieldLabelStyle(context))),
               Expanded(
                 child: TextField(
                   key: const ValueKey('compose-subject'),
                   controller: _subject,
-                  decoration: const InputDecoration(isDense: true, filled: false, border: InputBorder.none, hintText: 'Subject', contentPadding: EdgeInsets.symmetric(vertical: 12)),
-                  style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w600),
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    filled: false,
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    hintText: 'Subject',
+                    contentPadding: EdgeInsets.symmetric(vertical: 12)),
+                  style: text.bodyMedium,
                   textInputAction: TextInputAction.next,
                   onSubmitted: (_) => _editorFocus.requestFocus(),
                 ),
@@ -374,12 +393,14 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
             ],
           ),
         ),
+        ],
         _line(scheme),
       ],
     );
 
     final editor = ComposeEditor(
       controller: _editor!,
+      showToolbar: _formatting,
       focusNode: _editorFocus,
       onAttachFiles: _addFiles,
       onSend: _send,
@@ -444,39 +465,60 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                 )
               : Row(
                   children: [
-                    FilledButton.icon(
-                      key: const ValueKey('compose-send'),
-                      onPressed: _send,
-                      icon: const Icon(Icons.send_rounded, size: 18),
-                      label: const Text('Send'),
+                    Tooltip(
+                      message: 'Send (Ctrl+Enter)',
+                      child: FilledButton.icon(
+                        key: const ValueKey('compose-send'),
+                        onPressed: _send,
+                        icon: const Icon(Icons.send_rounded, size: 18),
+                        label: const Text('Send'),
+                      ),
                     ),
                     const SizedBox(width: 8),
-                    Tooltip(message: 'Ctrl+Enter', child: Text('Ctrl+Enter', style: text.labelSmall!.copyWith(color: scheme.onSurfaceVariant))),
-                    const SizedBox(width: 12),
-                    IconButton(
+                    _barButton(
+                      key: const ValueKey('compose-formatting'),
+                      icon: Icons.text_format_rounded,
+                      tooltip: _formatting ? 'Hide formatting' : 'Formatting',
+                      selected: _formatting,
+                      onPressed: () => setState(() => _formatting = !_formatting),
+                    ),
+                    _barButton(
+                      key: const ValueKey('compose-attach'),
+                      icon: Icons.attach_file_rounded,
                       tooltip: 'Attach files',
                       onPressed: () async {
                         final files = await openFiles();
                         if (files.isNotEmpty) _addFiles([for (final f in files) f.path]);
                       },
-                      icon: const Icon(Icons.attach_file_rounded),
+                    ),
+                    _barButton(
+                      key: const ValueKey('compose-image'),
+                      icon: Icons.image_outlined,
+                      tooltip: 'Insert picture',
+                      onPressed: () async {
+                        final files = await openFiles(acceptedTypeGroups: const [XTypeGroup(label: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])]);
+                        for (final f in files) {
+                          await _editor!.insertImage(f.path);
+                        }
+                      },
                     ),
                     if (showQuoteToggle)
-                      FilterChip(
-                        label: const Text('Include quoted message'),
+                      _barButton(
+                        key: const ValueKey('compose-quote'),
+                        icon: Icons.notes_rounded,
+                        tooltip: _includeQuote ? 'Original message is included below your reply' : 'Original message is left out',
                         selected: _includeQuote,
-                        onSelected: (v) {
-                          setState(() => _includeQuote = v);
+                        onPressed: () {
+                          setState(() => _includeQuote = !_includeQuote);
                           _touched();
                         },
-                        visualDensity: VisualDensity.compact,
                       ),
                     const Spacer(),
-                    TextButton.icon(
+                    _barButton(
                       key: const ValueKey('compose-discard'),
+                      icon: Icons.delete_outline_rounded,
+                      tooltip: 'Discard draft',
                       onPressed: _discard,
-                      icon: const Icon(Icons.delete_outline_rounded, size: 18),
-                      label: const Text('Discard'),
                     ),
                   ],
                 ),
@@ -529,7 +571,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             children: [
-              SizedBox(width: 64, child: Text('From', style: text.labelLarge!.copyWith(color: scheme.onSurfaceVariant))),
+              SizedBox(width: fieldLabelWidth, child: Text('From', style: fieldLabelStyle(context))),
               Expanded(
                 child: identities.isEmpty
                     ? Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('No account', style: text.bodyLarge))
@@ -541,7 +583,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                           value: current?.id ?? identities.first.id,
                           items: [
                             for (final i in identities)
-                              DropdownMenuItem(value: i.id, child: Text(i.name.isEmpty ? i.email : '${i.name} <${i.email}>', overflow: TextOverflow.ellipsis)),
+                              DropdownMenuItem(value: i.id, child: Text(i.name.isEmpty ? i.email : '${i.name} <${i.email}>', overflow: TextOverflow.ellipsis, style: text.bodyMedium)),
                           ],
                           onChanged: (id) {
                             final i = identities.where((x) => x.id == id).firstOrNull;
@@ -563,6 +605,29 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     );
   }
 
+  Widget _barButton({required Key key, required IconData icon, required String tooltip, required VoidCallback onPressed, bool selected = false}) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      key: key,
+      tooltip: tooltip,
+      isSelected: selected,
+      onPressed: onPressed,
+      iconSize: 20,
+      style: IconButton.styleFrom(
+        foregroundColor: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
+        backgroundColor: selected ? scheme.secondaryContainer : null,
+      ),
+      icon: Icon(icon),
+    );
+  }
+
+  Widget _fieldLink(String label, VoidCallback onPressed, ColorScheme scheme, TextTheme text, {Key? key}) => TextButton(
+        key: key,
+        onPressed: onPressed,
+        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: scheme.onSurfaceVariant, textStyle: text.labelMedium),
+        child: Text(label),
+      );
+
   Widget _line(ColorScheme scheme) => Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.6));
 
   static IconData _iconFor(String mime) {
@@ -574,6 +639,10 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     return Icons.insert_drive_file_outlined;
   }
 }
+
+/// Labels down the left of the address fields: one width, one quiet style.
+const double fieldLabelWidth = 64;
+TextStyle fieldLabelStyle(BuildContext context) => Theme.of(context).textTheme.bodyMedium!.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
 
 String formatSize(int bytes) {
   if (bytes < 1024) return '$bytes B';

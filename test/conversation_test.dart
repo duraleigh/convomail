@@ -141,6 +141,24 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('clicking the sender line shows the sending address and every recipient with name and address', (tester) async {
+    await openSarah(tester);
+    final lunch = (await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Lunch?');
+    expect(find.byKey(ValueKey('message-details-${lunch.id}')), findsNothing);
+    await tester.tap(find.byKey(ValueKey('message-details-toggle-${lunch.id}')));
+    await tester.pumpAndSettle();
+    final details = find.byKey(ValueKey('message-details-${lunch.id}'));
+    expect(details, findsOneWidget);
+    String all() => tester.widgetList<SelectableText>(find.descendant(of: details, matching: find.byType(SelectableText))).map((t) => t.textSpan?.toPlainText() ?? t.data ?? '').join(' | ');
+    expect(all(), contains('sarah@x.com'));
+    expect(all(), contains('me@example.com'));
+    expect(find.descendant(of: details, matching: find.text('To')), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('message-details-toggle-${lunch.id}')));
+    await tester.pumpAndSettle();
+    expect(details, findsNothing);
+    await teardown(tester);
+  });
+
   testWidgets('threads are grouped: two cards for Sarah, count pill on the 3-message thread', (tester) async {
     await openSarah(tester);
     // Sarah's row holds her 2 thread messages + Lunch; the thread has 3 across participants.

@@ -46,6 +46,7 @@ class MessageCard extends ConsumerWidget {
     final to = participants.where((p) => p.role == 'to').map(_label).join(', ');
     final cc = participants.where((p) => p.role == 'cc').map(_label).join(', ');
     final senderName = message.isFromMe ? 'You' : (message.fromName.isNotEmpty ? message.fromName : message.fromAddress);
+    final detailsOpen = ref.watch(_detailsOpenProvider).contains(message.id);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -55,30 +56,56 @@ class MessageCard extends ConsumerWidget {
             TonalAvatar(identityKey: message.isFromMe ? 'me' : message.fromContactKey, name: senderName, size: 36),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(child: Text(senderName, style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
-                      if (message.feedsCategory != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          key: ValueKey('message-category-${message.id}'),
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-                          decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
-                          child: Text(message.feedsCategory!, style: text.labelSmall!.copyWith(color: scheme.onTertiaryContainer, letterSpacing: 0)),
+              // Clicking the sender line shows who exactly sent it, from which
+              // address, and everyone it went to.
+              child: InkWell(
+                key: ValueKey('message-details-toggle-${message.id}'),
+                borderRadius: BorderRadius.circular(AppShapes.sm),
+                onTap: () => ref.read(_detailsOpenProvider.notifier).toggle(message.id),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            senderName,
+                            style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
+                        if (message.feedsCategory != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            key: ValueKey('message-category-${message.id}'),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                            decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
+                            child: Text(message.feedsCategory!, style: text.labelSmall!.copyWith(color: scheme.onTertiaryContainer, letterSpacing: 0)),
+                          ),
+                        ],
                       ],
-                    ],
-                  ),
-                  Text(
-                    [if (to.isNotEmpty) 'To: $to', if (cc.isNotEmpty) 'CC: $cc', _fullTime(message.date ?? message.internalDate), if (ref.watch(multiAccountProvider)) 'via ${_accountEmail(ref)}'].join(' · '),
-                    style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
+                    ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            [
+                              if (to.isNotEmpty) 'To: $to',
+                              if (cc.isNotEmpty) 'CC: $cc',
+                              _fullTime(message.date ?? message.internalDate),
+                              if (ref.watch(multiAccountProvider)) 'via ${_accountEmail(ref)}',
+                            ].join(' · '),
+                            style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        // Shows there is more to see here.
+                        Icon(detailsOpen ? Icons.arrow_drop_up_rounded : Icons.arrow_drop_down_rounded, size: 18, color: scheme.onSurfaceVariant),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
             IconButton(
@@ -88,6 +115,7 @@ class MessageCard extends ConsumerWidget {
             ),
           ],
         ),
+        if (detailsOpen) _MessageDetails(message: message, participants: participants, account: ref.watch(multiAccountProvider) ? _accountEmail(ref) : null),
         const SizedBox(height: AppSpace.md),
         // While the email is worked out again (marked read, say), the one on
         // screen stays: a reload never blanks it.
@@ -101,13 +129,11 @@ class MessageCard extends ConsumerWidget {
             decoration: BoxDecoration(color: scheme.errorContainer, borderRadius: BorderRadius.circular(AppShapes.md)),
             child: Row(
               children: [
-                Expanded(child: Text('$e'.replaceFirst('Bad state: ', '').replaceFirst('MailTransportException: ', ''), style: text.bodyMedium!.copyWith(color: scheme.onErrorContainer))),
-                const SizedBox(width: AppSpace.sm),
-                TextButton(
-                  key: ValueKey('body-retry-${message.id}'),
-                  onPressed: () => ref.invalidate(messageBodyProvider(message.id)),
-                  child: const Text('Retry'),
+                Expanded(
+                  child: Text('$e'.replaceFirst('Bad state: ', '').replaceFirst('MailTransportException: ', ''), style: text.bodyMedium!.copyWith(color: scheme.onErrorContainer)),
                 ),
+                const SizedBox(width: AppSpace.sm),
+                TextButton(key: ValueKey('body-retry-${message.id}'), onPressed: () => ref.invalidate(messageBodyProvider(message.id)), child: const Text('Retry')),
               ],
             ),
           ),
@@ -180,19 +206,24 @@ class MessageCard extends ConsumerWidget {
                     if (!context.mounted) return;
                     final picked = await showDialog<String?>(
                       context: context,
-                      builder: (ctx) => SimpleDialog(title: const Text('Category for this message'), children: [for (final n in names) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, n), child: Text(n))]),
+                      builder: (ctx) => SimpleDialog(
+                        title: const Text('Category for this message'),
+                        children: [for (final n in names) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, n), child: Text(n))],
+                      ),
                     );
                     if (picked != null && context.mounted) await correctClassification(context, ref, message: message, category: picked, title: 'Tag as $picked');
                   case 'trash':
                     final pending = await actions.trashRow('c:${message.fromContactKey}', messageIds: [message.id], label: 'Moved to Trash');
                     if (pending != null && context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text(pending.label),
-                        duration: actions.undoWindow,
-                        behavior: SnackBarBehavior.floating,
-                        width: 420,
-                        action: SnackBarAction(label: 'Undo', onPressed: () => actions.undo(pending)),
-                      ));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(pending.label),
+                          duration: actions.undoWindow,
+                          behavior: SnackBarBehavior.floating,
+                          width: 420,
+                          action: SnackBarAction(label: 'Undo', onPressed: () => actions.undo(pending)),
+                        ),
+                      );
                     }
                 }
               },
@@ -277,21 +308,14 @@ class _PrivacyStripState extends ConsumerState<_PrivacyStrip> {
             children: [
               Icon(blocked ? Icons.shield_outlined : Icons.visibility_outlined, size: 18, color: blocked ? scheme.onSecondaryContainer : scheme.onTertiaryContainer),
               const SizedBox(width: 8),
-              Expanded(child: Text(label, style: text.labelLarge!.copyWith(color: blocked ? scheme.onSecondaryContainer : scheme.onTertiaryContainer))),
-              TextButton(
-                onPressed: () => setState(() => _showHosts = !_showHosts),
-                child: Text(_showHosts ? 'Hide hosts' : 'Blocked hosts'),
+              Expanded(
+                child: Text(label, style: text.labelLarge!.copyWith(color: blocked ? scheme.onSecondaryContainer : scheme.onTertiaryContainer)),
               ),
+              TextButton(onPressed: () => setState(() => _showHosts = !_showHosts), child: Text(_showHosts ? 'Hide hosts' : 'Blocked hosts')),
               if (blocked)
-                FilledButton.tonal(
-                  onPressed: () => ref.read(databaseProvider).setImagesAllowed(widget.message.id, true),
-                  child: const Text('Load images'),
-                )
+                FilledButton.tonal(onPressed: () => ref.read(databaseProvider).setImagesAllowed(widget.message.id, true), child: const Text('Load images'))
               else
-                TextButton(
-                  onPressed: () => ref.read(databaseProvider).setImagesAllowed(widget.message.id, false),
-                  child: const Text('Block again'),
-                ),
+                TextButton(onPressed: () => ref.read(databaseProvider).setImagesAllowed(widget.message.id, false), child: const Text('Block again')),
             ],
           ),
           if (_showHosts)
@@ -343,10 +367,98 @@ class _BodyPlaceholderState extends State<_BodyPlaceholder> {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        height: 160,
-        child: Align(
-          alignment: Alignment.topLeft,
-          child: _slow ? SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 2, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6))) : null,
+    height: 160,
+    child: Align(
+      alignment: Alignment.topLeft,
+      child: _slow ? SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 2, color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.6))) : null,
+    ),
+  );
+}
+
+/// Messages whose full sender and recipient details are open.
+final _detailsOpenProvider = NotifierProvider<_DetailsOpen, Set<int>>(_DetailsOpen.new);
+
+class _DetailsOpen extends Notifier<Set<int>> {
+  @override
+  Set<int> build() => const {};
+  void toggle(int id) => state = state.contains(id) ? ({...state}..remove(id)) : {...state, id};
+}
+
+/// Who sent a message, from exactly which address, and everyone it went to,
+/// each with name and address. Addresses can be selected and copied.
+class _MessageDetails extends StatelessWidget {
+  const _MessageDetails({required this.message, required this.participants, this.account});
+  final Message message;
+  final List<MessageParticipant> participants;
+  final String? account;
+
+  static String _date(DateTime? t) {
+    if (t == null) return '';
+    final l = t.toLocal();
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    final hour = l.hour % 12 == 0 ? 12 : l.hour % 12;
+    return '${days[l.weekday - 1]}, ${months[l.month - 1]} ${l.day}, ${l.year} at $hour:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'AM' : 'PM'}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final label = text.labelMedium!.copyWith(color: scheme.onSurfaceVariant);
+    final name = text.bodyMedium!;
+    final address = text.bodySmall!.copyWith(color: scheme.onSurfaceVariant);
+
+    Widget person(String n, String a) => SelectableText.rich(
+      TextSpan(
+        children: [
+          if (n.isNotEmpty && n.toLowerCase() != a.toLowerCase()) TextSpan(text: '$n  ', style: name),
+          TextSpan(text: a, style: n.isEmpty ? name : address),
+        ],
+      ),
+    );
+
+    TableRow row(String title, List<Widget> values) => TableRow(
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 3, bottom: 6),
+          child: Text(title, style: label),
         ),
-      );
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: values),
+        ),
+      ],
+    );
+
+    List<Widget> people(String role) => [for (final p in participants.where((p) => p.role == role)) person(p.isMe ? (p.name.isEmpty ? 'You' : '${p.name} (you)') : p.name, p.address)];
+
+    final from = people('from');
+    final rows = <TableRow>[
+      row('From', from.isEmpty ? [person(message.fromName, message.fromAddress)] : from),
+      for (final (role, title) in const [('replyTo', 'Reply to'), ('to', 'To'), ('cc', 'Cc'), ('bcc', 'Bcc')])
+        if (participants.any((p) => p.role == role)) row(title, people(role)),
+      row('Date', [SelectableText(_date(message.date ?? message.internalDate), style: name)]),
+      if (account != null) row('Account', [SelectableText(account!, style: name)]),
+    ];
+    return Container(
+      key: ValueKey('message-details-${message.id}'),
+      margin: const EdgeInsets.only(top: AppSpace.sm, left: 46),
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+      decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(AppShapes.md)),
+      child: Table(
+        columnWidths: const {0: IntrinsicColumnWidth(), 1: FlexColumnWidth()},
+        defaultVerticalAlignment: TableCellVerticalAlignment.top,
+        children: [
+          for (final r in rows)
+            TableRow(
+              children: [
+                Padding(padding: const EdgeInsets.only(right: 16), child: r.children[0]),
+                r.children[1],
+              ],
+            ),
+        ],
+      ),
+    );
+  }
 }

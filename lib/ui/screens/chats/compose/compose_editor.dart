@@ -1,14 +1,11 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:appflowy_editor/appflowy_editor.dart' hide FloatingToolbar;
-import 'package:file_selector/file_selector.dart';
+import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
-
-import '../../../widgets/floating_toolbar.dart';
 
 /// Owns the editor document for one composition and exports it (spec 4.4:
 /// block-based editor with headings, lists, bold/italic/underline, inline
@@ -83,12 +80,14 @@ class ComposeEditorController extends ChangeNotifier {
   }
 }
 
-/// The editor plus its Material 3 Expressive floating formatting toolbar.
+/// The editor, with a flat formatting bar along its bottom edge when
+/// [showToolbar] is on.
 class ComposeEditor extends StatefulWidget {
   const ComposeEditor({
     super.key,
     required this.controller,
     this.autoFocus = false,
+    this.showToolbar = false,
     this.onAttachFiles,
     this.onSend,
     this.onEscape,
@@ -98,7 +97,10 @@ class ComposeEditor extends StatefulWidget {
   final ComposeEditorController controller;
   final bool autoFocus;
 
-  /// Called from the toolbar's paperclip with the picked paths.
+  /// Shows the formatting bar (bold, lists, quote).
+  final bool showToolbar;
+
+  /// Called with paths of files pasted or dropped onto the editor.
   final void Function(List<String> paths)? onAttachFiles;
 
   /// Ctrl+Enter.
@@ -166,19 +168,7 @@ class _ComposeEditorState extends State<ComposeEditor> {
     return KeyEventResult.ignored;
   }
 
-  Future<void> _pickImage() async {
-    final files = await openFiles(acceptedTypeGroups: const [
-      XTypeGroup(label: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']),
-    ]);
-    for (final f in files) {
-      await widget.controller.insertImage(f.path);
-    }
-  }
 
-  Future<void> _pickAttachments() async {
-    final files = await openFiles();
-    if (files.isNotEmpty) widget.onAttachFiles?.call([for (final f in files) f.path]);
-  }
 
   bool _hasAttr(String key) {
     final sel = _es.selection;
@@ -214,7 +204,7 @@ class _ComposeEditorState extends State<ComposeEditor> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final style = EditorStyle.desktop(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 72),
+      padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
       cursorColor: scheme.primary,
       selectionColor: scheme.primary.withValues(alpha: 0.22),
       textStyleConfiguration: TextStyleConfiguration(
@@ -225,51 +215,68 @@ class _ComposeEditorState extends State<ComposeEditor> {
       ),
     );
 
-    return Stack(
+    final editor = AppFlowyEditor(
+      editorState: _es,
+      editorStyle: style,
+      autoFocus: widget.autoFocus,
+      focusNode: widget.focusNode,
+      blockComponentBuilders: standardBlockComponentBuilderMap,
+      characterShortcutEvents: standardCharacterShortcutEvents,
+      commandShortcutEvents: _commands,
+    );
+    // The formatting bar sits flat along the bottom of the writing area and
+    // only when asked for, so it never covers what is being written.
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Positioned.fill(
-          child: AppFlowyEditor(
-            editorState: _es,
-            editorStyle: style,
-            autoFocus: widget.autoFocus,
-            focusNode: widget.focusNode,
-            blockComponentBuilders: standardBlockComponentBuilderMap,
-            characterShortcutEvents: standardCharacterShortcutEvents,
-            commandShortcutEvents: _commands,
-          ),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 8,
-          child: Center(
+        Expanded(child: editor),
+        if (widget.showToolbar)
+          Container(
+            key: const ValueKey('format-bar'),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.6)))),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             child: ValueListenableBuilder<Selection?>(
               valueListenable: _es.selectionNotifier,
-              builder: (context, _, _) => FloatingToolbar(
-                children: [
-                  ToolbarAction(icon: Icons.format_bold_rounded, tooltip: 'Bold (Ctrl+B)', active: _hasAttr(AppFlowyRichTextKeys.bold), onPressed: () => _es.toggleAttribute(AppFlowyRichTextKeys.bold)),
-                  ToolbarAction(icon: Icons.format_italic_rounded, tooltip: 'Italic (Ctrl+I)', active: _hasAttr(AppFlowyRichTextKeys.italic), onPressed: () => _es.toggleAttribute(AppFlowyRichTextKeys.italic)),
-                  ToolbarAction(icon: Icons.format_underlined_rounded, tooltip: 'Underline (Ctrl+U)', active: _hasAttr(AppFlowyRichTextKeys.underline), onPressed: () => _es.toggleAttribute(AppFlowyRichTextKeys.underline)),
-                  ToolbarAction(icon: Icons.strikethrough_s_rounded, tooltip: 'Strikethrough', active: _hasAttr(AppFlowyRichTextKeys.strikethrough), onPressed: () => _es.toggleAttribute(AppFlowyRichTextKeys.strikethrough)),
-                  _divider(scheme),
-                  ToolbarAction(icon: Icons.title_rounded, tooltip: 'Heading', active: _isBlock(HeadingBlockKeys.type, level: 1), onPressed: () => _setBlock(HeadingBlockKeys.type, level: 1)),
-                  ToolbarAction(icon: Icons.text_fields_rounded, tooltip: 'Subheading', active: _isBlock(HeadingBlockKeys.type, level: 2), onPressed: () => _setBlock(HeadingBlockKeys.type, level: 2)),
-                  ToolbarAction(icon: Icons.format_list_bulleted_rounded, tooltip: 'Bulleted list', active: _isBlock(BulletedListBlockKeys.type), onPressed: () => _setBlock(BulletedListBlockKeys.type)),
-                  ToolbarAction(icon: Icons.format_list_numbered_rounded, tooltip: 'Numbered list', active: _isBlock(NumberedListBlockKeys.type), onPressed: () => _setBlock(NumberedListBlockKeys.type)),
-                  ToolbarAction(icon: Icons.format_quote_rounded, tooltip: 'Quote', active: _isBlock(QuoteBlockKeys.type), onPressed: () => _setBlock(QuoteBlockKeys.type)),
-                  _divider(scheme),
-                  ToolbarAction(icon: Icons.image_outlined, tooltip: 'Insert image', onPressed: _pickImage),
-                  if (widget.onAttachFiles != null) ToolbarAction(icon: Icons.attach_file_rounded, tooltip: 'Attach files', onPressed: _pickAttachments),
-                ],
+              builder: (context, _, _) => SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _tool(Icons.format_bold_rounded, 'Bold (Ctrl+B)', _hasAttr(AppFlowyRichTextKeys.bold), () => _es.toggleAttribute(AppFlowyRichTextKeys.bold)),
+                    _tool(Icons.format_italic_rounded, 'Italic (Ctrl+I)', _hasAttr(AppFlowyRichTextKeys.italic), () => _es.toggleAttribute(AppFlowyRichTextKeys.italic)),
+                    _tool(Icons.format_underlined_rounded, 'Underline (Ctrl+U)', _hasAttr(AppFlowyRichTextKeys.underline), () => _es.toggleAttribute(AppFlowyRichTextKeys.underline)),
+                    _tool(Icons.strikethrough_s_rounded, 'Strikethrough', _hasAttr(AppFlowyRichTextKeys.strikethrough), () => _es.toggleAttribute(AppFlowyRichTextKeys.strikethrough)),
+                    _divider(scheme),
+                    _tool(Icons.title_rounded, 'Heading', _isBlock(HeadingBlockKeys.type, level: 1), () => _setBlock(HeadingBlockKeys.type, level: 1)),
+                    _tool(Icons.text_fields_rounded, 'Subheading', _isBlock(HeadingBlockKeys.type, level: 2), () => _setBlock(HeadingBlockKeys.type, level: 2)),
+                    _tool(Icons.format_list_bulleted_rounded, 'Bulleted list', _isBlock(BulletedListBlockKeys.type), () => _setBlock(BulletedListBlockKeys.type)),
+                    _tool(Icons.format_list_numbered_rounded, 'Numbered list', _isBlock(NumberedListBlockKeys.type), () => _setBlock(NumberedListBlockKeys.type)),
+                    _tool(Icons.format_quote_rounded, 'Quote', _isBlock(QuoteBlockKeys.type), () => _setBlock(QuoteBlockKeys.type)),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
       ],
     );
   }
 
-  Widget _divider(ColorScheme scheme) => Container(width: 1, height: 24, margin: const EdgeInsets.symmetric(horizontal: 4), color: scheme.onPrimaryContainer.withValues(alpha: 0.25));
+  Widget _tool(IconData icon, String tooltip, bool active, VoidCallback onPressed) {
+    final scheme = Theme.of(context).colorScheme;
+    return IconButton(
+      tooltip: tooltip,
+      isSelected: active,
+      onPressed: onPressed,
+      iconSize: 20,
+      visualDensity: VisualDensity.compact,
+      style: IconButton.styleFrom(
+        foregroundColor: scheme.onSurfaceVariant,
+        backgroundColor: active ? scheme.secondaryContainer : null,
+      ),
+      icon: Icon(icon),
+    );
+  }
+
+  Widget _divider(ColorScheme scheme) => Container(width: 1, height: 20, margin: const EdgeInsets.symmetric(horizontal: 6), color: scheme.outlineVariant);
 }
 
 /// Keyboard shortcut summary shown in Settings → Keyboard.
