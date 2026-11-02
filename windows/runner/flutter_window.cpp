@@ -1,5 +1,7 @@
 #include "flutter_window.h"
 
+#include <dwmapi.h>
+
 #include <optional>
 
 #include "flutter/generated_plugin_registrant.h"
@@ -26,6 +28,12 @@ bool FlutterWindow::OnCreate() {
   }
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
+
+  // The app draws a see-through frame of its own, so Windows 11 must not
+  // outline the window. Earlier Windows versions ignore this.
+  COLORREF no_border = 0xFFFFFFFE;  // DWMWA_COLOR_NONE
+  DwmSetWindowAttribute(GetHandle(), 34 /* DWMWA_BORDER_COLOR */, &no_border,
+                        sizeof(no_border));
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
     this->Show();

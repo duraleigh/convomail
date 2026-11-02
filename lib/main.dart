@@ -162,10 +162,15 @@ Future<void> main(List<String> args) async {
       minimumSize: AppLayout.minWindowSize,
       center: true,
       title: 'ConvoMail',
-      // No system title bar: WindowBar draws an invisible one.
+      // No system title bar or frame: WindowFrame draws a see-through one.
       titleBarStyle: TitleBarStyle.hidden,
+      backgroundColor: Colors.transparent,
     );
     await windowManager.waitUntilReadyToShow(options, () async {
+      // Frameless: no Windows outline or shadow around the see-through
+      // frame. WindowFrame provides the resize edges instead.
+      await windowManager.setAsFrameless();
+      await windowManager.setHasShadow(false);
       if (!StartupArgs.minimized) {
         await windowManager.show();
         await windowManager.focus();
@@ -241,10 +246,8 @@ class _ConvoMailAppState extends ConsumerState<ConvoMailApp> {
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
       home: const AppShell(),
-      // The stand-in title bar lies over every screen, onboarding included.
-      builder: (context, child) => ref.watch(windowChromeProvider)
-          ? Stack(children: [child!, const Positioned(top: 0, left: 0, right: 0, child: WindowBar())])
-          : child!,
+      // The see-through frame holds every screen, onboarding included.
+      builder: (context, child) => ref.watch(windowChromeProvider) ? WindowFrame(child: child!) : child!,
     );
   }
 }
