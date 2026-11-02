@@ -24,6 +24,7 @@ import 'sync/notification_center.dart';
 import 'sync/schedule_service.dart';
 import 'sync/sync_controller.dart';
 import 'ui/shell/app_shell.dart';
+import 'ui/shell/window_bar.dart';
 import 'ui/theme/app_theme.dart';
 import 'ui/theme/tokens.dart';
 
@@ -161,7 +162,8 @@ Future<void> main(List<String> args) async {
       minimumSize: AppLayout.minWindowSize,
       center: true,
       title: 'ConvoMail',
-      titleBarStyle: TitleBarStyle.normal,
+      // No system title bar: WindowBar draws an invisible one.
+      titleBarStyle: TitleBarStyle.hidden,
     );
     await windowManager.waitUntilReadyToShow(options, () async {
       if (!StartupArgs.minimized) {
@@ -173,6 +175,7 @@ Future<void> main(List<String> args) async {
   final container = ProviderContainer(overrides: [
     ...startup.overrides,
     if (integration != null) windowsIntegrationProvider.overrideWith((ref) => integration),
+    if (Platform.isWindows) windowChromeProvider.overrideWith((ref) => true),
     if (Platform.isWindows) notificationSinkProvider.overrideWith((ref) => WindowsNotificationSink(ref)),
     if (log != null) appLogProvider.overrideWith((ref) => log),
     showOnboardingProvider.overrideWith((ref) => true),
@@ -238,6 +241,10 @@ class _ConvoMailAppState extends ConsumerState<ConvoMailApp> {
       darkTheme: AppTheme.dark(),
       themeMode: settings.themeMode,
       home: const AppShell(),
+      // The stand-in title bar lies over every screen, onboarding included.
+      builder: (context, child) => ref.watch(windowChromeProvider)
+          ? Stack(children: [child!, const Positioned(top: 0, left: 0, right: 0, child: WindowBar())])
+          : child!,
     );
   }
 }

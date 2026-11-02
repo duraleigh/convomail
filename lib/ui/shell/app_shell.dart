@@ -21,6 +21,7 @@ import '../screens/planner_screen.dart';
 import '../screens/settings_screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/tonal_avatar.dart';
+import 'window_bar.dart';
 
 /// The single-window desktop shell: navigation rail on the left, destination
 /// content on the right (spec 5.3). Nothing opens a second OS window.
@@ -123,15 +124,19 @@ class _AppShellState extends ConsumerState<AppShell> {
         backgroundColor: scheme.surface,
         body: Row(
           children: [
-            _Rail(destination: destination),
+            _Rail(destination: destination, topInset: ref.watch(windowChromeProvider) ? windowBarHeight : 0),
             Expanded(
-              child: AnimatedSwitcher(
+              child: Padding(
+                // Room for the invisible title bar, so nothing sits under it.
+                padding: EdgeInsets.only(top: ref.watch(windowChromeProvider) ? windowBarHeight : 0),
+                child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
                 // Chats and Feeds share one layout, so its widths and state
                 // carry across, and switching does not fade the whole pane.
                 child: KeyedSubtree(key: ValueKey(destination == Destination.feeds ? Destination.chats : destination), child: _content(destination)),
+              ),
               ),
             ),
           ],
@@ -169,8 +174,11 @@ class _FeedsRailIcon extends ConsumerWidget {
 }
 
 class _Rail extends ConsumerWidget {
-  const _Rail({required this.destination});
+  const _Rail({required this.destination, this.topInset = 0});
   final Destination destination;
+
+  /// Space at the top for the invisible title bar.
+  final double topInset;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -181,7 +189,7 @@ class _Rail extends ConsumerWidget {
       selectedIndex: railIndex < 0 ? null : railIndex,
       onDestinationSelected: (i) => ref.read(destinationProvider.notifier).select(Destination.rail[i]),
       leading: Padding(
-        padding: const EdgeInsets.only(top: 4, bottom: 14),
+        padding: EdgeInsets.only(top: 4 + topInset, bottom: 14),
         child: FloatingActionButton(
           heroTag: 'compose-fab',
           tooltip: 'New message (Ctrl+N)',
