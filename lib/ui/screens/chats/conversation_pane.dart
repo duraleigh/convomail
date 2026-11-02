@@ -42,6 +42,19 @@ class ConversationPane extends ConsumerWidget {
       _autoFilesOpened = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(filesPanelOpenProvider.notifier).open());
     }
+    // Opening a chat shows its newest message in full; everything else
+    // stays collapsed until clicked.
+    ref.listen(selectedRowMessagesProvider, (prev, next) {
+      // While loading, the value is still the previous chat's list.
+      if (next.isLoading) return;
+      final list = next.value;
+      final key = ref.read(selectedRowProvider);
+      if (list == null || list.isEmpty || key == null || ref.read(_newestOpenedForProvider) == key) return;
+      ref.read(_newestOpenedForProvider.notifier).set(key);
+      final newest = list.first;
+      ref.read(expandedMessagesProvider.notifier).expand(newest.id);
+      if (!newest.isSeen && !newest.isFromMe) ref.read(rowActionsProvider).markMessageRead(newest.id);
+    });
     ref.listen(selectedRowProvider, (prev, next) {
       if (prev != next) {
         ref.read(replyRequestProvider.notifier).close();
@@ -267,6 +280,8 @@ class _ThreadedList extends ConsumerWidget {
             messages: msgs,
             threadCount: counts[e.key] ?? msgs.length,
             expanded: isExpanded,
+            openIds: forceExpanded ? {for (final m in msgs) m.id} : expanded,
+            onOpenMessage: (id) => ref.read(expandedMessagesProvider.notifier).expand(id),
             onToggle: () {
               final n = ref.read(expandedMessagesProvider.notifier);
               if (isExpanded) {
@@ -318,6 +333,8 @@ class _ThreadCard extends StatelessWidget {
     required this.messages,
     required this.threadCount,
     required this.expanded,
+    this.openIds = const {},
+    this.onOpenMessage,
     required this.onToggle,
     required this.onViewThread,
     this.highlight = const [],
@@ -327,6 +344,10 @@ class _ThreadCard extends StatelessWidget {
   final List<Message> messages;
   final int threadCount;
   final bool expanded;
+
+  /// Messages shown in full; the rest of an open card show as one line.
+  final Set<int> openIds;
+  final ValueChanged<int>? onOpenMessage;
   final VoidCallback onToggle;
   final VoidCallback onViewThread;
 
@@ -408,11 +429,76 @@ class _ThreadCard extends StatelessWidget {
                   children: [
                     for (var i = messages.length - 1; i >= 0; i--) ...[
                       if (i != messages.length - 1) Divider(height: 24, color: scheme.outlineVariant),
-                      MessageCard(message: messages[i], threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread),
+                      if (openIds.contains(messages[i].id))
+                        MessageCard(message: messages[i], threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread)
+                      else
+                        _CollapsedMessage(message: messages[i], onOpen: () => onOpenMessage?.call(messages[i].id)),
                     ],
                   ],
                 ),
               ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Which chat last had its newest message opened automatically, so it
+/// happens once per opening and never undoes the user's own collapsing.
+final _newestOpenedForProvider = NotifierProvider<_NewestOpenedFor, String?>(_NewestOpenedFor.new);
+
+class _NewestOpenedFor extends Notifier<String?> {
+  @override
+  String? build() {
+    // Opening another chat, or the same one again later, starts over.
+    ref.listen(selectedRowProvider, (prev, next) {
+      if (prev != next) state = null;
+    });
+    return null;
+  }
+
+  void set(String? key) => state = key;
+}
+
+/// One message of an open card shown as a single line: sender, a line of
+/// text, time. Clicking it shows the message in full.
+class _CollapsedMessage extends StatelessWidget {
+  const _CollapsedMessage({required this.message, required this.onOpen});
+  final Message message;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final sender = message.isFromMe ? 'You' : (message.fromName.isNotEmpty ? message.fromName : message.fromAddress);
+    final unread = !message.isSeen && !message.isFromMe;
+    final when = message.date ?? message.internalDate;
+    return InkWell(
+      key: ValueKey('collapsed-message-${message.id}'),
+      borderRadius: BorderRadius.circular(AppShapes.sm),
+      onTap: onOpen,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        child: Row(
+          children: [
+            TonalAvatar(identityKey: message.isFromMe ? 'me' : message.fromContactKey, name: sender, size: 28),
+            const SizedBox(width: 10),
+            Text(sender, style: text.labelLarge!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w600)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                message.snippet.isNotEmpty ? message.snippet : message.subject,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+            if (when != null) ...[
+              const SizedBox(width: 10),
+              Text(relativeTime(when), style: text.labelSmall!.copyWith(color: scheme.onSurfaceVariant)),
+            ],
           ],
         ),
       ),

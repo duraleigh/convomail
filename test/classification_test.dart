@@ -641,7 +641,7 @@ void main() {
       await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Lunch?').last);
+      // The newest message (Lunch?) opens with the chat.
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
@@ -661,7 +661,7 @@ void main() {
       await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Lunch?').last);
+      // The newest message (Lunch?) opens with the chat.
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();

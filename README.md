@@ -30,6 +30,10 @@ Visual reference: `docs/email-client-visual-mockups.html`.
 
 Run with `--destination=<chats|boards|planner|settings>` or `--inbox=<people|feeds>` to open on a given screen.
 
+## Roadmap
+
+- **Your choices on every computer.** Names, subtitles, merges, manual moves to Chats or Feeds, groups, categories and rules live only in this computer's database today. Planned: keep them as one small settings message in a hidden folder of the user's own mailbox (for example `ConvoMail/Settings`), read at start and on change, and merged item by item by time of change. Every installation signed in to the same account would then agree, with no third-party server. A milestone of its own: storage format, merge rules, and tests for two computers changing the same person.
+
 ## Layout
 
 ```

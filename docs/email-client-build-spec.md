@@ -58,6 +58,7 @@ This is the main/home screen, equivalent to Unibox's contact sidebar and ChatInb
 - **Header**: a Material 3 flexible top app bar — a row of icon buttons (menu icon left for account switching; filter icon and account avatar right) above a large left-aligned headline ("Chats"). Compose is a floating action button (FAB) at the bottom right, not an app-bar icon.
 - **Bottom navigation bar** (Material 3 navigation bar) on every top-level screen with five destinations: Chats, Feeds, Boards, Planner, Settings (the Windows rail has the same order, with Settings at the bottom; Feeds carries a badge with its unread count, 99+ at most, hidden at zero). The active destination shows a filled icon inside a pill-shaped indicator.
 - **Search bar**: persistent, placeholder text "Search people and mail," always visible at the top of the list.
+- **Sort**: the same menu sorts the list: most recent first (default), oldest first, name A to Z, or name Z to A. Pinned rows stay on top.
 - **Filter menu**: the filter icon in the headline row opens a checked menu — All, Unread, Starred, This Week, Sent, Has attachments, From contacts, Snoozed. Exactly one filter active at a time ("All" by default); when a filter other than All is active the icon switches to a filled, primary-colored funnel. No chip row is shown in the list pane (changed Oct 26, 2026: the wrapped chip row took a third of the middle pane).
 - **No pinned-contacts strip.** The reference apps show a horizontal row of avatars above the list; this app does not. Pinning a contact (via swipe action) keeps that contact's row at the top of the main list instead, marked with a small pin icon.
 - **Main contact list**: vertically scrolling list, each row containing:
@@ -662,6 +663,10 @@ Product decisions made by the product owner after the original draft. Where any 
 34. **Avatars come from Google Contacts** through the People API, with the user's own OAuth client. This replaces "device contacts only, no network lookup" for that one endpoint. — 4.2, 4.18
 35. **Sent mail files with the person written to**, never with people on CC: a reply with the person it answers, a new message with its To recipients. Existing mail was filed again once. — 4.3
 36. **Chats holds real people only**, in both directions. Someone the user only wrote to gets a chat unless the address is a machine's (bounce and reply tokens, random tokens, mailing platforms, sending subdomains, automated names) or the user's mail to it answered automated mail. A first email to a new person still gets a chat. — 4.11
+37. When a chat opens, its **newest message opens in full**; the rest stay collapsed, and older messages in an open card show as one line each. Opening the chat marks that message read. — 4.3
+38. The tune menu **sorts** as well as filters: most recent first (default), oldest first, name A to Z, name Z to A. Pinned rows stay on top; the choice is kept across restarts. — 4.2
+39. **People found by search can be picked** (Ctrl-click, Shift-click, checkbox) for the same bulk actions as the full list, merging included. — 4.2, 4.6
+40. **Syncing the user's choices between computers** (names, merges, moves, groups) is planned, not built; see the README roadmap. Until then they are kept per computer. — 4.2
 
 **Build order**
 20. **Windows first, Android second.** Phase 1 is the Windows desktop app; no Android work until it is signed off. The Windows framework is proposed in the Phase 1 plan with its Phase 2 reuse implications stated. — 0, 2, 4.1, 4.2, 4.17, 4.18, 5.2, 5.3, 6, 7, 8, 9

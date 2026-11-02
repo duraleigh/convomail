@@ -253,6 +253,71 @@ void main() {
     await teardown(tester);
   });
 
+  test('sort orders: most recent, oldest, A to Z, Z to A; pinned rows stay on top', () async {
+    Future<List<String>> titles(PeopleSort s) async => (await db.peopleRows(sort: s)).map((r) => r.title).toList();
+    final newest = await titles(PeopleSort.newest);
+    expect(await titles(PeopleSort.oldest), newest.reversed.toList());
+    final az = await titles(PeopleSort.nameAZ);
+    expect(az, [...az]..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase())));
+    expect(await titles(PeopleSort.nameZA), az.reversed.toList());
+
+    await db.setPinned('c:tom@x.com', true);
+    expect((await titles(PeopleSort.nameZA)).first, 'Tom Andersen');
+    expect((await titles(PeopleSort.nameAZ)).first, 'Tom Andersen');
+  });
+
+  testWidgets('the tune menu sorts the list, and the choice survives a restart', (tester) async {
+    await pumpList(tester);
+    await tester.tap(find.byKey(const ValueKey('filter-menu')));
+    await tester.pumpAndSettle();
+    expect(find.text('Name A to Z'), findsOneWidget);
+    await tester.tap(find.text('Name Z to A'));
+    await tester.pumpAndSettle();
+    final names = [for (final w in tester.widgetList<PersonRow>(find.byType(PersonRow))) w.row.title];
+    expect(names, [...names]..sort((a, b) => b.toLowerCase().compareTo(a.toLowerCase())));
+    expect(await db.getSetting('list.sort'), 'nameZA');
+    await teardown(tester);
+  });
+
+  testWidgets('people found by search can be picked and merged, like the full list', (tester) async {
+    final folder = (await db.select(db.folders).get()).first;
+    final id = await db.into(db.messages).insert(MessagesCompanion.insert(
+          accountId: folder.accountId,
+          folderId: folder.id,
+          uid: 700,
+          subject: const Value('Other address'),
+          fromAddress: const Value('sarah@work.com'),
+          fromName: const Value('Sarah Chen'),
+          fromContactKey: const Value('sarah@work.com'),
+          date: Value(DateTime.now()),
+        ));
+    await db.into(db.messageRowAssignments).insert(MessageRowAssignmentsCompanion.insert(messageId: id, rowKey: 'c:sarah@work.com'));
+    await db.into(db.contacts).insert(ContactsCompanion.insert(key: 'sarah@work.com', displayName: const Value('Sarah Chen')), mode: InsertMode.insertOrIgnore);
+    await db.into(db.contactAddresses).insert(ContactAddressesCompanion.insert(address: 'sarah@work.com', contactKey: 'sarah@work.com'), mode: InsertMode.insertOrIgnore);
+    await db.refreshDirtyRows();
+    await pumpList(tester);
+
+    await tester.enterText(find.byType(SearchBar), 'sarah');
+    await tester.pumpAndSettle();
+    final results = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('search-person-'));
+    expect(results, findsNWidgets(2));
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(results.at(0));
+    await tester.pump();
+    await tester.tap(results.at(1));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('bulk-merge')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('merge-confirm')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Merged 2 people'), findsOneWidget);
+    expect((await db.peopleRows()).where((r) => r.title == 'Sarah Chen'), hasLength(1));
+    await teardown(tester);
+  });
+
   group('merge people', () {
     Future<void> seedSecondAddress() async {
       final folder = (await db.select(db.folders).get()).first;

@@ -49,6 +49,13 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   final _searchController = TextEditingController();
   bool _autoOpened = false;
 
+  static const _sortLabels = {
+    PeopleSort.newest: 'Most recent first',
+    PeopleSort.oldest: 'Oldest first',
+    PeopleSort.nameAZ: 'Name A to Z',
+    PeopleSort.nameZA: 'Name Z to A',
+  };
+
   static const _filterLabels = {
     PeopleFilter.all: 'All',
     PeopleFilter.unread: 'Unread',
@@ -319,6 +326,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     final scheme = Theme.of(context).colorScheme;
     final mode = ref.watch(inboxModeProvider);
     final filter = ref.watch(peopleFilterProvider);
+    final sort = ref.watch(peopleSortProvider).value ?? PeopleSort.newest;
     final rows = ref.watch(peopleRowsProvider);
     final selected = ref.watch(selectedRowProvider);
     final searchFocus = ref.watch(searchFocusProvider);
@@ -369,29 +377,42 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   );
                 }),
               ),
-              PopupMenuButton<PeopleFilter>(
+              PopupMenuButton<Object>(
                 key: const ValueKey('filter-menu'),
-                tooltip: 'Filters',
-                onSelected: (f) => ref.read(peopleFilterProvider.notifier).select(f),
-                icon: filter == PeopleFilter.all
+                tooltip: 'Sort and filter',
+                onSelected: (v) {
+                  if (v is PeopleFilter) ref.read(peopleFilterProvider.notifier).select(v);
+                  if (v is PeopleSort) ref.read(peopleSortProvider.notifier).select(v);
+                },
+                icon: filter == PeopleFilter.all && sort == PeopleSort.newest
                     ? const Icon(Icons.tune_rounded)
                     : Icon(Icons.filter_alt_rounded, color: scheme.primary),
-                itemBuilder: (context) => [
-                  for (final f in PeopleFilter.values)
-                    PopupMenuItem<PeopleFilter>(
-                      value: f,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            child: f == filter ? Icon(Icons.check_rounded, size: 20, color: scheme.primary) : null,
-                          ),
-                          const SizedBox(width: 12),
-                          Text(_filterLabels[f]!),
-                        ],
-                      ),
-                    ),
-                ],
+                itemBuilder: (context) {
+                  PopupMenuItem<Object> item(Object value, String label, bool checked) => PopupMenuItem<Object>(
+                        key: ValueKey('menu-$value'),
+                        value: value,
+                        height: 40,
+                        child: Row(
+                          children: [
+                            SizedBox(width: 24, child: checked ? Icon(Icons.check_rounded, size: 20, color: scheme.primary) : null),
+                            const SizedBox(width: 12),
+                            Flexible(child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis)),
+                          ],
+                        ),
+                      );
+                  PopupMenuItem<Object> heading(String label) => PopupMenuItem<Object>(
+                        enabled: false,
+                        height: 32,
+                        child: Text(label, style: text.labelSmall!.copyWith(letterSpacing: 1, color: scheme.onSurfaceVariant)),
+                      );
+                  return [
+                    heading('SORT'),
+                    for (final s in PeopleSort.values) item(s, _sortLabels[s]!, s == sort),
+                    const PopupMenuDivider(),
+                    heading('SHOW'),
+                    for (final f in PeopleFilter.values) item(f, _filterLabels[f]!, f == filter),
+                  ];
+                },
               ),
             ],
           ),
@@ -430,12 +451,13 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                 return const EmptyState(icon: Icons.rss_feed_rounded, title: 'Nothing in Feeds', message: 'Newsletters, receipts, and notifications land here automatically.');
               }
               if (ref.watch(searchActiveProvider)) {
+                // People found by search can be picked like the full list, the
+                // quickest way to gather everyone to merge.
                 return SearchResultsView(
                   people: list,
-                  onOpenRow: (row) {
-                    ref.read(selectedRowProvider.notifier).select(row.rowKey);
-                    _listFocus.requestFocus();
-                  },
+                  onOpenRow: (row) => _onRowTap(row, list),
+                  picked: picked,
+                  onCheck: (row) => ref.read(multiSelectProvider.notifier).toggle(row.rowKey),
                 );
               }
               if (list.isEmpty) return _empty(filter);

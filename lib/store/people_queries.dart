@@ -6,6 +6,9 @@ import 'database.dart';
 /// Which subset of People rows to show (spec 4.7). Exactly one active.
 enum PeopleFilter { all, unread, starred, thisWeek, sent, hasAttachments, fromContacts, snoozed }
 
+/// Order of the list (spec 4.2). Pinned rows stay on top in every order.
+enum PeopleSort { newest, oldest, nameAZ, nameZA }
+
 /// Which tab of the middle pane a row query serves (spec 4.11).
 enum InboxTab { people, feeds }
 
@@ -125,7 +128,7 @@ extension PeopleQueries on AppDatabase {
   ///
   /// [category] narrows the Feeds list to rows with mail in that category,
   /// whether it comes from the sender's default or from a single message.
-  Stream<List<PeopleRow>> watchPeopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId, String? category}) {
+  Stream<List<PeopleRow>> watchPeopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId, String? category, PeopleSort sort = PeopleSort.newest}) {
     final q = customSelect(
       accountId == null ? _listSql : _scopedListSql,
       variables: accountId == null ? const [] : [Variable.withInt(accountId)],
@@ -135,14 +138,14 @@ extension PeopleQueries on AppDatabase {
       // Summaries may be stale right after a migration or a direct write;
       // refreshing here is a no-op when nothing is dirty.
       await refreshDirtyRows();
-      return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category);
+      return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category, sort: sort);
     });
   }
 
-  Future<List<PeopleRow>> peopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId, String? category}) async {
+  Future<List<PeopleRow>> peopleRows({PeopleFilter filter = PeopleFilter.all, String search = '', InboxTab tab = InboxTab.people, int? accountId, String? category, PeopleSort sort = PeopleSort.newest}) async {
     await refreshDirtyRows();
     final rows = await customSelect(accountId == null ? _listSql : _scopedListSql, variables: accountId == null ? const [] : [Variable.withInt(accountId)]).get();
-    return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category);
+    return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category, sort: sort);
   }
 
   /// Row keys holding Feeds mail in [category].
@@ -339,7 +342,7 @@ extension PeopleQueries on AppDatabase {
     ) s
 ''');
 
-  Future<List<PeopleRow>> _materialize(List<QueryRow> rows, {required PeopleFilter filter, required String search, InboxTab tab = InboxTab.people, String? category}) async {
+  Future<List<PeopleRow>> _materialize(List<QueryRow> rows, {required PeopleFilter filter, required String search, InboxTab tab = InboxTab.people, String? category, PeopleSort sort = PeopleSort.newest}) async {
     final inCategory = category == null ? null : await _rowsInCategory(category);
     Map<int, List<(String, String)>>? membersByGroup;
     Future<List<(String, String)>> membersFor(int groupId) async {
@@ -460,7 +463,14 @@ extension PeopleQueries on AppDatabase {
       if (a.pinned != b.pinned) return a.pinned ? -1 : 1;
       final at = a.lastActivity?.millisecondsSinceEpoch ?? 0;
       final bt = b.lastActivity?.millisecondsSinceEpoch ?? 0;
-      return bt.compareTo(at);
+      final an = a.title.toLowerCase();
+      final bn = b.title.toLowerCase();
+      return switch (sort) {
+        PeopleSort.newest => bt.compareTo(at),
+        PeopleSort.oldest => at.compareTo(bt),
+        PeopleSort.nameAZ => an == bn ? bt.compareTo(at) : an.compareTo(bn),
+        PeopleSort.nameZA => an == bn ? bt.compareTo(at) : bn.compareTo(an),
+      };
     });
     return out;
   }

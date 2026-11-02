@@ -19,6 +19,7 @@ import 'package:convomail/ui/screens/chats/files/attachment_preview.dart';
 import 'package:convomail/ui/screens/chats/files/attachment_ui.dart';
 import 'package:convomail/ui/screens/chats/files/files_panel.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
+import 'package:convomail/ui/screens/chats/message_card.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -260,9 +261,12 @@ void main() {
       await openSarah(tester);
       final container = ProviderScope.containerOf(tester.element(find.byType(AppShell)));
       final msg = (await db.messagesForRow('c:sarah@x.com')).firstWhere((m) => m.subject == 'Logo inline');
-      // Expanding the card fetches the body and renders it; the inline part
-      // downloads in the background (file I/O needs runAsync).
-      await tester.tap(find.descendant(of: find.byType(ConversationPane), matching: find.text('Logo inline')));
+      // The newest message opens with the chat, which fetches the body and
+      // renders it; the inline part downloads in the background (file I/O
+      // needs runAsync).
+      if (find.byWidgetPredicate((w) => w is MessageCard && w.message.id == msg.id).evaluate().isEmpty) {
+        await tester.tap(find.descendant(of: find.byType(ConversationPane), matching: find.text('Logo inline')));
+      }
       await settle(tester);
       // Each real wait lets one file I/O step complete; the pumps between
       // them run its continuation. Creating and writing the file takes several.

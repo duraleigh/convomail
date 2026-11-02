@@ -116,6 +116,31 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets('opening a chat shows its newest message in full; older ones open on a click as single lines', (tester) async {
+    // A newer message in the Design review thread, so its card holds an
+    // older message too.
+    final folder = (await db.select(db.folders).get()).first;
+    final day = (await db.messageById(sarahMsg2))!.date!;
+    await seedMessage(accountId: folder.accountId, folderId: folder.id, uid: 20, from: 'sarah@x.com', fromName: 'Sarah Chen', subject: 'Re: Design review', date: day.add(const Duration(hours: 3)), messageId: '<z@x>', inReplyTo: '<a@x>', text: 'Newest words here');
+    await db.rebuildMissingThreads();
+    await openSarah(tester);
+
+    expect(find.textContaining('Newest words here'), findsWidgets, reason: 'the newest message is open in full');
+    final older = (await db.select(db.messages).get()).firstWhere((m) => m.id == sarahMsg2);
+    expect(find.byKey(ValueKey('collapsed-message-${older.id}')), findsOneWidget, reason: 'an older one in the same card is one line');
+    expect(find.textContaining('Final version attached'), findsNothing);
+
+    await tester.tap(find.byKey(ValueKey('collapsed-message-${older.id}')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Final version attached'), findsOneWidget);
+
+    // Collapsing the card is not undone while the chat stays open.
+    await tester.tap(find.descendant(of: find.byType(ConversationPane), matching: find.text('Re: Design review')).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Newest words here'), findsNothing);
+    await teardown(tester);
+  });
+
   testWidgets('threads are grouped: two cards for Sarah, count pill on the 3-message thread', (tester) async {
     await openSarah(tester);
     // Sarah's row holds her 2 thread messages + Lunch; the thread has 3 across participants.
@@ -191,12 +216,10 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('a plain-text message renders escaped and marks read on expand', (tester) async {
-    await openSarah(tester);
+  testWidgets('a plain-text message renders escaped, and opening the chat reads its newest message', (tester) async {
     expect((await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Lunch?').isSeen, isFalse);
-    await tester.tap(find.descendant(of: find.byType(ConversationPane), matching: find.text('Lunch?')));
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Free at noon?'), findsWidgets);
+    await openSarah(tester);
+    expect(find.textContaining('Free at noon?'), findsWidgets, reason: 'Lunch? is the newest, so it opens with the chat');
     expect((await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Lunch?').isSeen, isTrue);
     final container = ProviderScope.containerOf(tester.element(find.byType(AppShell)));
     expect(container.read(selectedRowProvider), 'c:sarah@x.com');

@@ -56,9 +56,13 @@ String markTerms(String text, List<String> terms) {
 /// expands and scrolls to the message, and carries the query into the
 /// in-conversation search so matches are highlighted.
 class SearchResultsView extends ConsumerWidget {
-  const SearchResultsView({super.key, required this.people, required this.onOpenRow});
+  const SearchResultsView({super.key, required this.people, required this.onOpenRow, this.picked = const {}, this.onCheck});
   final List<PeopleRow> people;
   final void Function(PeopleRow row) onOpenRow;
+
+  /// Rows picked for a bulk action, as in the full list.
+  final Set<String> picked;
+  final void Function(PeopleRow row)? onCheck;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -102,9 +106,16 @@ class SearchResultsView extends ConsumerWidget {
                 GroupedListItem(
                   key: ValueKey('search-person-${row.rowKey}'),
                   radius: GroupedList.radiusFor(people.indexOf(row), people.length),
-                  selected: row.rowKey == selected,
+                  selected: row.rowKey == selected || picked.contains(row.rowKey),
                   onTap: () => onOpenRow(row),
-                  child: PersonRow(row: row, selected: row.rowKey == selected, onAction: (_) {}),
+                  child: PersonRow(
+                    row: row,
+                    selected: row.rowKey == selected,
+                    onAction: (_) {},
+                    checked: picked.contains(row.rowKey),
+                    selectionMode: picked.isNotEmpty,
+                    onCheck: onCheck == null ? null : () => onCheck!(row),
+                  ),
                 ),
             ],
           ),

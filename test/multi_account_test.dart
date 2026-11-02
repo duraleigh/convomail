@@ -147,9 +147,7 @@ void main() {
       // Sarah's row in work scope shows only the work message.
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
-      // The row preview and the thread card both carry the subject; expand the card.
-      await tester.tap(find.text('Project kickoff').last);
-      await tester.pumpAndSettle();
+      // Its only message, the newest, opens with the chat.
       expect(find.byType(MessageCard), findsOneWidget, reason: 'only the work-account message in work scope');
       expect(find.textContaining('via clay@work.com'), findsOneWidget);
 

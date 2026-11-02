@@ -114,6 +114,24 @@ class FeedsCategoryFilter extends Notifier<String?> {
 /// Categories with Feeds mail in the selected account, for those pills.
 final feedsCategoriesInUseProvider = StreamProvider<List<String>>((ref) => ref.watch(databaseProvider).watchCategoriesInUse(accountId: ref.watch(accountScopeProvider)));
 
+/// Order of the Chats and Feeds lists, kept across restarts.
+final peopleSortProvider = AsyncNotifierProvider<PeopleSortNotifier, PeopleSort>(PeopleSortNotifier.new);
+
+class PeopleSortNotifier extends AsyncNotifier<PeopleSort> {
+  static const key = 'list.sort';
+
+  @override
+  Future<PeopleSort> build() async {
+    final saved = await ref.read(databaseProvider).getSetting(key);
+    return PeopleSort.values.where((s) => s.name == saved).firstOrNull ?? PeopleSort.newest;
+  }
+
+  Future<void> select(PeopleSort sort) async {
+    state = AsyncData(sort);
+    await ref.read(databaseProvider).putSetting(key, sort.name);
+  }
+}
+
 /// Unread messages in Feeds for the rail badge, in the selected account.
 final feedsUnreadProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsUnread(accountId: ref.watch(accountScopeProvider)));
 
@@ -125,7 +143,8 @@ final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   final mode = ref.watch(inboxModeProvider);
   final scope = ref.watch(accountScopeProvider);
   final category = mode == InboxMode.feeds ? ref.watch(feedsCategoryFilterProvider) : null;
-  return db.watchPeopleRows(filter: filter, search: search, category: category, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people, accountId: scope);
+  final sort = ref.watch(peopleSortProvider).value ?? PeopleSort.newest;
+  return db.watchPeopleRows(filter: filter, search: search, category: category, sort: sort, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people, accountId: scope);
 });
 
 /// Dev/verification aid: when true, the list selects its first row and the
