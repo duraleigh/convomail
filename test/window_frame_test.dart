@@ -15,7 +15,13 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    await tester.pumpWidget(const MaterialApp(home: WindowFrame(child: ColoredBox(key: ValueKey('app'), color: Colors.white))));
+    // Placed as in the app: around the navigator, outside its overlay.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: const ColoredBox(key: ValueKey('app'), color: Colors.white),
+        builder: (context, child) => WindowFrame(child: child!),
+      ),
+    );
 
     final app = tester.getRect(find.byKey(const ValueKey('app')));
     expect(app.left, windowFrameEdge);

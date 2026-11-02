@@ -26,12 +26,37 @@ const double _resizeEdge = 6;
 /// left, right and bottom and [windowBarHeight] from the top, where
 /// [WindowBar] keeps the window buttons. Dragging the frame moves the window;
 /// dragging its outer edge resizes it.
-class WindowFrame extends StatelessWidget {
+class WindowFrame extends StatefulWidget {
   const WindowFrame({super.key, required this.child});
   final Widget child;
 
   @override
-  Widget build(BuildContext context) {
+  State<WindowFrame> createState() => _WindowFrameState();
+}
+
+class _WindowFrameState extends State<WindowFrame> {
+  // The frame sits outside the app's own navigator, so it brings a layer of
+  // its own for the window buttons' tooltips to float on.
+  late final OverlayEntry _entry = OverlayEntry(builder: _frame);
+
+  @override
+  void didUpdateWidget(WindowFrame oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.child != widget.child) _entry.markNeedsBuild();
+  }
+
+  @override
+  void dispose() {
+    _entry
+      ..remove()
+      ..dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Overlay(initialEntries: [_entry]);
+
+  Widget _frame(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(windowContentRadius));
     return DragToResizeArea(
       resizeEdgeSize: _resizeEdge,
@@ -53,7 +78,7 @@ class WindowFrame extends StatelessWidget {
                     BoxShadow(color: Color(0x73000000), offset: Offset(0, 8), blurRadius: 12, spreadRadius: -2),
                   ],
                 ),
-                child: ClipRRect(borderRadius: radius, child: child),
+                child: ClipRRect(borderRadius: radius, child: widget.child),
               ),
             ),
             const Positioned(top: 0, left: 0, right: 0, child: WindowBar()),
