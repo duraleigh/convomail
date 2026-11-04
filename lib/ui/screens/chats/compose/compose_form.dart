@@ -16,12 +16,14 @@ import '../../../../app/compose_state.dart';
 import '../../../../mail/mail_transport.dart';
 import '../../../../mail/models.dart';
 import '../../../../mail/outgoing.dart';
+import '../../../../mail/sending_route.dart';
 import '../../../../store/compose_queries.dart';
 import '../../../../store/database.dart';
 import '../../../../store/sync_queries.dart';
 import '../../../../sync/send_service.dart';
 import '../../../theme/tokens.dart';
 import '../../../widgets/wavy_progress.dart';
+import '../../settings/sending_setup_dialog.dart';
 import 'compose_editor.dart';
 import 'recipient_field.dart';
 
@@ -32,14 +34,7 @@ final allIdentitiesProvider = StreamProvider<List<Identity>>((ref) => ref.watch(
 /// (spec 4.4). Owns recipients, subject, editor, attachments, autosave, and
 /// the send flow with progress and failure feedback.
 class ComposeForm extends ConsumerStatefulWidget {
-  const ComposeForm({
-    super.key,
-    required this.request,
-    required this.onClose,
-    this.compact = false,
-    this.existingDraft,
-    this.header,
-  });
+  const ComposeForm({super.key, required this.request, required this.onClose, this.compact = false, this.existingDraft, this.header});
 
   final ComposeRequest request;
 
@@ -187,11 +182,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     }
 
     final signature = identity?.signature.trim() ?? '';
-    _editor = ComposeEditorController(
-      bodyJson: bodyJson,
-      html: bodyHtml,
-      signatureLines: signature.isEmpty || draft != null ? const [] : signature.split('\n'),
-    );
+    _editor = ComposeEditorController(bodyJson: bodyJson, html: bodyHtml, signatureLines: signature.isEmpty || draft != null ? const [] : signature.split('\n'));
     _editor!.addListener(_touched);
     if (!mounted) return;
     setState(() => _loading = false);
@@ -224,22 +215,24 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       }
       return;
     }
-    final id = await _db.saveDraft(DraftsCompanion(
-      id: _draftId == null ? const Value.absent() : Value(_draftId!),
-      accountId: Value(_accountId!),
-      identityId: Value(_identityId),
-      kind: Value(_kind),
-      rowKey: Value(widget.request.rowKey ?? widget.existingDraft?.rowKey),
-      inReplyToMessageId: Value(_original?.id),
-      recipientsTo: Value(AddressJson.encode(_to)),
-      recipientsCc: Value(AddressJson.encode(_cc)),
-      recipientsBcc: Value(AddressJson.encode(_bcc)),
-      subject: Value(_subject.text),
-      bodyJson: Value(_editor!.toJson()),
-      bodyHtml: Value(_editor!.toHtml()),
-      attachmentsJson: Value(jsonEncode([for (final a in _attachments) a.toJson()])),
-      includeQuote: Value(_includeQuote),
-    ));
+    final id = await _db.saveDraft(
+      DraftsCompanion(
+        id: _draftId == null ? const Value.absent() : Value(_draftId!),
+        accountId: Value(_accountId!),
+        identityId: Value(_identityId),
+        kind: Value(_kind),
+        rowKey: Value(widget.request.rowKey ?? widget.existingDraft?.rowKey),
+        inReplyToMessageId: Value(_original?.id),
+        recipientsTo: Value(AddressJson.encode(_to)),
+        recipientsCc: Value(AddressJson.encode(_cc)),
+        recipientsBcc: Value(AddressJson.encode(_bcc)),
+        subject: Value(_subject.text),
+        bodyJson: Value(_editor!.toJson()),
+        bodyHtml: Value(_editor!.toHtml()),
+        attachmentsJson: Value(jsonEncode([for (final a in _attachments) a.toJson()])),
+        includeQuote: Value(_includeQuote),
+      ),
+    );
     if (mounted) _draftId = id;
   }
 
@@ -356,56 +349,61 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
         ),
         if (_showCcBcc) ...[
           _line(scheme),
-          RecipientField(label: 'Cc', recipients: _cc, onChanged: (v) {
-            setState(() => _cc = v);
-            _touched();
-          }),
+          RecipientField(
+            label: 'Cc',
+            recipients: _cc,
+            onChanged: (v) {
+              setState(() => _cc = v);
+              _touched();
+            },
+          ),
           _line(scheme),
-          RecipientField(label: 'Bcc', recipients: _bcc, onChanged: (v) {
-            setState(() => _bcc = v);
-            _touched();
-          }),
+          RecipientField(
+            label: 'Bcc',
+            recipients: _bcc,
+            onChanged: (v) {
+              setState(() => _bcc = v);
+              _touched();
+            },
+          ),
         ],
         if (subjectVisible) ...[
-        _line(scheme),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Row(
-            children: [
-              SizedBox(width: fieldLabelWidth, child: Text('Subject', style: fieldLabelStyle(context))),
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('compose-subject'),
-                  controller: _subject,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    filled: false,
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    hintText: 'Subject',
-                    contentPadding: EdgeInsets.symmetric(vertical: 12)),
-                  style: text.bodyMedium,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => _editorFocus.requestFocus(),
+          _line(scheme),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: fieldLabelWidth,
+                  child: Text('Subject', style: fieldLabelStyle(context)),
                 ),
-              ),
-            ],
+                Expanded(
+                  child: TextField(
+                    key: const ValueKey('compose-subject'),
+                    controller: _subject,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      hintText: 'Subject',
+                      contentPadding: EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    style: text.bodyMedium,
+                    textInputAction: TextInputAction.next,
+                    onSubmitted: (_) => _editorFocus.requestFocus(),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
         ],
         _line(scheme),
       ],
     );
 
-    final editor = ComposeEditor(
-      controller: _editor!,
-      showToolbar: _formatting,
-      focusNode: _editorFocus,
-      onAttachFiles: _addFiles,
-      onSend: _send,
-      onEscape: _close,
-    );
+    final editor = ComposeEditor(controller: _editor!, showToolbar: _formatting, focusNode: _editorFocus, onAttachFiles: _addFiles, onSend: _send, onEscape: _close);
 
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -413,7 +411,10 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
         if (widget.header != null) widget.header!,
         Padding(padding: EdgeInsets.fromLTRB(widget.compact ? 8 : 12, 0, widget.compact ? 8 : 12, 0), child: fields),
         if (widget.compact)
-          ConstrainedBox(constraints: const BoxConstraints(minHeight: 180, maxHeight: 340), child: SizedBox(height: 260, child: editor))
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 180, maxHeight: 340),
+            child: SizedBox(height: 260, child: editor),
+          )
         else
           Expanded(child: editor),
         if (_attachments.isNotEmpty)
@@ -447,7 +448,9 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                 children: [
                   Icon(Icons.error_outline_rounded, color: scheme.onErrorContainer, size: 20),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(_error!, style: text.bodyMedium!.copyWith(color: scheme.onErrorContainer))),
+                  Expanded(
+                    child: Text(_error!, style: text.bodyMedium!.copyWith(color: scheme.onErrorContainer)),
+                  ),
                   TextButton(onPressed: () => setState(() => _error = null), child: const Text('Dismiss')),
                 ],
               ),
@@ -467,12 +470,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                   children: [
                     Tooltip(
                       message: 'Send (Ctrl+Enter)',
-                      child: FilledButton.icon(
-                        key: const ValueKey('compose-send'),
-                        onPressed: _send,
-                        icon: const Icon(Icons.send_rounded, size: 18),
-                        label: const Text('Send'),
-                      ),
+                      child: FilledButton.icon(key: const ValueKey('compose-send'), onPressed: _send, icon: const Icon(Icons.send_rounded, size: 18), label: const Text('Send')),
                     ),
                     const SizedBox(width: 8),
                     _barButton(
@@ -496,7 +494,11 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                       icon: Icons.image_outlined,
                       tooltip: 'Insert picture',
                       onPressed: () async {
-                        final files = await openFiles(acceptedTypeGroups: const [XTypeGroup(label: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp'])]);
+                        final files = await openFiles(
+                          acceptedTypeGroups: const [
+                            XTypeGroup(label: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']),
+                          ],
+                        );
                         for (final f in files) {
                           await _editor!.insertImage(f.path);
                         }
@@ -514,12 +516,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                         },
                       ),
                     const Spacer(),
-                    _barButton(
-                      key: const ValueKey('compose-discard'),
-                      icon: Icons.delete_outline_rounded,
-                      tooltip: 'Discard draft',
-                      onPressed: _discard,
-                    ),
+                    _barButton(key: const ValueKey('compose-discard'), icon: Icons.delete_outline_rounded, tooltip: 'Discard draft', onPressed: _discard),
                   ],
                 ),
         ),
@@ -527,10 +524,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     );
 
     return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.escape): _close,
-        const SingleActivator(LogicalKeyboardKey.enter, control: true): _send,
-      },
+      bindings: {const SingleActivator(LogicalKeyboardKey.escape): _close, const SingleActivator(LogicalKeyboardKey.enter, control: true): _send},
       child: FocusTraversalGroup(
         child: DropTarget(
           onDragEntered: (_) => setState(() => _dragging = true),
@@ -564,17 +558,25 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
   }
 
   Widget _fromRow(List<Identity> identities, ColorScheme scheme, TextTheme text) {
-    final current = identities.where((i) => i.id == _identityId).firstOrNull;
+    final current = identities.where((i) => i.id == _identityId).firstOrNull ?? identities.firstOrNull;
+    final account = current == null ? null : (ref.watch(accountsProvider).value ?? const <Account>[]).where((a) => a.id == current.accountId).firstOrNull;
+    final blocked = current != null && account != null && needsSendingSetup(current, account);
     return Column(
       children: [
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Row(
             children: [
-              SizedBox(width: fieldLabelWidth, child: Text('From', style: fieldLabelStyle(context))),
+              SizedBox(
+                width: fieldLabelWidth,
+                child: Text('From', style: fieldLabelStyle(context)),
+              ),
               Expanded(
                 child: identities.isEmpty
-                    ? Padding(padding: const EdgeInsets.symmetric(vertical: 12), child: Text('No account', style: text.bodyLarge))
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: Text('No account', style: text.bodyLarge),
+                      )
                     : DropdownButtonHideUnderline(
                         child: DropdownButton<int>(
                           key: const ValueKey('compose-from'),
@@ -583,7 +585,10 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                           value: current?.id ?? identities.first.id,
                           items: [
                             for (final i in identities)
-                              DropdownMenuItem(value: i.id, child: Text(i.name.isEmpty ? i.email : '${i.name} <${i.email}>', overflow: TextOverflow.ellipsis, style: text.bodyMedium)),
+                              DropdownMenuItem(
+                                value: i.id,
+                                child: Text(i.name.isEmpty ? i.email : '${i.name} <${i.email}>', overflow: TextOverflow.ellipsis, style: text.bodyMedium),
+                              ),
                           ],
                           onChanged: (id) {
                             final i = identities.where((x) => x.id == id).firstOrNull;
@@ -600,6 +605,22 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
             ],
           ),
         ),
+        // Said before writing, not after a bounce.
+        if (blocked)
+          Padding(
+            key: const ValueKey('compose-from-blocked'),
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline_rounded, size: 18, color: scheme.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text("${current.email} can't send yet. Add its password once and it will.", style: text.bodySmall!.copyWith(color: scheme.error)),
+                ),
+                TextButton(key: const ValueKey('compose-from-setup'), onPressed: () => showSendingSetupDialog(context, current), child: const Text('Set up sending')),
+              ],
+            ),
+          ),
         _line(scheme),
       ],
     );
@@ -613,20 +634,17 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       isSelected: selected,
       onPressed: onPressed,
       iconSize: 20,
-      style: IconButton.styleFrom(
-        foregroundColor: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant,
-        backgroundColor: selected ? scheme.secondaryContainer : null,
-      ),
+      style: IconButton.styleFrom(foregroundColor: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant, backgroundColor: selected ? scheme.secondaryContainer : null),
       icon: Icon(icon),
     );
   }
 
   Widget _fieldLink(String label, VoidCallback onPressed, ColorScheme scheme, TextTheme text, {Key? key}) => TextButton(
-        key: key,
-        onPressed: onPressed,
-        style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: scheme.onSurfaceVariant, textStyle: text.labelMedium),
-        child: Text(label),
-      );
+    key: key,
+    onPressed: onPressed,
+    style: TextButton.styleFrom(visualDensity: VisualDensity.compact, foregroundColor: scheme.onSurfaceVariant, textStyle: text.labelMedium),
+    child: Text(label),
+  );
 
   Widget _line(ColorScheme scheme) => Divider(height: 1, thickness: 1, color: scheme.outlineVariant.withValues(alpha: 0.6));
 

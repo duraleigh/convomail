@@ -3,12 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../mail/sending_route.dart';
+import '../../../platform/credential_store.dart';
 import '../../../store/compose_queries.dart';
 import '../../../store/database.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import '../chats/compose/compose_form.dart';
+import 'sending_setup_dialog.dart';
 
 /// Settings → Accounts → Identities & signatures (spec 4.4): per identity a
 /// display name, a plain-text signature inserted into new messages and
@@ -33,9 +36,7 @@ class SignaturesSection extends ConsumerWidget {
         Text('Signatures are added to new messages and replies and can be edited before sending.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
         const SizedBox(height: AppSpace.md),
         GroupedList(
-          children: [
-            for (final i in identities) _IdentityTile(key: ValueKey('identity-${i.id}'), identity: i, account: accounts.where((a) => a.id == i.accountId).firstOrNull),
-          ],
+          children: [for (final i in identities) _IdentityTile(key: ValueKey('identity-${i.id}'), identity: i, account: accounts.where((a) => a.id == i.accountId).firstOrNull)],
         ),
       ],
     );
@@ -95,7 +96,11 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (_saved) Padding(padding: const EdgeInsets.only(right: 8), child: Text('Saved', style: text.labelSmall!.copyWith(color: scheme.primary))),
+              if (_saved)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Text('Saved', style: text.labelSmall!.copyWith(color: scheme.primary)),
+                ),
               ChoiceChip(
                 label: const Text('Default'),
                 selected: i.isDefault,
@@ -104,6 +109,7 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
               ),
             ],
           ),
+          if (widget.account != null) _SendingRow(identity: i, account: widget.account!),
           const SizedBox(height: AppSpace.md),
           TextField(
             key: ValueKey('identity-name-${i.id}'),
@@ -120,6 +126,56 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
             decoration: const InputDecoration(labelText: 'Signature', hintText: 'Best,\nYour name', isDense: true, border: OutlineInputBorder(), alignLabelWithHint: true),
             onChanged: (_) => _changed(),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Whether the address can send, and the way to set it up when it can't.
+class _SendingRow extends ConsumerWidget {
+  const _SendingRow({required this.identity, required this.account});
+  final Identity identity;
+  final Account account;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final i = identity;
+    final blocked = needsSendingSetup(i, account);
+    final own = identityServer(i);
+    final status = blocked
+        ? "Can't send yet: mail from this address needs its own password, or it bounces."
+        : own != null
+        ? 'Sends through ${own.host}'
+        : 'Sends through ${account.email}';
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.sm),
+      child: Row(
+        children: [
+          Icon(blocked ? Icons.error_outline_rounded : Icons.check_circle_outline_rounded, size: 18, color: blocked ? scheme.error : scheme.primary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              status,
+              key: ValueKey('identity-sending-${i.id}'),
+              style: text.bodySmall!.copyWith(color: blocked ? scheme.error : scheme.onSurfaceVariant),
+            ),
+          ),
+          if (blocked)
+            FilledButton.tonal(key: ValueKey('identity-setup-${i.id}'), onPressed: () => showSendingSetupDialog(context, i), child: const Text('Set up sending'))
+          else if (own != null) ...[
+            TextButton(key: ValueKey('identity-setup-${i.id}'), onPressed: () => showSendingSetupDialog(context, i), child: const Text('Change')),
+            TextButton(
+              key: ValueKey('identity-unset-${i.id}'),
+              onPressed: () async {
+                await ref.read(databaseProvider).setIdentityServer(i.id, null);
+                await ref.read(credentialStoreProvider).delete(CredentialStore.identityPasswordKey(i.id));
+              },
+              child: const Text('Remove'),
+            ),
+          ],
         ],
       ),
     );

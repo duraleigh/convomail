@@ -9,13 +9,11 @@ import 'models.dart';
 /// Sends a built message over SMTP. One connection per send; the sync
 /// engine's IMAP connection is unaffected.
 abstract interface class MailSender {
-  Future<void> send(
-    ServerConfig server,
-    MailCredentials credentials,
-    MimeMessage message, {
-    required RemoteAddress from,
-    required List<RemoteAddress> recipients,
-  });
+  Future<void> send(ServerConfig server, MailCredentials credentials, MimeMessage message, {required RemoteAddress from, required List<RemoteAddress> recipients});
+
+  /// Connects and signs in without sending anything, to check a server and
+  /// login. Throws [MailTransportException] when either is wrong.
+  Future<void> verify(ServerConfig server, MailCredentials credentials);
 }
 
 final mailSenderProvider = Provider<MailSender>((ref) => SmtpSender());
@@ -28,6 +26,24 @@ class SmtpSender implements MailSender {
   @override
   Future<void> send(ServerConfig server, MailCredentials credentials, MimeMessage message, {required RemoteAddress from, required List<RemoteAddress> recipients}) async {
     if (recipients.isEmpty) throw const MailTransportException('Add at least one recipient.');
+    await _session(server, credentials, (client) async {
+      final response = await client
+          .sendMessage(
+            message,
+            from: MailAddress(from.name.isEmpty ? null : from.name, from.address),
+            recipients: [for (final r in recipients) MailAddress(null, r.address)],
+            use8BitEncoding: client.serverInfo.supports8BitMime,
+          )
+          .timeout(timeout);
+      if (response.isFailedStatus) throw MailTransportException('The server refused the message: ${response.errorMessage}');
+    });
+  }
+
+  @override
+  Future<void> verify(ServerConfig server, MailCredentials credentials) => _session(server, credentials, (_) async {});
+
+  /// Connects, signs in, runs [body], and always hangs up.
+  Future<void> _session(ServerConfig server, MailCredentials credentials, Future<void> Function(SmtpClient client) body) async {
     final client = SmtpClient(_ehloHost(), isLogEnabled: logEnabled);
     try {
       await client.connectToServer(server.host, server.port, isSecure: server.security == ConnectionSecurity.ssl, timeout: const Duration(seconds: 20));
@@ -40,19 +56,11 @@ class SmtpSender implements MailSender {
         final mech = client.serverInfo.supportsAuth(AuthMechanism.plain)
             ? AuthMechanism.plain
             : client.serverInfo.supportsAuth(AuthMechanism.login)
-                ? AuthMechanism.login
-                : AuthMechanism.plain;
+            ? AuthMechanism.login
+            : AuthMechanism.plain;
         await client.authenticate(credentials.username, credentials.password, mech);
       }
-      final response = await client
-          .sendMessage(
-            message,
-            from: MailAddress(from.name.isEmpty ? null : from.name, from.address),
-            recipients: [for (final r in recipients) MailAddress(null, r.address)],
-            use8BitEncoding: client.serverInfo.supports8BitMime,
-          )
-          .timeout(timeout);
-      if (response.isFailedStatus) throw MailTransportException('The server refused the message: ${response.errorMessage}');
+      await body(client);
     } on SmtpException catch (e) {
       final msg = e.message ?? e.response.errorMessage;
       final code = e.response.code ?? 0;
@@ -94,6 +102,15 @@ class RecordingMailSender implements MailSender {
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (failWith != null) throw failWith!;
     sent.add(SentRecord(server: server, username: credentials.username, message: message, from: from, recipients: recipients));
+  }
+
+  /// Servers and logins checked with [verify].
+  final List<(ServerConfig, MailCredentials)> verified = [];
+
+  @override
+  Future<void> verify(ServerConfig server, MailCredentials credentials) async {
+    if (failWith != null) throw failWith!;
+    verified.add((server, credentials));
   }
 }
 

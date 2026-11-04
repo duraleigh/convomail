@@ -9,6 +9,7 @@ import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../mail/outgoing.dart';
 import '../mail/provider_config.dart';
+import '../mail/sending_route.dart';
 import '../platform/credential_store.dart';
 import '../store/compose_queries.dart';
 import '../store/database.dart';
@@ -66,12 +67,12 @@ class SendProgress {
   bool get inFlight => phase != SendPhase.done && phase != SendPhase.failed;
 
   String get label => switch (phase) {
-        SendPhase.building => 'Preparing…',
-        SendPhase.sending => 'Sending…',
-        SendPhase.storingCopy => 'Saving to Sent…',
-        SendPhase.done => 'Sent',
-        SendPhase.failed => error ?? 'Send failed',
-      };
+    SendPhase.building => 'Preparing…',
+    SendPhase.sending => 'Sending…',
+    SendPhase.storingCopy => 'Saving to Sent…',
+    SendPhase.done => 'Sent',
+    SendPhase.failed => error ?? 'Send failed',
+  };
 }
 
 /// Progress per compose session. Keyed by a token the composer chooses.
@@ -103,25 +104,40 @@ class SendService {
       if (account == null) throw const MailTransportException('That account no longer exists.');
       final identity = s.identityId == null ? null : await _db.identityById(s.identityId!);
       final from = RemoteAddress(identity?.email ?? account.email, identity?.name ?? account.displayName);
+      // Checked before anything is built: an address on another domain sent
+      // through the account's server would only bounce.
+      if (identity != null && needsSendingSetup(identity, account)) {
+        throw MailTransportException(
+          "Mail from ${identity.email} can't be sent until its password is added. "
+          'Settings → Accounts → ${identity.email} → Set up sending.',
+          isAuthFailure: true,
+        );
+      }
 
       final original = s.inReplyToMessageId == null ? null : await _db.messageById(s.inReplyToMessageId!);
       final built = await MimeFactory.build(await _outgoing(s, from, identity, original));
 
       progress.put(token, const SendProgress(SendPhase.sending));
-      final password = await _ref.read(credentialStoreProvider).read(CredentialStore.passwordKey(account.id));
-      if (password == null) throw const MailTransportException('No saved password for this account.', isAuthFailure: true);
-      final server = ServerConfig(
-        host: identity?.smtpHost ?? account.smtpHost,
-        port: identity?.smtpPort ?? account.smtpPort,
-        security: ConnectionSecurityName.parse(identity?.smtpSecurity ?? account.smtpSecurity),
-      );
-      await _ref.read(mailSenderProvider).send(
-            server,
-            MailCredentials(username: account.username, password: password),
-            built.message,
-            from: from,
-            recipients: [...s.to, ...s.cc, ...s.bcc],
-          );
+      final store = _ref.read(credentialStoreProvider);
+      // An identity with a server of its own sends through it with its own
+      // login; everything else goes through the account.
+      final ownServer = identity == null ? null : identityServer(identity);
+      final ServerConfig server;
+      final MailCredentials credentials;
+      if (ownServer != null) {
+        final password = await store.read(CredentialStore.identityPasswordKey(identity!.id));
+        if (password == null) {
+          throw MailTransportException('No saved password for ${identity.email}. Settings → Accounts → ${identity.email} → Set up sending.', isAuthFailure: true);
+        }
+        server = ownServer;
+        credentials = MailCredentials(username: identity.smtpUsername ?? identity.email, password: password);
+      } else {
+        final password = await store.read(CredentialStore.passwordKey(account.id));
+        if (password == null) throw const MailTransportException('No saved password for this account.', isAuthFailure: true);
+        server = ServerConfig(host: account.smtpHost, port: account.smtpPort, security: ConnectionSecurityName.parse(account.smtpSecurity));
+        credentials = MailCredentials(username: account.username, password: password);
+      }
+      await _ref.read(mailSenderProvider).send(server, credentials, built.message, from: from, recipients: [...s.to, ...s.cc, ...s.bcc]);
 
       // Sent copy: servers that do not keep one get an APPEND; then the Sent
       // folder is re-synced so the message shows in the recipient's row.
@@ -129,7 +145,8 @@ class SendService {
       final profile = ProviderProfiles.byId(account.providerId);
       final syncer = _ref.read(syncControllerProvider).syncerFor(account.id);
       if (syncer != null) {
-        await syncer.storeSentCopy(built.raw, appendCopy: !(profile?.smtpSavesSentCopy ?? false));
+        // The account's server files its own copy; another server does not.
+        await syncer.storeSentCopy(built.raw, appendCopy: ownServer != null || !(profile?.smtpSavesSentCopy ?? false));
       }
 
       if (original != null && s.isReply) {
@@ -164,17 +181,7 @@ class SendService {
         html = '$html${forwardBlock(original, body, await _db.participantsOf(original.id))}';
       }
     }
-    return OutgoingMessage(
-      from: from,
-      to: s.to,
-      cc: s.cc,
-      bcc: s.bcc,
-      subject: s.subject,
-      html: html,
-      attachments: s.attachments,
-      inReplyTo: inReplyTo,
-      references: references,
-    );
+    return OutgoingMessage(from: from, to: s.to, cc: s.cc, bcc: s.bcc, subject: s.subject, html: html, attachments: s.attachments, inReplyTo: inReplyTo, references: references);
   }
 
   /// The original's HTML (sanitized, remote images allowed so the quoted

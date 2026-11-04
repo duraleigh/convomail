@@ -18,6 +18,9 @@ abstract interface class CredentialStore {
   Future<void> delete(String key);
 
   static String passwordKey(int accountId) => 'account.$accountId.password';
+
+  /// Password for an identity that sends through a server of its own.
+  static String identityPasswordKey(int identityId) => 'identity.$identityId.password';
 }
 
 /// Windows Credential Manager via advapi32 (CredWriteW/CredReadW/CredDeleteW).

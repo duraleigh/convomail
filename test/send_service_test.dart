@@ -40,20 +40,27 @@ void main() {
     imap = FakeMailTransport();
     smtp = RecordingMailSender();
     final store = InMemoryCredentialStore();
-    container = ProviderContainer(overrides: [
-      settingsStoreProvider.overrideWith((ref) => InMemorySettingsStore()),
-      databaseProvider.overrideWith((ref) => db),
-      credentialStoreProvider.overrideWith((ref) => store),
-      transportFactoryProvider.overrideWith((ref) => () => imap),
-      mailSenderProvider.overrideWith((ref) => smtp),
-    ]);
+    container = ProviderContainer(
+      overrides: [
+        settingsStoreProvider.overrideWith((ref) => InMemorySettingsStore()),
+        databaseProvider.overrideWith((ref) => db),
+        credentialStoreProvider.overrideWith((ref) => store),
+        transportFactoryProvider.overrideWith(
+          (ref) =>
+              () => imap,
+        ),
+        mailSenderProvider.overrideWith((ref) => smtp),
+      ],
+    );
     account = await insertTestAccount(db);
     if (providerId != 'custom') {
       await (db.update(db.accounts)..where((a) => a.id.equals(account.id))).write(AccountsCompanion(providerId: Value(providerId)));
       account = (await db.accountById(account.id))!;
     }
     await store.write(CredentialStore.passwordKey(account.id), 'secret');
-    await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'me@example.com', name: const Value('Clay Example'), signature: const Value('Best,\nClay'), isDefault: const Value(true)));
+    await db
+        .into(db.identities)
+        .insert(IdentitiesCompanion.insert(accountId: account.id, email: 'me@example.com', name: const Value('Clay Example'), signature: const Value('Best,\nClay'), isDefault: const Value(true)));
 
     // Server: INBOX with one message from Sarah, an empty Sent folder.
     final inbox = imap.folder('INBOX', role: FolderRole.inbox);
@@ -69,7 +76,12 @@ void main() {
       ),
       body: const RemoteMessageBody(html: '<p>Can you add me to the <b>Figma</b> team?</p>'),
     );
-    final syncer = AccountSyncer(db: db, transport: imap, account: account, credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'));
+    final syncer = AccountSyncer(
+      db: db,
+      transport: imap,
+      account: account,
+      credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'),
+    );
     await syncer.syncOnce();
     container.read(syncControllerProvider).adoptForTest(account.id, syncer);
     await db.refreshDirtyRows();
@@ -84,7 +96,9 @@ void main() {
   test('reply: SMTP gets the MIME, custom server gets an APPEND to Sent, original is answered, draft deleted, message files under Sarah', () async {
     await setUpWith();
     final draftId = await db.saveDraft(DraftsCompanion(accountId: Value(account.id), kind: const Value('reply'), rowKey: const Value('c:sarah@x.com'), subject: const Value('Re: Figma access')));
-    final id = await container.read(sendServiceProvider).send(
+    final id = await container
+        .read(sendServiceProvider)
+        .send(
           ComposeSubmission(
             accountId: account.id,
             identityId: (await db.identitiesForAccount(account.id)).single.id,
@@ -137,7 +151,9 @@ void main() {
 
   test('gmail: no APPEND because the server files the copy; Sent is still re-synced', () async {
     await setUpWith(providerId: 'gmail');
-    await container.read(sendServiceProvider).send(
+    await container
+        .read(sendServiceProvider)
+        .send(
           ComposeSubmission(accountId: account.id, identityId: null, to: const [RemoteAddress('sarah@x.com')], subject: 'Hi', bodyHtml: '<p>x</p>'),
           token: 't',
         );
@@ -146,10 +162,72 @@ void main() {
     expect(imap.log.where((l) => l.startsWith('select Sent')), isNotEmpty, reason: 'Sent folder re-synced after the send');
   });
 
+  test('an address on another domain with no server of its own is refused before anything is sent', () async {
+    await setUpWith(providerId: 'gmail');
+    final alias = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'ca@clayaiken.com', discovered: const Value(true)));
+    await expectLater(
+      container
+          .read(sendServiceProvider)
+          .send(
+            ComposeSubmission(accountId: account.id, identityId: alias, to: const [RemoteAddress('sarah@x.com')], subject: 'Hi', bodyHtml: '<p>x</p>'),
+            token: 't',
+          ),
+      throwsA(isA<MailTransportException>().having((e) => e.message, 'message', contains("can't be sent until its password is added"))),
+    );
+    expect(smtp.sent, isEmpty, reason: 'nothing goes out to bounce');
+    expect(imap.appended, isEmpty);
+  });
+
+  test("an address with its own server sends through it with its own login, and a Sent copy is kept", () async {
+    await setUpWith(providerId: 'gmail');
+    final alias = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'ca@clayaiken.com', discovered: const Value(true)));
+    await db.setIdentityServer(alias, const ServerConfig(host: 'smtp.forwardemail.net', port: 465, security: ConnectionSecurity.ssl));
+    await container.read(credentialStoreProvider).write(CredentialStore.identityPasswordKey(alias), 'alias-secret');
+
+    await container
+        .read(sendServiceProvider)
+        .send(
+          ComposeSubmission(accountId: account.id, identityId: alias, to: const [RemoteAddress('sarah@x.com')], subject: 'Hi', bodyHtml: '<p>x</p>'),
+          token: 't',
+        );
+    final sent = smtp.sent.single;
+    expect(sent.server.host, 'smtp.forwardemail.net');
+    expect(sent.username, 'ca@clayaiken.com');
+    expect(sent.from.address, 'ca@clayaiken.com');
+    // Gmail files a copy only of mail sent through Gmail, so one is added.
+    expect(imap.appended, hasLength(1));
+  });
+
+  test('an address with its own server but no saved password asks for it and sends nothing', () async {
+    await setUpWith(providerId: 'gmail');
+    final alias = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'ca@clayaiken.com'));
+    await db.setIdentityServer(alias, const ServerConfig(host: 'smtp.forwardemail.net', port: 465, security: ConnectionSecurity.ssl));
+    await expectLater(
+      container
+          .read(sendServiceProvider)
+          .send(
+            ComposeSubmission(accountId: account.id, identityId: alias, to: const [RemoteAddress('sarah@x.com')], subject: 'Hi', bodyHtml: '<p>x</p>'),
+            token: 't',
+          ),
+      throwsA(isA<MailTransportException>().having((e) => e.isAuthFailure, 'isAuthFailure', isTrue)),
+    );
+    expect(smtp.sent, isEmpty);
+  });
+
   test('forward includes the forwarded header block and no In-Reply-To', () async {
     await setUpWith();
-    await container.read(sendServiceProvider).send(
-          ComposeSubmission(accountId: account.id, identityId: null, to: const [RemoteAddress('tom@x.com')], subject: 'Fwd: Figma access', bodyHtml: '<p>FYI</p>', inReplyToMessageId: sarahMsg, kind: 'forward'),
+    await container
+        .read(sendServiceProvider)
+        .send(
+          ComposeSubmission(
+            accountId: account.id,
+            identityId: null,
+            to: const [RemoteAddress('tom@x.com')],
+            subject: 'Fwd: Figma access',
+            bodyHtml: '<p>FYI</p>',
+            inReplyToMessageId: sarahMsg,
+            kind: 'forward',
+          ),
           token: 't',
         );
     final m = smtp.sent.single.parsed;
@@ -166,7 +244,9 @@ void main() {
     smtp.failWith = const MailTransportException('The mail server rejected the username or password.', isAuthFailure: true);
     final draftId = await db.saveDraft(DraftsCompanion(accountId: Value(account.id), subject: const Value('x')));
     await expectLater(
-      container.read(sendServiceProvider).send(
+      container
+          .read(sendServiceProvider)
+          .send(
             ComposeSubmission(accountId: account.id, identityId: null, to: const [RemoteAddress('sarah@x.com')], subject: 'x', bodyHtml: '<p>x</p>', draftId: draftId),
             token: 't',
           ),
@@ -191,7 +271,9 @@ void main() {
 
   test('attachments travel with the send', () async {
     await setUpWith();
-    await container.read(sendServiceProvider).send(
+    await container
+        .read(sendServiceProvider)
+        .send(
           ComposeSubmission(
             accountId: account.id,
             identityId: null,

@@ -1312,6 +1312,17 @@ class $IdentitiesTable extends Identities
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _smtpUsernameMeta = const VerificationMeta(
+    'smtpUsername',
+  );
+  @override
+  late final GeneratedColumn<String> smtpUsername = GeneratedColumn<String>(
+    'smtp_username',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isDefaultMeta = const VerificationMeta(
     'isDefault',
   );
@@ -1352,6 +1363,7 @@ class $IdentitiesTable extends Identities
     smtpHost,
     smtpPort,
     smtpSecurity,
+    smtpUsername,
     isDefault,
     discovered,
   ];
@@ -1419,6 +1431,15 @@ class $IdentitiesTable extends Identities
         ),
       );
     }
+    if (data.containsKey('smtp_username')) {
+      context.handle(
+        _smtpUsernameMeta,
+        smtpUsername.isAcceptableOrUnknown(
+          data['smtp_username']!,
+          _smtpUsernameMeta,
+        ),
+      );
+    }
     if (data.containsKey('is_default')) {
       context.handle(
         _isDefaultMeta,
@@ -1472,6 +1493,10 @@ class $IdentitiesTable extends Identities
         DriftSqlType.string,
         data['${effectivePrefix}smtp_security'],
       ),
+      smtpUsername: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}smtp_username'],
+      ),
       isDefault: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_default'],
@@ -1498,6 +1523,10 @@ class Identity extends DataClass implements Insertable<Identity> {
   final String? smtpHost;
   final int? smtpPort;
   final String? smtpSecurity;
+
+  /// Login for the identity's own server (see sending_route.dart); its
+  /// password is in the credential store. Null means the email address.
+  final String? smtpUsername;
   final bool isDefault;
 
   /// True when the identity was learned from the account's Sent folder
@@ -1512,6 +1541,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     this.smtpHost,
     this.smtpPort,
     this.smtpSecurity,
+    this.smtpUsername,
     required this.isDefault,
     required this.discovered,
   });
@@ -1531,6 +1561,9 @@ class Identity extends DataClass implements Insertable<Identity> {
     }
     if (!nullToAbsent || smtpSecurity != null) {
       map['smtp_security'] = Variable<String>(smtpSecurity);
+    }
+    if (!nullToAbsent || smtpUsername != null) {
+      map['smtp_username'] = Variable<String>(smtpUsername);
     }
     map['is_default'] = Variable<bool>(isDefault);
     map['discovered'] = Variable<bool>(discovered);
@@ -1553,6 +1586,9 @@ class Identity extends DataClass implements Insertable<Identity> {
       smtpSecurity: smtpSecurity == null && nullToAbsent
           ? const Value.absent()
           : Value(smtpSecurity),
+      smtpUsername: smtpUsername == null && nullToAbsent
+          ? const Value.absent()
+          : Value(smtpUsername),
       isDefault: Value(isDefault),
       discovered: Value(discovered),
     );
@@ -1572,6 +1608,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       smtpHost: serializer.fromJson<String?>(json['smtpHost']),
       smtpPort: serializer.fromJson<int?>(json['smtpPort']),
       smtpSecurity: serializer.fromJson<String?>(json['smtpSecurity']),
+      smtpUsername: serializer.fromJson<String?>(json['smtpUsername']),
       isDefault: serializer.fromJson<bool>(json['isDefault']),
       discovered: serializer.fromJson<bool>(json['discovered']),
     );
@@ -1588,6 +1625,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       'smtpHost': serializer.toJson<String?>(smtpHost),
       'smtpPort': serializer.toJson<int?>(smtpPort),
       'smtpSecurity': serializer.toJson<String?>(smtpSecurity),
+      'smtpUsername': serializer.toJson<String?>(smtpUsername),
       'isDefault': serializer.toJson<bool>(isDefault),
       'discovered': serializer.toJson<bool>(discovered),
     };
@@ -1602,6 +1640,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     Value<String?> smtpHost = const Value.absent(),
     Value<int?> smtpPort = const Value.absent(),
     Value<String?> smtpSecurity = const Value.absent(),
+    Value<String?> smtpUsername = const Value.absent(),
     bool? isDefault,
     bool? discovered,
   }) => Identity(
@@ -1613,6 +1652,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     smtpHost: smtpHost.present ? smtpHost.value : this.smtpHost,
     smtpPort: smtpPort.present ? smtpPort.value : this.smtpPort,
     smtpSecurity: smtpSecurity.present ? smtpSecurity.value : this.smtpSecurity,
+    smtpUsername: smtpUsername.present ? smtpUsername.value : this.smtpUsername,
     isDefault: isDefault ?? this.isDefault,
     discovered: discovered ?? this.discovered,
   );
@@ -1628,6 +1668,9 @@ class Identity extends DataClass implements Insertable<Identity> {
       smtpSecurity: data.smtpSecurity.present
           ? data.smtpSecurity.value
           : this.smtpSecurity,
+      smtpUsername: data.smtpUsername.present
+          ? data.smtpUsername.value
+          : this.smtpUsername,
       isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
       discovered: data.discovered.present
           ? data.discovered.value
@@ -1646,6 +1689,7 @@ class Identity extends DataClass implements Insertable<Identity> {
           ..write('smtpHost: $smtpHost, ')
           ..write('smtpPort: $smtpPort, ')
           ..write('smtpSecurity: $smtpSecurity, ')
+          ..write('smtpUsername: $smtpUsername, ')
           ..write('isDefault: $isDefault, ')
           ..write('discovered: $discovered')
           ..write(')'))
@@ -1662,6 +1706,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     smtpHost,
     smtpPort,
     smtpSecurity,
+    smtpUsername,
     isDefault,
     discovered,
   );
@@ -1677,6 +1722,7 @@ class Identity extends DataClass implements Insertable<Identity> {
           other.smtpHost == this.smtpHost &&
           other.smtpPort == this.smtpPort &&
           other.smtpSecurity == this.smtpSecurity &&
+          other.smtpUsername == this.smtpUsername &&
           other.isDefault == this.isDefault &&
           other.discovered == this.discovered);
 }
@@ -1690,6 +1736,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
   final Value<String?> smtpHost;
   final Value<int?> smtpPort;
   final Value<String?> smtpSecurity;
+  final Value<String?> smtpUsername;
   final Value<bool> isDefault;
   final Value<bool> discovered;
   const IdentitiesCompanion({
@@ -1701,6 +1748,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     this.smtpHost = const Value.absent(),
     this.smtpPort = const Value.absent(),
     this.smtpSecurity = const Value.absent(),
+    this.smtpUsername = const Value.absent(),
     this.isDefault = const Value.absent(),
     this.discovered = const Value.absent(),
   });
@@ -1713,6 +1761,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     this.smtpHost = const Value.absent(),
     this.smtpPort = const Value.absent(),
     this.smtpSecurity = const Value.absent(),
+    this.smtpUsername = const Value.absent(),
     this.isDefault = const Value.absent(),
     this.discovered = const Value.absent(),
   }) : accountId = Value(accountId),
@@ -1726,6 +1775,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     Expression<String>? smtpHost,
     Expression<int>? smtpPort,
     Expression<String>? smtpSecurity,
+    Expression<String>? smtpUsername,
     Expression<bool>? isDefault,
     Expression<bool>? discovered,
   }) {
@@ -1738,6 +1788,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
       if (smtpHost != null) 'smtp_host': smtpHost,
       if (smtpPort != null) 'smtp_port': smtpPort,
       if (smtpSecurity != null) 'smtp_security': smtpSecurity,
+      if (smtpUsername != null) 'smtp_username': smtpUsername,
       if (isDefault != null) 'is_default': isDefault,
       if (discovered != null) 'discovered': discovered,
     });
@@ -1752,6 +1803,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     Value<String?>? smtpHost,
     Value<int?>? smtpPort,
     Value<String?>? smtpSecurity,
+    Value<String?>? smtpUsername,
     Value<bool>? isDefault,
     Value<bool>? discovered,
   }) {
@@ -1764,6 +1816,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
       smtpHost: smtpHost ?? this.smtpHost,
       smtpPort: smtpPort ?? this.smtpPort,
       smtpSecurity: smtpSecurity ?? this.smtpSecurity,
+      smtpUsername: smtpUsername ?? this.smtpUsername,
       isDefault: isDefault ?? this.isDefault,
       discovered: discovered ?? this.discovered,
     );
@@ -1796,6 +1849,9 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     if (smtpSecurity.present) {
       map['smtp_security'] = Variable<String>(smtpSecurity.value);
     }
+    if (smtpUsername.present) {
+      map['smtp_username'] = Variable<String>(smtpUsername.value);
+    }
     if (isDefault.present) {
       map['is_default'] = Variable<bool>(isDefault.value);
     }
@@ -1816,6 +1872,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
           ..write('smtpHost: $smtpHost, ')
           ..write('smtpPort: $smtpPort, ')
           ..write('smtpSecurity: $smtpSecurity, ')
+          ..write('smtpUsername: $smtpUsername, ')
           ..write('isDefault: $isDefault, ')
           ..write('discovered: $discovered')
           ..write(')'))
@@ -3487,7 +3544,7 @@ class Message extends DataClass implements Insertable<Message> {
   /// Space-separated Message-IDs from the References header.
   final String? referencesHeader;
 
-  /// When this message was read for timely information (spec 4.20), and
+  /// When this message was read for timely information (spec 4.21), and
   /// whether it held any.
   final DateTime? timelyCheckedAt;
   final bool hasTimelyItem;
@@ -16710,6 +16767,7 @@ typedef $$IdentitiesTableCreateCompanionBuilder = IdentitiesCompanion Function({
   Value<String?> smtpHost,
   Value<int?> smtpPort,
   Value<String?> smtpSecurity,
+  Value<String?> smtpUsername,
   Value<bool> isDefault,
   Value<bool> discovered,
 });
@@ -16722,6 +16780,7 @@ typedef $$IdentitiesTableUpdateCompanionBuilder = IdentitiesCompanion Function({
   Value<String?> smtpHost,
   Value<int?> smtpPort,
   Value<String?> smtpSecurity,
+  Value<String?> smtpUsername,
   Value<bool> isDefault,
   Value<bool> discovered,
 });
@@ -16789,6 +16848,11 @@ class $$IdentitiesTableFilterComposer
 
   ColumnFilters<String> get smtpSecurity => $composableBuilder(
     column: $table.smtpSecurity,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get smtpUsername => $composableBuilder(
+    column: $table.smtpUsername,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16870,6 +16934,11 @@ class $$IdentitiesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get smtpUsername => $composableBuilder(
+    column: $table.smtpUsername,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isDefault => $composableBuilder(
     column: $table.isDefault,
     builder: (column) => ColumnOrderings(column),
@@ -16933,6 +17002,11 @@ class $$IdentitiesTableAnnotationComposer
 
   GeneratedColumn<String> get smtpSecurity => $composableBuilder(
     column: $table.smtpSecurity,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get smtpUsername => $composableBuilder(
+    column: $table.smtpUsername,
     builder: (column) => column,
   );
 
@@ -17004,6 +17078,7 @@ class $$IdentitiesTableTableManager
                 Value<String?> smtpHost = const Value.absent(),
                 Value<int?> smtpPort = const Value.absent(),
                 Value<String?> smtpSecurity = const Value.absent(),
+                Value<String?> smtpUsername = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
                 Value<bool> discovered = const Value.absent(),
               }) => IdentitiesCompanion(
@@ -17015,6 +17090,7 @@ class $$IdentitiesTableTableManager
                 smtpHost: smtpHost,
                 smtpPort: smtpPort,
                 smtpSecurity: smtpSecurity,
+                smtpUsername: smtpUsername,
                 isDefault: isDefault,
                 discovered: discovered,
               ),
@@ -17028,6 +17104,7 @@ class $$IdentitiesTableTableManager
                 Value<String?> smtpHost = const Value.absent(),
                 Value<int?> smtpPort = const Value.absent(),
                 Value<String?> smtpSecurity = const Value.absent(),
+                Value<String?> smtpUsername = const Value.absent(),
                 Value<bool> isDefault = const Value.absent(),
                 Value<bool> discovered = const Value.absent(),
               }) => IdentitiesCompanion.insert(
@@ -17039,6 +17116,7 @@ class $$IdentitiesTableTableManager
                 smtpHost: smtpHost,
                 smtpPort: smtpPort,
                 smtpSecurity: smtpSecurity,
+                smtpUsername: smtpUsername,
                 isDefault: isDefault,
                 discovered: discovered,
               ),

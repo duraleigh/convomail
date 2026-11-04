@@ -36,6 +36,15 @@ extension ComposeQueries on AppDatabase {
         signature: signature == null ? const Value.absent() : Value(signature),
       ));
 
+  /// Gives the identity a server of its own (with its own login), or with
+  /// null takes it away so the identity sends through its account again.
+  Future<void> setIdentityServer(int id, ServerConfig? server, {String? username}) => (update(identities)..where((i) => i.id.equals(id))).write(IdentitiesCompanion(
+        smtpHost: Value(server?.host),
+        smtpPort: Value(server?.port),
+        smtpSecurity: Value(server?.security.dbValue),
+        smtpUsername: Value(server == null ? null : username),
+      ));
+
   Future<void> setDefaultIdentity(int accountId, int identityId) => transaction(() async {
         await (update(identities)..where((i) => i.accountId.equals(accountId))).write(const IdentitiesCompanion(isDefault: Value(false)));
         await (update(identities)..where((i) => i.id.equals(identityId))).write(const IdentitiesCompanion(isDefault: Value(true)));

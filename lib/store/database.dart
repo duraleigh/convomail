@@ -62,6 +62,10 @@ class Identities extends Table {
   TextColumn get smtpHost => text().nullable()();
   IntColumn get smtpPort => integer().nullable()();
   TextColumn get smtpSecurity => text().nullable()();
+
+  /// Login for the identity's own server (see sending_route.dart); its
+  /// password is in the credential store. Null means the email address.
+  TextColumn get smtpUsername => text().nullable()();
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
 
   /// True when the identity was learned from the account's Sent folder
@@ -550,7 +554,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -665,6 +669,9 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           }
           if (from < 14) {
             await m.createTable(addressBookEntryRows);
+          }
+          if (from < 15) {
+            await m.addColumn(identities, identities.smtpUsername);
           }
         },
         beforeOpen: (details) async {
