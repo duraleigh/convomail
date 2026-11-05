@@ -4,6 +4,7 @@ import 'package:convomail/mail/sending_route.dart';
 import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/compose_queries.dart';
 import 'package:convomail/store/database.dart';
+import 'package:convomail/store/sync_queries.dart';
 import 'package:convomail/ui/screens/settings/sending_setup_dialog.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -87,6 +88,33 @@ void main() {
     expect(saved.smtpUsername, isNull, reason: 'each address signs in as itself');
     expect(await store.read(CredentialStore.identityPasswordKey(other)), isNull);
     expect((await tester.runAsync(() => db.identityById(other)))!.smtpHost, isNull);
+  });
+
+  testWidgets('an iCloud address is pointed to Apple for its password', (tester) async {
+    final mac = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'caiken@mac.com', discovered: const Value(true)));
+    alias = (await db.identityById(mac))!;
+    await pumpDialog(tester);
+    expect(find.byKey(const ValueKey('sending-provider-help')), findsOneWidget);
+    expect(find.text('Open appleid.apple.com'), findsOneWidget);
+    expect(find.text('Server: smtp.mail.me.com'), findsOneWidget);
+  });
+
+  test('a removed address is gone from the list, stays gone after sync, and hands on the default', () async {
+    final remarkable = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'my@remarkable.com', discovered: const Value(true)));
+    await db.setDefaultIdentity(account.id, remarkable);
+
+    await db.removeIdentity(remarkable);
+
+    final left = await db.identitiesForAccount(account.id);
+    expect(left.map((i) => i.email), isNot(contains('my@remarkable.com')));
+    expect(left.where((i) => i.isDefault), hasLength(1));
+    expect((await db.watchAllIdentities().first).map((i) => i.email), isNot(contains('my@remarkable.com')));
+
+    // Sync finds it again in Sent; it is not added back.
+    final sent = await db.into(db.folders).insert(FoldersCompanion.insert(accountId: account.id, path: 'Sent', name: 'Sent', role: const Value('sent')));
+    await db.into(db.messages).insert(MessagesCompanion.insert(accountId: account.id, folderId: sent, uid: 1, fromAddress: const Value('my@remarkable.com')));
+    await db.discoverIdentitiesFromSent(account.id, sent);
+    expect((await db.identitiesForAccount(account.id)).map((i) => i.email), isNot(contains('my@remarkable.com')));
   });
 
   testWidgets('a password the server refuses is not saved and says so', (tester) async {

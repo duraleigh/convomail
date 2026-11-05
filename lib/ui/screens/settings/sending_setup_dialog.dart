@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../mail/mail_sender.dart';
 import '../../../mail/mail_transport.dart';
 import '../../../mail/models.dart';
+import '../../../mail/provider_config.dart';
 import '../../../mail/sending_route.dart';
 import '../../../platform/credential_store.dart';
 import '../../../store/compose_queries.dart';
@@ -104,7 +106,8 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
     final email = widget.identity.email;
-    final forwardEmail = _host.text.trim().toLowerCase().endsWith('forwardemail.net');
+    final provider = ProviderProfiles.forEmail(email);
+    final forwardEmail =_host.text.trim().toLowerCase().endsWith('forwardemail.net');
     return AlertDialog(
       title: Text('Send from $email'),
       content: SizedBox(
@@ -114,6 +117,19 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text('Enter the password for this address once. ConvoMail checks it, then mail from $email goes out properly.', style: text.bodyMedium),
+            if (provider != null && provider.appPasswordHelp != null && _host.text.trim().toLowerCase() == provider.smtp.host) ...[
+              const SizedBox(height: AppSpace.sm),
+              Text(provider.appPasswordHelp!, key: const ValueKey('sending-provider-help'), style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+              if (provider.appPasswordUrl != null)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => launchUrl(Uri.parse(provider.appPasswordUrl!)),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                    label: Text('Open ${Uri.parse(provider.appPasswordUrl!).host}'),
+                  ),
+                ),
+            ],
             if (forwardEmail) ...[
               const SizedBox(height: AppSpace.sm),
               Text(

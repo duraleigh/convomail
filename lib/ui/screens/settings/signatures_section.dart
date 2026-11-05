@@ -75,6 +75,25 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
     if (_saved) setState(() => _saved = false);
   }
 
+  Future<void> _remove() async {
+    final i = widget.identity;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Remove ${i.email}?'),
+        content: const Text("You won't be able to send from it in ConvoMail. Mail you already sent from it stays where it is."),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('identity-remove-confirm'), onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    _debounce?.cancel();
+    await ref.read(databaseProvider).removeIdentity(i.id);
+    await ref.read(credentialStoreProvider).delete(CredentialStore.identityPasswordKey(i.id));
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -100,6 +119,16 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
                   child: Text('Saved', style: text.labelSmall!.copyWith(color: scheme.primary)),
+                ),
+              if (widget.account != null && i.email.toLowerCase() != widget.account!.email.toLowerCase())
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: TextButton.icon(
+                    key: ValueKey('identity-remove-${i.id}'),
+                    onPressed: _remove,
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18),
+                    label: const Text('Remove'),
+                  ),
                 ),
               ChoiceChip(
                 label: const Text('Default'),

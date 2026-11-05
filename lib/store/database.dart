@@ -66,6 +66,9 @@ class Identities extends Table {
   /// Login for the identity's own server (see sending_route.dart); its
   /// password is in the credential store. Null means the email address.
   TextColumn get smtpUsername => text().nullable()();
+  /// Removed by the user: never offered for sending, never re-discovered,
+  /// still counted as "me" so its old mail files as before.
+  BoolColumn get hidden => boolean().withDefault(const Constant(false))();
   BoolColumn get isDefault => boolean().withDefault(const Constant(false))();
 
   /// True when the identity was learned from the account's Sent folder
@@ -554,7 +557,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -672,6 +675,9 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           }
           if (from < 15) {
             await m.addColumn(identities, identities.smtpUsername);
+          }
+          if (from < 16) {
+            await m.addColumn(identities, identities.hidden);
           }
         },
         beforeOpen: (details) async {

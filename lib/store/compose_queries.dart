@@ -20,14 +20,31 @@ class RecipientSuggestion {
 extension ComposeQueries on AppDatabase {
   // ---- identities ------------------------------------------------------------
 
+  /// The addresses an account can send from (removed ones left out).
   Future<List<Identity>> identitiesForAccount(int accountId) => (select(identities)
-        ..where((i) => i.accountId.equals(accountId))
+        ..where((i) => i.accountId.equals(accountId) & i.hidden.equals(false))
         ..orderBy([(i) => OrderingTerm.desc(i.isDefault), (i) => OrderingTerm.asc(i.discovered), (i) => OrderingTerm.asc(i.id)]))
       .get();
 
   Stream<List<Identity>> watchAllIdentities() => (select(identities)
+        ..where((i) => i.hidden.equals(false))
         ..orderBy([(i) => OrderingTerm.asc(i.accountId), (i) => OrderingTerm.desc(i.isDefault), (i) => OrderingTerm.asc(i.id)]))
       .watch();
+
+  /// Removes an address from the list. It stays known as the user's own, so
+  /// its old mail still files as theirs and sync doesn't add it back. Its
+  /// sending password is the caller's to delete. When it was the default,
+  /// the account's first remaining address becomes the default.
+  Future<void> removeIdentity(int id) => transaction(() async {
+        final identity = await identityById(id);
+        if (identity == null) return;
+        await (update(identities)..where((i) => i.id.equals(id))).write(const IdentitiesCompanion(hidden: Value(true), isDefault: Value(false)));
+        await setIdentityServer(id, null);
+        if (identity.isDefault) {
+          final next = (await identitiesForAccount(identity.accountId)).firstOrNull;
+          if (next != null) await setDefaultIdentity(identity.accountId, next.id);
+        }
+      });
 
   Future<Identity?> identityById(int id) => (select(identities)..where((i) => i.id.equals(id))).getSingleOrNull();
 
