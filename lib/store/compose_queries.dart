@@ -31,6 +31,18 @@ extension ComposeQueries on AppDatabase {
         ..orderBy([(i) => OrderingTerm.asc(i.accountId), (i) => OrderingTerm.desc(i.isDefault), (i) => OrderingTerm.asc(i.id)]))
       .watch();
 
+  /// Adds an address the user sends from (or brings back one they removed)
+  /// and returns its id.
+  Future<int> addIdentity(int accountId, String email, {String name = ''}) => transaction(() async {
+        final address = email.trim().toLowerCase();
+        final existing = await (select(identities)..where((i) => i.accountId.equals(accountId) & i.email.lower().equals(address))).getSingleOrNull();
+        if (existing != null) {
+          await (update(identities)..where((i) => i.id.equals(existing.id))).write(IdentitiesCompanion(hidden: const Value(false), name: name.isEmpty ? const Value.absent() : Value(name)));
+          return existing.id;
+        }
+        return into(identities).insert(IdentitiesCompanion.insert(accountId: accountId, email: address, name: Value(name), discovered: const Value(true)));
+      });
+
   /// Removes an address from the list. It stays known as the user's own, so
   /// its old mail still files as theirs and sync doesn't add it back. Its
   /// sending password is the caller's to delete. When it was the default,

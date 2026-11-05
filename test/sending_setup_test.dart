@@ -5,6 +5,7 @@ import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/compose_queries.dart';
 import 'package:convomail/store/database.dart';
 import 'package:convomail/store/sync_queries.dart';
+import 'package:convomail/ui/screens/settings/add_address_dialog.dart';
 import 'package:convomail/ui/screens/settings/sending_setup_dialog.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -115,6 +116,33 @@ void main() {
     await db.into(db.messages).insert(MessagesCompanion.insert(accountId: account.id, folderId: sent, uid: 1, fromAddress: const Value('my@remarkable.com')));
     await db.discoverIdentitiesFromSent(account.id, sent);
     expect((await db.identitiesForAccount(account.id)).map((i) => i.email), isNot(contains('my@remarkable.com')));
+  });
+
+  test('a new address on a set-up domain gets its password, once the server takes it', () async {
+    // ca@ already sends with the domain-wide password.
+    await store.write(CredentialStore.identityPasswordKey(alias.id), 'domain-secret');
+    await db.setIdentityServer(alias.id, suggestedServerFor(alias.email));
+
+    final contact = (await db.identityById(await db.addIdentity(account.id, 'Contact@ClayAiken.com', name: 'Contact')))!;
+    expect(contact.email, 'contact@clayaiken.com');
+    expect(await reuseDomainSending(db: db, store: store, sender: smtp, identity: contact), isTrue);
+    expect(smtp.verified.single.$2.username, 'contact@clayaiken.com');
+    expect(await store.read(CredentialStore.identityPasswordKey(contact.id)), 'domain-secret');
+    expect(needsSendingSetup((await db.identityById(contact.id))!, account), isFalse);
+
+    // A domain with nothing set up, or a refused password, leaves it to set up.
+    final other = (await db.identityById(await db.addIdentity(account.id, 'cheryl@duraleigh.com')))!;
+    expect(await reuseDomainSending(db: db, store: store, sender: smtp, identity: other), isFalse);
+    smtp.failWith = const MailTransportException('no', isAuthFailure: true);
+    final refused = (await db.identityById(await db.addIdentity(account.id, 'new@clayaiken.com')))!;
+    expect(await reuseDomainSending(db: db, store: store, sender: smtp, identity: refused), isFalse);
+    expect(await store.read(CredentialStore.identityPasswordKey(refused.id)), isNull);
+  });
+
+  test('adding a removed address brings it back', () async {
+    await db.removeIdentity(alias.id);
+    expect(await db.addIdentity(account.id, 'ca@clayaiken.com'), alias.id);
+    expect((await db.identitiesForAccount(account.id)).map((i) => i.email), contains('ca@clayaiken.com'));
   });
 
   testWidgets('a password the server refuses is not saved and says so', (tester) async {

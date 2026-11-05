@@ -11,6 +11,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
 import '../chats/compose/compose_form.dart';
+import 'add_address_dialog.dart';
 import 'sending_setup_dialog.dart';
 
 /// Settings → Accounts → Identities & signatures (spec 4.4): per identity a
@@ -37,6 +38,16 @@ class SignaturesSection extends ConsumerWidget {
         const SizedBox(height: AppSpace.md),
         GroupedList(
           children: [for (final i in identities) _IdentityTile(key: ValueKey('identity-${i.id}'), identity: i, account: accounts.where((a) => a.id == i.accountId).firstOrNull)],
+        ),
+        const SizedBox(height: AppSpace.md),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            key: const ValueKey('add-address'),
+            onPressed: () => showAddAddressDialog(context, accounts),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            label: const Text('Add an address'),
+          ),
         ),
       ],
     );
