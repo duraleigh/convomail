@@ -11,7 +11,7 @@ import 'package:path_provider/path_provider.dart';
 /// block-based editor with headings, lists, bold/italic/underline, inline
 /// images).
 class ComposeEditorController extends ChangeNotifier {
-  ComposeEditorController({String? bodyJson, String? html, List<String> signatureLines = const []}) {
+  ComposeEditorController({String? bodyJson, String? html, List<Node> signature = const []}) {
     Document? doc;
     if (bodyJson != null && bodyJson.isNotEmpty) {
       try {
@@ -24,10 +24,11 @@ class ComposeEditorController extends ChangeNotifier {
       } catch (_) {}
     }
     doc ??= Document.blank(withInitialText: true);
-    if (signatureLines.isNotEmpty && (bodyJson == null || bodyJson.isEmpty)) {
+    if (signature.isNotEmpty && (bodyJson == null || bodyJson.isEmpty)) {
       doc.root.insert(paragraphNode());
-      for (final line in signatureLines) {
-        doc.root.insert(paragraphNode(text: line));
+      for (final n in signature) {
+        doc.root.insert(n);
+        _signature.add(n);
       }
     }
     if (doc.root.children.isEmpty) doc.root.insert(paragraphNode());
@@ -37,13 +38,51 @@ class ComposeEditorController extends ChangeNotifier {
 
   late final EditorState editorState;
 
+  /// The signature blocks this composer put in, so a change of From address
+  /// can swap them for the new address's signature.
+  final List<Node> _signature = [];
+
+  /// Replaces the signature put in earlier with [next], keeping its place.
+  /// Blocks the user deleted stay deleted; with none left, [next] goes at
+  /// the end.
+  Future<void> replaceSignature(List<Node> next) async {
+    final remaining = _signature.where((n) => n.parent != null && identical(_rootOf(n), editorState.document.root)).toList();
+    final t = editorState.transaction;
+    Path at;
+    if (remaining.isNotEmpty) {
+      at = remaining.first.path;
+      t.deleteNodes(remaining);
+    } else {
+      final children = editorState.document.root.children;
+      at = [children.length];
+      if (next.isNotEmpty && children.isNotEmpty && !(children.last.type == ParagraphBlockKeys.type && (children.last.delta?.isEmpty ?? false))) {
+        t.insertNode(at, paragraphNode());
+        at = [children.length + 1];
+      }
+    }
+    if (next.isNotEmpty) t.insertNodes(at, next, deepCopy: false);
+    _signature
+      ..clear()
+      ..addAll(next);
+    if (t.operations.isNotEmpty) await editorState.apply(t, withUpdateSelection: false);
+  }
+
+  static Node _rootOf(Node n) {
+    var r = n;
+    while (r.parent != null) {
+      r = r.parent!;
+    }
+    return r;
+  }
+
   /// Editor JSON for the draft table.
   String toJson() => jsonEncode(editorState.document.toJson());
 
   /// HTML fragment for the outgoing message.
   String toHtml() {
     try {
-      return documentToHTML(editorState.document);
+      // Picture sizes as whole pixels: "200", not "200.0".
+      return documentToHTML(editorState.document).replaceAllMapped(RegExp(r'(width|height)="(\d+)(?:\.\d+)?"'), (m) => '${m[1]}="${m[2]}"');
     } catch (_) {
       return plainText().split('\n').map((l) => '<p>${const HtmlEscape().convert(l)}</p>').join();
     }

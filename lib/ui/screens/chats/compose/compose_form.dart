@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:appflowy_editor/appflowy_editor.dart' show Node;
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:enough_mail/enough_mail.dart' show MediaType;
@@ -13,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../../app/account_scope.dart';
 import '../../../../app/compose_state.dart';
+import '../../../../domain/signature.dart';
 import '../../../../mail/mail_transport.dart';
 import '../../../../mail/models.dart';
 import '../../../../mail/outgoing.dart';
@@ -181,8 +183,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       }
     }
 
-    final signature = identity?.signature.trim() ?? '';
-    _editor = ComposeEditorController(bodyJson: bodyJson, html: bodyHtml, signatureLines: signature.isEmpty || draft != null ? const [] : signature.split('\n'));
+    _editor = ComposeEditorController(bodyJson: bodyJson, html: bodyHtml, signature: identity == null || draft != null ? const <Node>[] : signatureNodes(identity));
     _editor!.addListener(_touched);
     if (!mounted) return;
     setState(() => _loading = false);
@@ -255,7 +256,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     setState(() {
       for (final path in paths) {
         if (_attachments.any((a) => a.path == path)) continue;
-        _attachments.add(OutgoingAttachment(fileName: p.basename(path), mimeType: MediaType.guessFromFileName(path).text, path: path));
+        _attachments.add(OutgoingAttachment(fileName: p.basename(path), mimeType: MimeFactory.imageMimeType(path) ?? MediaType.guessFromFileName(path).text, path: path));
       }
     });
     _touched();
@@ -593,6 +594,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                           onChanged: (id) {
                             final i = identities.where((x) => x.id == id).firstOrNull;
                             if (i == null) return;
+                            if (i.id != _identityId) unawaited(_editor?.replaceSignature(signatureNodes(i)));
                             setState(() {
                               _identityId = i.id;
                               _accountId = i.accountId;

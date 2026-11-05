@@ -65,6 +65,11 @@ extension ComposeQueries on AppDatabase {
         signature: signature == null ? const Value.absent() : Value(signature),
       ));
 
+  /// Stores the signature document ([json], null to clear) with its text,
+  /// which is what plain-text mail and search use.
+  Future<void> setIdentitySignature(int id, {required String? json, required String plainText}) =>
+      (update(identities)..where((i) => i.id.equals(id))).write(IdentitiesCompanion(signatureJson: Value(json), signature: Value(plainText)));
+
   /// Gives the identity a server of its own (with its own login), or with
   /// null takes it away so the identity sends through its account again.
   Future<void> setIdentityServer(int id, ServerConfig? server, {String? username}) => (update(identities)..where((i) => i.id.equals(id))).write(IdentitiesCompanion(

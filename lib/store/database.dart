@@ -59,6 +59,9 @@ class Identities extends Table {
   TextColumn get email => text()();
   TextColumn get name => text().withDefault(const Constant(''))();
   TextColumn get signature => text().withDefault(const Constant(''))();
+  /// The signature as an editor document (text, links, pictures). Null
+  /// means the plain-text [signature] is used.
+  TextColumn get signatureJson => text().nullable()();
   TextColumn get smtpHost => text().nullable()();
   IntColumn get smtpPort => integer().nullable()();
   TextColumn get smtpSecurity => text().nullable()();
@@ -557,7 +560,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 16;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -678,6 +681,9 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           }
           if (from < 16) {
             await m.addColumn(identities, identities.hidden);
+          }
+          if (from < 17) {
+            await m.addColumn(identities, identities.signatureJson);
           }
         },
         beforeOpen: (details) async {

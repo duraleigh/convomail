@@ -1279,6 +1279,17 @@ class $IdentitiesTable extends Identities
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _signatureJsonMeta = const VerificationMeta(
+    'signatureJson',
+  );
+  @override
+  late final GeneratedColumn<String> signatureJson = GeneratedColumn<String>(
+    'signature_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _smtpHostMeta = const VerificationMeta(
     'smtpHost',
   );
@@ -1373,6 +1384,7 @@ class $IdentitiesTable extends Identities
     email,
     name,
     signature,
+    signatureJson,
     smtpHost,
     smtpPort,
     smtpSecurity,
@@ -1422,6 +1434,15 @@ class $IdentitiesTable extends Identities
       context.handle(
         _signatureMeta,
         signature.isAcceptableOrUnknown(data['signature']!, _signatureMeta),
+      );
+    }
+    if (data.containsKey('signature_json')) {
+      context.handle(
+        _signatureJsonMeta,
+        signatureJson.isAcceptableOrUnknown(
+          data['signature_json']!,
+          _signatureJsonMeta,
+        ),
       );
     }
     if (data.containsKey('smtp_host')) {
@@ -1501,6 +1522,10 @@ class $IdentitiesTable extends Identities
         DriftSqlType.string,
         data['${effectivePrefix}signature'],
       )!,
+      signatureJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}signature_json'],
+      ),
       smtpHost: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}smtp_host'],
@@ -1544,6 +1569,10 @@ class Identity extends DataClass implements Insertable<Identity> {
   final String email;
   final String name;
   final String signature;
+
+  /// The signature as an editor document (text, links, pictures). Null
+  /// means the plain-text [signature] is used.
+  final String? signatureJson;
   final String? smtpHost;
   final int? smtpPort;
   final String? smtpSecurity;
@@ -1566,6 +1595,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     required this.email,
     required this.name,
     required this.signature,
+    this.signatureJson,
     this.smtpHost,
     this.smtpPort,
     this.smtpSecurity,
@@ -1582,6 +1612,9 @@ class Identity extends DataClass implements Insertable<Identity> {
     map['email'] = Variable<String>(email);
     map['name'] = Variable<String>(name);
     map['signature'] = Variable<String>(signature);
+    if (!nullToAbsent || signatureJson != null) {
+      map['signature_json'] = Variable<String>(signatureJson);
+    }
     if (!nullToAbsent || smtpHost != null) {
       map['smtp_host'] = Variable<String>(smtpHost);
     }
@@ -1607,6 +1640,9 @@ class Identity extends DataClass implements Insertable<Identity> {
       email: Value(email),
       name: Value(name),
       signature: Value(signature),
+      signatureJson: signatureJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(signatureJson),
       smtpHost: smtpHost == null && nullToAbsent
           ? const Value.absent()
           : Value(smtpHost),
@@ -1636,6 +1672,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       email: serializer.fromJson<String>(json['email']),
       name: serializer.fromJson<String>(json['name']),
       signature: serializer.fromJson<String>(json['signature']),
+      signatureJson: serializer.fromJson<String?>(json['signatureJson']),
       smtpHost: serializer.fromJson<String?>(json['smtpHost']),
       smtpPort: serializer.fromJson<int?>(json['smtpPort']),
       smtpSecurity: serializer.fromJson<String?>(json['smtpSecurity']),
@@ -1654,6 +1691,7 @@ class Identity extends DataClass implements Insertable<Identity> {
       'email': serializer.toJson<String>(email),
       'name': serializer.toJson<String>(name),
       'signature': serializer.toJson<String>(signature),
+      'signatureJson': serializer.toJson<String?>(signatureJson),
       'smtpHost': serializer.toJson<String?>(smtpHost),
       'smtpPort': serializer.toJson<int?>(smtpPort),
       'smtpSecurity': serializer.toJson<String?>(smtpSecurity),
@@ -1670,6 +1708,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     String? email,
     String? name,
     String? signature,
+    Value<String?> signatureJson = const Value.absent(),
     Value<String?> smtpHost = const Value.absent(),
     Value<int?> smtpPort = const Value.absent(),
     Value<String?> smtpSecurity = const Value.absent(),
@@ -1683,6 +1722,9 @@ class Identity extends DataClass implements Insertable<Identity> {
     email: email ?? this.email,
     name: name ?? this.name,
     signature: signature ?? this.signature,
+    signatureJson: signatureJson.present
+        ? signatureJson.value
+        : this.signatureJson,
     smtpHost: smtpHost.present ? smtpHost.value : this.smtpHost,
     smtpPort: smtpPort.present ? smtpPort.value : this.smtpPort,
     smtpSecurity: smtpSecurity.present ? smtpSecurity.value : this.smtpSecurity,
@@ -1698,6 +1740,9 @@ class Identity extends DataClass implements Insertable<Identity> {
       email: data.email.present ? data.email.value : this.email,
       name: data.name.present ? data.name.value : this.name,
       signature: data.signature.present ? data.signature.value : this.signature,
+      signatureJson: data.signatureJson.present
+          ? data.signatureJson.value
+          : this.signatureJson,
       smtpHost: data.smtpHost.present ? data.smtpHost.value : this.smtpHost,
       smtpPort: data.smtpPort.present ? data.smtpPort.value : this.smtpPort,
       smtpSecurity: data.smtpSecurity.present
@@ -1722,6 +1767,7 @@ class Identity extends DataClass implements Insertable<Identity> {
           ..write('email: $email, ')
           ..write('name: $name, ')
           ..write('signature: $signature, ')
+          ..write('signatureJson: $signatureJson, ')
           ..write('smtpHost: $smtpHost, ')
           ..write('smtpPort: $smtpPort, ')
           ..write('smtpSecurity: $smtpSecurity, ')
@@ -1740,6 +1786,7 @@ class Identity extends DataClass implements Insertable<Identity> {
     email,
     name,
     signature,
+    signatureJson,
     smtpHost,
     smtpPort,
     smtpSecurity,
@@ -1757,6 +1804,7 @@ class Identity extends DataClass implements Insertable<Identity> {
           other.email == this.email &&
           other.name == this.name &&
           other.signature == this.signature &&
+          other.signatureJson == this.signatureJson &&
           other.smtpHost == this.smtpHost &&
           other.smtpPort == this.smtpPort &&
           other.smtpSecurity == this.smtpSecurity &&
@@ -1772,6 +1820,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
   final Value<String> email;
   final Value<String> name;
   final Value<String> signature;
+  final Value<String?> signatureJson;
   final Value<String?> smtpHost;
   final Value<int?> smtpPort;
   final Value<String?> smtpSecurity;
@@ -1785,6 +1834,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     this.email = const Value.absent(),
     this.name = const Value.absent(),
     this.signature = const Value.absent(),
+    this.signatureJson = const Value.absent(),
     this.smtpHost = const Value.absent(),
     this.smtpPort = const Value.absent(),
     this.smtpSecurity = const Value.absent(),
@@ -1799,6 +1849,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     required String email,
     this.name = const Value.absent(),
     this.signature = const Value.absent(),
+    this.signatureJson = const Value.absent(),
     this.smtpHost = const Value.absent(),
     this.smtpPort = const Value.absent(),
     this.smtpSecurity = const Value.absent(),
@@ -1814,6 +1865,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     Expression<String>? email,
     Expression<String>? name,
     Expression<String>? signature,
+    Expression<String>? signatureJson,
     Expression<String>? smtpHost,
     Expression<int>? smtpPort,
     Expression<String>? smtpSecurity,
@@ -1828,6 +1880,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
       if (email != null) 'email': email,
       if (name != null) 'name': name,
       if (signature != null) 'signature': signature,
+      if (signatureJson != null) 'signature_json': signatureJson,
       if (smtpHost != null) 'smtp_host': smtpHost,
       if (smtpPort != null) 'smtp_port': smtpPort,
       if (smtpSecurity != null) 'smtp_security': smtpSecurity,
@@ -1844,6 +1897,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     Value<String>? email,
     Value<String>? name,
     Value<String>? signature,
+    Value<String?>? signatureJson,
     Value<String?>? smtpHost,
     Value<int?>? smtpPort,
     Value<String?>? smtpSecurity,
@@ -1858,6 +1912,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
       email: email ?? this.email,
       name: name ?? this.name,
       signature: signature ?? this.signature,
+      signatureJson: signatureJson ?? this.signatureJson,
       smtpHost: smtpHost ?? this.smtpHost,
       smtpPort: smtpPort ?? this.smtpPort,
       smtpSecurity: smtpSecurity ?? this.smtpSecurity,
@@ -1885,6 +1940,9 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
     }
     if (signature.present) {
       map['signature'] = Variable<String>(signature.value);
+    }
+    if (signatureJson.present) {
+      map['signature_json'] = Variable<String>(signatureJson.value);
     }
     if (smtpHost.present) {
       map['smtp_host'] = Variable<String>(smtpHost.value);
@@ -1918,6 +1976,7 @@ class IdentitiesCompanion extends UpdateCompanion<Identity> {
           ..write('email: $email, ')
           ..write('name: $name, ')
           ..write('signature: $signature, ')
+          ..write('signatureJson: $signatureJson, ')
           ..write('smtpHost: $smtpHost, ')
           ..write('smtpPort: $smtpPort, ')
           ..write('smtpSecurity: $smtpSecurity, ')
@@ -16814,6 +16873,7 @@ typedef $$IdentitiesTableCreateCompanionBuilder = IdentitiesCompanion Function({
   required String email,
   Value<String> name,
   Value<String> signature,
+  Value<String?> signatureJson,
   Value<String?> smtpHost,
   Value<int?> smtpPort,
   Value<String?> smtpSecurity,
@@ -16828,6 +16888,7 @@ typedef $$IdentitiesTableUpdateCompanionBuilder = IdentitiesCompanion Function({
   Value<String> email,
   Value<String> name,
   Value<String> signature,
+  Value<String?> signatureJson,
   Value<String?> smtpHost,
   Value<int?> smtpPort,
   Value<String?> smtpSecurity,
@@ -16885,6 +16946,11 @@ class $$IdentitiesTableFilterComposer
 
   ColumnFilters<String> get signature => $composableBuilder(
     column: $table.signature,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get signatureJson => $composableBuilder(
+    column: $table.signatureJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -16976,6 +17042,11 @@ class $$IdentitiesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get signatureJson => $composableBuilder(
+    column: $table.signatureJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get smtpHost => $composableBuilder(
     column: $table.smtpHost,
     builder: (column) => ColumnOrderings(column),
@@ -17055,6 +17126,11 @@ class $$IdentitiesTableAnnotationComposer
 
   GeneratedColumn<String> get signature =>
       $composableBuilder(column: $table.signature, builder: (column) => column);
+
+  GeneratedColumn<String> get signatureJson => $composableBuilder(
+    column: $table.signatureJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get smtpHost =>
       $composableBuilder(column: $table.smtpHost, builder: (column) => column);
@@ -17140,6 +17216,7 @@ class $$IdentitiesTableTableManager
                 Value<String> email = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> signature = const Value.absent(),
+                Value<String?> signatureJson = const Value.absent(),
                 Value<String?> smtpHost = const Value.absent(),
                 Value<int?> smtpPort = const Value.absent(),
                 Value<String?> smtpSecurity = const Value.absent(),
@@ -17153,6 +17230,7 @@ class $$IdentitiesTableTableManager
                 email: email,
                 name: name,
                 signature: signature,
+                signatureJson: signatureJson,
                 smtpHost: smtpHost,
                 smtpPort: smtpPort,
                 smtpSecurity: smtpSecurity,
@@ -17168,6 +17246,7 @@ class $$IdentitiesTableTableManager
                 required String email,
                 Value<String> name = const Value.absent(),
                 Value<String> signature = const Value.absent(),
+                Value<String?> signatureJson = const Value.absent(),
                 Value<String?> smtpHost = const Value.absent(),
                 Value<int?> smtpPort = const Value.absent(),
                 Value<String?> smtpSecurity = const Value.absent(),
@@ -17181,6 +17260,7 @@ class $$IdentitiesTableTableManager
                 email: email,
                 name: name,
                 signature: signature,
+                signatureJson: signatureJson,
                 smtpHost: smtpHost,
                 smtpPort: smtpPort,
                 smtpSecurity: smtpSecurity,

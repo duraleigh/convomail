@@ -13,9 +13,10 @@ import '../../widgets/tonal_avatar.dart';
 import '../chats/compose/compose_form.dart';
 import 'add_address_dialog.dart';
 import 'sending_setup_dialog.dart';
+import 'signature_editor.dart';
 
 /// Settings → Accounts → Identities & signatures (spec 4.4): per identity a
-/// display name, a plain-text signature inserted into new messages and
+/// display name, a signature (text and pictures) inserted into new messages and
 /// replies, and which identity an account sends from by default.
 class SignaturesSection extends ConsumerWidget {
   const SignaturesSection({super.key, required this.accounts});
@@ -65,7 +66,6 @@ class _IdentityTile extends ConsumerStatefulWidget {
 
 class _IdentityTileState extends ConsumerState<_IdentityTile> {
   late final _name = TextEditingController(text: widget.identity.name);
-  late final _signature = TextEditingController(text: widget.identity.signature);
   Timer? _debounce;
   bool _saved = false;
 
@@ -73,14 +73,13 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
   void dispose() {
     _debounce?.cancel();
     _name.dispose();
-    _signature.dispose();
     super.dispose();
   }
 
   void _changed() {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 600), () async {
-      await ref.read(databaseProvider).updateIdentity(widget.identity.id, name: _name.text.trim(), signature: _signature.text.trimRight());
+      await ref.read(databaseProvider).updateIdentity(widget.identity.id, name: _name.text.trim());
       if (mounted) setState(() => _saved = true);
     });
     if (_saved) setState(() => _saved = false);
@@ -158,14 +157,7 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
             onChanged: (_) => _changed(),
           ),
           const SizedBox(height: AppSpace.md),
-          TextField(
-            key: ValueKey('identity-signature-${i.id}'),
-            controller: _signature,
-            minLines: 2,
-            maxLines: 6,
-            decoration: const InputDecoration(labelText: 'Signature', hintText: 'Best,\nYour name', isDense: true, border: OutlineInputBorder(), alignLabelWithHint: true),
-            onChanged: (_) => _changed(),
-          ),
+          SignatureEditor(identity: i),
         ],
       ),
     );

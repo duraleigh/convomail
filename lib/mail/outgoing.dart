@@ -122,9 +122,10 @@ abstract final class MimeFactory {
       if (!file.existsSync()) continue;
       n++;
       final cid = 'img$n.${DateTime.now().millisecondsSinceEpoch}@convomail';
+      final name = path.split(RegExp(r'[\\/]')).last;
       inline.add(OutgoingAttachment(
-        fileName: file.uri.pathSegments.isEmpty ? 'image$n' : file.uri.pathSegments.last,
-        mimeType: MediaType.guessFromFileName(path).text,
+        fileName: name.isEmpty ? 'image$n' : name,
+        mimeType: imageMimeType(name) ?? MediaType.guessFromFileName(name).text,
         path: path,
         contentId: cid,
       ));
@@ -200,6 +201,17 @@ abstract final class MimeFactory {
     final i = address.lastIndexOf('@');
     return i < 0 ? 'convomail.local' : address.substring(i + 1);
   }
+
+  /// The picture type for [fileName] by its extension, so an inline picture
+  /// is labelled as one (the mail library's guess misses GIF).
+  static String? imageMimeType(String fileName) => switch (fileName.toLowerCase().split('.').last) {
+        'gif' => 'image/gif',
+        'png' => 'image/png',
+        'jpg' || 'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+        'bmp' => 'image/bmp',
+        _ => null,
+      };
 
   static bool isLocalSource(String src) {
     final lower = src.toLowerCase();
