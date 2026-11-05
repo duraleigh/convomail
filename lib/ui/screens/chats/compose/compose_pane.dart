@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/compose_state.dart';
 import '../../../../store/compose_queries.dart';
 import '../../../../store/database.dart';
-import '../../../theme/tokens.dart';
 import 'compose_form.dart';
 
 final latestNewDraftProvider = StreamProvider<Draft?>((ref) => ref.watch(databaseProvider).watchLatestNewDraft());
@@ -22,10 +21,11 @@ class ComposePane extends ConsumerWidget {
     final draft = ref.watch(latestNewDraftProvider);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 12, 12),
+      // Runs to the window's own edges: no inset border of its own.
+      padding: EdgeInsets.zero,
       child: Material(
         color: scheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppShapes.xl),
+        borderRadius: BorderRadius.zero,
         clipBehavior: Clip.antiAlias,
         child: draft.when(
           loading: () => const Center(child: CircularProgressIndicator()),

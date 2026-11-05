@@ -68,10 +68,11 @@ class ConversationPane extends ConsumerWidget {
     });
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 12, 12, 12),
+      // Runs to the window's own edges: no inset border of its own.
+      padding: EdgeInsets.zero,
       child: Material(
         color: scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(AppShapes.xl),
+        borderRadius: BorderRadius.zero,
         clipBehavior: Clip.antiAlias,
         // A selection can go stale when its messages vanish from the server
         // (deleted elsewhere) or get re-filed; fall back to the empty state
