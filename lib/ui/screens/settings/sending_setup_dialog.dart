@@ -34,7 +34,19 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
   late final _username = TextEditingController(text: widget.identity.smtpUsername ?? widget.identity.email);
   final _password = TextEditingController();
   late ConnectionSecurity _security = _start.security;
+  late final String _domain = emailDomain(widget.identity.email);
+  bool _wholeDomain = true;
+  List<String> _peers = const [];
   bool _showServer = false;
+
+  @override
+  void initState() {
+    super.initState();
+    ref.read(databaseProvider).identitiesForAccount(widget.identity.accountId).then((all) {
+      if (!mounted) return;
+      setState(() => _peers = [for (final i in all) if (i.id != widget.identity.id && i.smtpHost == null && emailDomain(i.email) == _domain) i.email]);
+    });
+  }
   bool _working = false;
   String? _error;
 
@@ -61,8 +73,21 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
       // Signs in without sending, so a wrong password shows up here and
       // not as a bounced email later.
       await ref.read(mailSenderProvider).verify(server, credentials);
-      await ref.read(credentialStoreProvider).write(CredentialStore.identityPasswordKey(widget.identity.id), credentials.password);
-      await ref.read(databaseProvider).setIdentityServer(widget.identity.id, server, username: credentials.username == widget.identity.email ? null : credentials.username);
+      final db = ref.read(databaseProvider);
+      final store = ref.read(credentialStoreProvider);
+      final ownUsername = credentials.username.toLowerCase() == widget.identity.email.toLowerCase();
+      // A domain-wide password (Forward Email's catch-all password) works
+      // for every address on the domain, each signing in as itself.
+      final targets = [
+        widget.identity,
+        if (_wholeDomain && ownUsername && _peers.isNotEmpty)
+          for (final i in await db.identitiesForAccount(widget.identity.accountId))
+            if (_peers.contains(i.email)) i,
+      ];
+      for (final i in targets) {
+        await store.write(CredentialStore.identityPasswordKey(i.id), credentials.password);
+        await db.setIdentityServer(i.id, server, username: i.id == widget.identity.id && !ownUsername ? credentials.username : null);
+      }
       if (mounted) Navigator.of(context).pop(true);
     } on MailTransportException catch (e) {
       if (mounted) {
@@ -92,8 +117,7 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
             if (forwardEmail) ...[
               const SizedBox(height: AppSpace.sm),
               Text(
-                'It is the password Forward Email made for this address (on forwardemail.net, open the address and choose Generate Password), '
-                'the same one Gmail uses to send as $email.',
+                'Use the Forward Email password for this address, or the catch-all password for $_domain, which works for every address on it.',
                 style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
               ),
             ],
@@ -107,7 +131,18 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
               decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder()),
               onSubmitted: (_) => _save(),
             ),
-            const SizedBox(height: AppSpace.sm),
+            if (_peers.isNotEmpty)
+              CheckboxListTile(
+                key: const ValueKey('sending-whole-domain'),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                dense: true,
+                value: _wholeDomain,
+                onChanged: _working ? null : (v) => setState(() => _wholeDomain = v ?? false),
+                title: Text('Also use it for ${_peers.join(', ')}'),
+              )
+            else
+              const SizedBox(height: AppSpace.sm),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(

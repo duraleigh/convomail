@@ -10,7 +10,10 @@ import 'provider_config.dart';
 // through the account's server instead, it arrives from a server its domain
 // never approved, and a domain with a strict DMARC policy has it bounced.
 
-String _domain(String email) => email.substring(email.lastIndexOf('@') + 1).toLowerCase();
+/// The domain part of [email], lowercased.
+String emailDomain(String email) => email.substring(email.lastIndexOf('@') + 1).toLowerCase();
+
+String _domain(String email) => emailDomain(email);
 
 /// True when [identity] sends through its account's server and login.
 bool sendsThroughAccount(Identity identity, Account account) => identity.smtpHost == null && _domain(identity.email) == _domain(account.email);

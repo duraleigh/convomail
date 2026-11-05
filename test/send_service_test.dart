@@ -178,7 +178,7 @@ void main() {
     expect(imap.appended, isEmpty);
   });
 
-  test("an address with its own server sends through it with its own login, and a Sent copy is kept", () async {
+  test('an address with its own server sends through it with its own login, and a Sent copy is kept', () async {
     await setUpWith(providerId: 'gmail');
     final alias = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'ca@clayaiken.com', discovered: const Value(true)));
     await db.setIdentityServer(alias, const ServerConfig(host: 'smtp.forwardemail.net', port: 465, security: ConnectionSecurity.ssl));

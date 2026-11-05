@@ -68,6 +68,27 @@ void main() {
     expect(needsSendingSetup(saved, account), isFalse);
   });
 
+  testWidgets('one domain password covers the other addresses on that domain', (tester) async {
+    final cheryl = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'cheryl@clayaiken.com', discovered: const Value(true)));
+    final other = await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'clay@duraleigh.com', discovered: const Value(true)));
+    await pumpDialog(tester);
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+    expect(find.text('Also use it for cheryl@clayaiken.com'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('sending-password')), 'domain-secret');
+    await tester.tap(find.byKey(const ValueKey('sending-save')));
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+    await tester.pump();
+
+    expect(await store.read(CredentialStore.identityPasswordKey(cheryl)), 'domain-secret');
+    final saved = (await tester.runAsync(() => db.identityById(cheryl)))!;
+    expect(saved.smtpHost, 'smtp.forwardemail.net');
+    expect(saved.smtpUsername, isNull, reason: 'each address signs in as itself');
+    expect(await store.read(CredentialStore.identityPasswordKey(other)), isNull);
+    expect((await tester.runAsync(() => db.identityById(other)))!.smtpHost, isNull);
+  });
+
   testWidgets('a password the server refuses is not saved and says so', (tester) async {
     smtp.failWith = const MailTransportException('The mail server rejected the username or password.', isAuthFailure: true);
     await pumpDialog(tester);
