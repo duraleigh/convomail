@@ -26,13 +26,13 @@ void main() {
   late AppDatabase db;
   late int sarahMsg2;
 
-  Widget app() => ProviderScope(
+  Widget app({HtmlRendererBuilder? renderer}) => ProviderScope(
         overrides: [
           settingsStoreProvider.overrideWith((ref) => InMemorySettingsStore()),
           databaseProvider.overrideWith((ref) => db),
           credentialStoreProvider.overrideWith((ref) => InMemoryCredentialStore()),
           transportFactoryProvider.overrideWith((ref) => () => FakeMailTransport()),
-          htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
+          htmlRendererProvider.overrideWith((ref) => renderer ?? (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
         ],
         child: const ConvoMailApp(startSync: false),
       );
@@ -106,11 +106,11 @@ void main() {
     await db.close();
   }
 
-  Future<void> openSarah(WidgetTester tester) async {
+  Future<void> openSarah(WidgetTester tester, {HtmlRendererBuilder? renderer}) async {
     tester.view.physicalSize = const Size(1500, 950);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    await tester.pumpWidget(app());
+    await tester.pumpWidget(app(renderer: renderer));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sarah Chen').first);
     await tester.pumpAndSettle();
@@ -243,4 +243,50 @@ void main() {
     expect(container.read(selectedRowProvider), 'c:sarah@x.com');
     await teardown(tester);
   });
+
+  testWidgets('an open email is kept, not loaded again, when the chat redraws', (tester) async {
+    // Each time the email's view starts from scratch it loads the page again:
+    // on screen, a flash.
+    var starts = 0;
+    await openSarah(tester, renderer: (context, html, {maxHeight = 1200}) => _CountingBody(html: html, onStart: () => starts++));
+    await tester.tap(find.text('Re: Design review'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Final version attached'), findsOneWidget);
+    final before = starts;
+    expect(before, greaterThan(0));
+
+    // Starred, and another message changing: both redraw the chat.
+    await (db.update(db.messages)..where((m) => m.id.equals(sarahMsg2))).write(const MessagesCompanion(isFlagged: Value(true)));
+    await tester.pumpAndSettle();
+    await (db.update(db.messages)..where((m) => m.subject.equals('Lunch?'))).write(const MessagesCompanion(isSeen: Value(false)));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Final version attached'), findsOneWidget);
+    expect(starts, before, reason: 'the open emails were kept');
+    await teardown(tester);
+  });
+
+  test('each page load is marked so older pages are ignored', () {
+    expect(tagMailPage('<!DOCTYPE html><html><head></head><body>Hi</body></html>', '7'), '<!DOCTYPE html><html data-cm="7"><head></head><body>Hi</body></html>');
+    expect(tagMailPage('<p>Hi</p>', '8'), contains('<html data-cm="8">'));
+  });
+}
+
+class _CountingBody extends StatefulWidget {
+  const _CountingBody({required this.html, required this.onStart});
+  final String html;
+  final VoidCallback onStart;
+
+  @override
+  State<_CountingBody> createState() => _CountingBodyState();
+}
+
+class _CountingBodyState extends State<_CountingBody> {
+  @override
+  void initState() {
+    super.initState();
+    widget.onStart();
+  }
+
+  @override
+  Widget build(BuildContext context) => PlainHtmlFallback(html: widget.html);
 }

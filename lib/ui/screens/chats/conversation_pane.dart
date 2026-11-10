@@ -241,7 +241,7 @@ class _ThreadedList extends ConsumerWidget {
     final scrollTo = ref.watch(scrollToMessageProvider);
     if (scrollTo != null && messages.any((m) => m.id == scrollTo)) {
       final target = messages.firstWhere((m) => m.id == scrollTo);
-      final key = GlobalObjectKey('thread-${target.threadKey ?? 'm:${target.id}'}');
+      final key = _cardKey(_cardId(target));
       WidgetsBinding.instance.addPostFrameCallback((_) {
         final ctx = key.currentContext;
         if (ctx != null) Scrollable.ensureVisible(ctx, alignment: 0.1, duration: const Duration(milliseconds: 250));
@@ -277,7 +277,7 @@ class _ThreadedList extends ConsumerWidget {
         final msgs = e.value;
         final isExpanded = forceExpanded || msgs.any((m) => expanded.contains(m.id));
         items.add(Padding(
-          key: GlobalObjectKey('thread-${e.key}'),
+          key: _cardKey('${sec.day.millisecondsSinceEpoch}|${e.key}'),
           padding: const EdgeInsets.only(bottom: 8),
           child: _ThreadCard(
             threadKey: e.key,
@@ -320,6 +320,18 @@ class _ThreadedList extends ConsumerWidget {
     if (diff < 7) return 'LAST ${const ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'][day.weekday - 1]}';
     return '${const ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][day.month - 1]} ${day.day}${day.year == now.year ? '' : ', ${day.year}'}';
   }
+}
+
+/// One key per thread card (a thread can show under more than one day), kept
+/// for the session. The same key object every build means a card, and the
+/// email open inside it, survives redraws instead of being built again from
+/// scratch (each rebuild reloaded the email: a visible flash).
+final _cardKeys = <String, GlobalKey>{};
+GlobalKey _cardKey(String id) => _cardKeys.putIfAbsent(id, GlobalKey.new);
+
+String _cardId(Message m) {
+  final ts = (m.date ?? m.internalDate ?? DateTime.fromMillisecondsSinceEpoch(0)).toLocal();
+  return '${DateTime(ts.year, ts.month, ts.day).millisecondsSinceEpoch}|${m.threadKey ?? 'm:${m.id}'}';
 }
 
 class _DaySection {
@@ -435,7 +447,7 @@ class _ThreadCard extends StatelessWidget {
                     for (var i = messages.length - 1; i >= 0; i--) ...[
                       if (i != messages.length - 1) Divider(height: 24, color: scheme.outlineVariant),
                       if (openIds.contains(messages[i].id))
-                        MessageCard(message: messages[i], threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread)
+                        MessageCard(key: ValueKey('message-card-${messages[i].id}'), message: messages[i],threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread)
                       else
                         _CollapsedMessage(message: messages[i], onOpen: () => onOpenMessage?.call(messages[i].id)),
                     ],

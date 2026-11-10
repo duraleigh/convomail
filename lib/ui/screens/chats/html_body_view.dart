@@ -63,15 +63,17 @@ class WebViewPool {
         if (href) window.chrome.webview.postMessage(JSON.stringify({type:'link', href: href}));
       }, true);
       function height(){ return Math.ceil(document.documentElement.scrollHeight); }
+      // Which load this page is, so word from an earlier page is ignored.
+      function page(){ return document.documentElement.getAttribute('data-cm') || ''; }
       // "ready" goes once, after the page has laid out and painted twice,
       // so the view is shown only when it already looks right.
       function ready(){
         requestAnimationFrame(function(){ requestAnimationFrame(function(){
-          window.chrome.webview.postMessage(JSON.stringify({type:'ready', h: height()}));
+          window.chrome.webview.postMessage(JSON.stringify({type:'ready', h: height(), p: page()}));
           var last = height();
           new ResizeObserver(function(){
             var h = height();
-            if (Math.abs(h - last) > 16) { last = h; window.chrome.webview.postMessage(JSON.stringify({type:'height', h: h})); }
+            if (Math.abs(h - last) > 16) { last = h; window.chrome.webview.postMessage(JSON.stringify({type:'height', h: h, p: page()})); }
           }).observe(document.documentElement);
         }); });
       }
@@ -150,6 +152,14 @@ class WebViewPool {
   }
 }
 
+/// Marks a page's `<html>` element with which load it is ([page]), so the
+/// view's reports about an earlier page can be told apart.
+String tagMailPage(String html, String page) {
+  final at = html.indexOf(RegExp('<html', caseSensitive: false));
+  if (at < 0) return '<!DOCTYPE html><html data-cm="$page"><body>$html</body></html>';
+  return '${html.substring(0, at + 5)} data-cm="$page"${html.substring(at + 5)}';
+}
+
 /// Renders in an embedded WebView2 taken from [WebViewPool]. Navigation is
 /// disabled: link clicks are opened in the system browser. Until the page
 /// has painted and measured itself, a plain cover in the card's colour sits
@@ -174,6 +184,18 @@ class _WebView2BodyState extends State<WebView2Body> {
   Timer? _slowTimer;
   bool _disposed = false;
 
+  /// Each page load gets its own number, written into the page, and only
+  /// messages carrying the current one count. A pooled view can still report
+  /// on the page it showed before (its blank page, or this card's previous
+  /// email), which would set the wrong height and show the box too early.
+  static int _pages = 0;
+  String _page = '';
+
+  Future<void> _load(PooledWebView v) {
+    _page = '${++_pages}';
+    return v.controller.loadStringContent(tagMailPage(widget.html, _page));
+  }
+
   @override
   void initState() {
     super.initState();
@@ -194,11 +216,11 @@ class _WebView2BodyState extends State<WebView2Body> {
       v.onMessage = _onMessage;
       v.onUrl = (u) {
         // Any navigation away from our content is refused: reload ours.
-        if (u.isNotEmpty && !u.startsWith('about:') && !u.startsWith('data:')) v.controller.loadStringContent(widget.html);
+        if (u.isNotEmpty && !u.startsWith('about:') && !u.startsWith('data:')) unawaited(_load(v));
       };
       if (!mounted) return;
       await v.controller.setBackgroundColor(Theme.of(context).colorScheme.surfaceContainerLowest);
-      await v.controller.loadStringContent(widget.html);
+      await _load(v);
       if (!mounted) return;
       setState(() => _view = v);
       // Shown regardless after a while, should the page never report back.
@@ -233,7 +255,7 @@ class _WebView2BodyState extends State<WebView2Body> {
       setState(() => _shown = false);
       _fallback?.cancel();
       _fallback = Timer(const Duration(milliseconds: 2500), () => _reveal(null));
-      _view!.controller.loadStringContent(widget.html);
+      unawaited(_load(_view!));
     }
   }
 
@@ -242,9 +264,9 @@ class _WebView2BodyState extends State<WebView2Body> {
       final msg = raw is String ? jsonDecode(raw) : raw;
       if (msg is! Map) return;
       switch (msg['type']) {
-        case 'ready':
+        case 'ready' when msg['p'] == _page:
           _reveal((msg['h'] as num).toDouble());
-        case 'height':
+        case 'height' when msg['p'] == _page:
           final h = ((msg['h'] as num).toDouble() + 8).clamp(40.0, widget.maxHeight);
           if (mounted && (h - _height).abs() > 16) setState(() => _height = h);
         case 'link':
@@ -276,19 +298,15 @@ class _WebView2BodyState extends State<WebView2Body> {
           fit: StackFit.expand,
           children: [
             if (view != null) Webview(view.controller),
-            IgnorePointer(
-              ignoring: _shown,
-              child: AnimatedOpacity(
-                opacity: _shown ? 0 : 1,
-                duration: const Duration(milliseconds: 120),
-                child: Container(
-                  color: scheme.surfaceContainerLowest,
-                  alignment: Alignment.topLeft,
-                  padding: const EdgeInsets.all(12),
-                  child: _slow ? SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 2, color: scheme.primary.withValues(alpha: 0.6))) : null,
-                ),
+            // Lifted in one step: a fade from the dark card to a white email
+            // passes through grey, which reads as a flash.
+            if (!_shown)
+              Container(
+                color: scheme.surfaceContainerLowest,
+                alignment: Alignment.topLeft,
+                padding: const EdgeInsets.all(12),
+                child: _slow ? SizedBox(width: 120, child: LinearProgressIndicator(minHeight: 2, color: scheme.primary.withValues(alpha: 0.6))) : null,
               ),
-            ),
           ],
         ),
       ),
