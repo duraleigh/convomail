@@ -11,7 +11,6 @@ import '../../../app/destinations.dart';
 import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../app/settings_navigation.dart';
-import '../../../app/shortcuts.dart';
 import '../../../app/timely_state.dart';
 import '../../../domain/classifier.dart';
 import '../../../domain/filing.dart';
@@ -46,8 +45,42 @@ class PeopleListPane extends ConsumerStatefulWidget {
 
 class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   final _listFocus = FocusNode(debugLabel: 'people-list');
-  final _searchController = TextEditingController();
   bool _autoOpened = false;
+
+  /// Picking rows one by one: from the third, offer to pick them all, once
+  /// per selection.
+  static const _offerSelectAllAt = 3;
+  bool _offeredSelectAll = false;
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason>? _selectAllToast;
+
+  void _onPickedChanged(Set<String>? prev, Set<String> next, InboxMode mode) {
+    if (next.isEmpty) {
+      _offeredSelectAll = false;
+      _selectAllToast?.close();
+      _selectAllToast = null;
+      return;
+    }
+    final list = ref.read(peopleRowsProvider).value ?? const <PeopleRow>[];
+    if (_offeredSelectAll || (prev?.length ?? 0) >= _offerSelectAllAt || next.length < _offerSelectAllAt || next.length >= list.length) return;
+    _offeredSelectAll = true;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    _selectAllToast = messenger.showSnackBar(SnackBar(
+      key: const ValueKey('select-all-toast'),
+      content: Text('Select all ${list.length} ${mode == InboxMode.feeds ? 'feeds' : 'chats'}?'),
+      behavior: SnackBarBehavior.floating,
+      width: 420,
+      duration: const Duration(seconds: 8),
+      action: SnackBarAction(
+        label: 'Select all',
+        onPressed: () {
+          final now = ref.read(peopleRowsProvider).value ?? list;
+          ref.read(multiSelectProvider.notifier).setAll([for (final r in now) r.rowKey]);
+        },
+      ),
+    ));
+    _selectAllToast!.closed.then((_) => _selectAllToast = null);
+  }
 
   static const _sortLabels = {
     PeopleSort.newest: 'Most recent first',
@@ -70,7 +103,6 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   @override
   void dispose() {
     _listFocus.dispose();
-    _searchController.dispose();
     super.dispose();
   }
 
@@ -329,19 +361,18 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     final sort = ref.watch(peopleSortProvider).value ?? PeopleSort.newest;
     final rows = ref.watch(peopleRowsProvider);
     final selected = ref.watch(selectedRowProvider);
-    final searchFocus = ref.watch(searchFocusProvider);
     final picked = ref.watch(multiSelectProvider);
     final liveCodes = {
       for (final i in timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now()).reversed)
         if (i.code != null) 'c:${i.contactKey}': i.code!,
     };
 
+    ref.listen(multiSelectProvider, (prev, next) => _onPickedChanged(prev, next, mode));
+
     // Chats and Feeds share this pane: each keeps its own search text, and
     // picked rows do not carry across.
     ref.listen(inboxModeProvider, (_, _) {
       ref.read(multiSelectProvider.notifier).clear();
-      final search = ref.read(peopleSearchProvider);
-      if (_searchController.text != search) _searchController.text = search;
     });
 
     return Column(
@@ -376,6 +407,16 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                     ],
                   );
                 }),
+              ),
+              // Search opens a bar across the top of the app; no search box
+              // takes room here.
+              IconButton(
+                key: const ValueKey('search-button'),
+                tooltip: 'Search (Ctrl+F)',
+                isSelected: ref.watch(searchBarShownProvider),
+                icon: const Icon(Icons.search_rounded),
+                selectedIcon: Icon(Icons.search_rounded, color: scheme.primary),
+                onPressed: () => ref.read(searchOpenProvider.notifier).toggle(),
               ),
               PopupMenuButton<Object>(
                 key: const ValueKey('filter-menu'),
@@ -417,28 +458,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
             ],
           ),
         ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: SearchBar(
-            controller: _searchController,
-            focusNode: searchFocus,
-            hintText: 'Search people and mail',
-            leading: const Icon(Icons.search_rounded),
-            trailing: [
-              if (_searchController.text.isNotEmpty)
-                IconButton(
-                  tooltip: 'Clear',
-                  icon: const Icon(Icons.close_rounded, size: 20),
-                  onPressed: () {
-                    _searchController.clear();
-                    ref.read(peopleSearchProvider.notifier).set('');
-                  },
-                ),
-            ],
-            onChanged: (v) => ref.read(peopleSearchProvider.notifier).set(v),
-            onSubmitted: (_) => _listFocus.requestFocus(),
-          ),
-        ),
+        const SizedBox(height: 8),
         if (!ref.watch(searchActiveProvider)) const TimelyStrip(),
         if (mode == InboxMode.feeds && !ref.watch(searchActiveProvider)) const _FeedsCategoryPills(),
         if (picked.isNotEmpty) _SelectionBar(count: picked.length, mode: mode, canMerge: (rows.value ?? const <PeopleRow>[]).where((r) => picked.contains(r.rowKey) && !r.isGroup && r.identityKey != 'me').length >= 2, onAction: (a) => _bulk(a, rows.value ?? const []), onClear: () => ref.read(multiSelectProvider.notifier).clear()),
@@ -549,7 +569,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
   }
 
   Widget _empty(PeopleFilter filter) {
-    if (filter != PeopleFilter.all || _searchController.text.isNotEmpty || ref.read(feedsCategoryFilterProvider) != null) {
+    if (filter != PeopleFilter.all || ref.read(peopleSearchProvider).isNotEmpty || ref.read(feedsCategoryFilterProvider) != null) {
       return const EmptyState(icon: Icons.filter_list_off_rounded, title: 'Nothing matches', message: 'Try another filter or search.');
     }
     return EmptyState(

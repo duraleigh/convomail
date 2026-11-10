@@ -100,10 +100,24 @@ class PeopleRow {
 }
 
 extension PeopleQueries on AppDatabase {
+  /// Runs [sort] (storing new mail and deciding where it goes) with the lists
+  /// held, then refreshes them once: new mail never shows in Chats on its
+  /// way to Feeds.
+  Future<T> whileSorting<T>(Future<T> Function() sort) async {
+    listRefreshHold++;
+    try {
+      return await sort();
+    } finally {
+      listRefreshHold--;
+      await refreshDirtyRows();
+    }
+  }
+
   /// Recomputes summaries for every row key marked dirty by the triggers.
   /// Cheap for incremental changes; a full rebuild after a first sync is a
   /// single grouped query.
   Future<void> refreshDirtyRows() async {
+    if (listRefreshHold > 0) return;
     await transaction(() async {
       final dirtyCount = await customSelect('SELECT COUNT(*) AS n FROM dirty_rows').getSingle();
       if ((dirtyCount.data['n'] as int) == 0) return;

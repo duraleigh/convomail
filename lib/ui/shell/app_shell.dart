@@ -21,6 +21,7 @@ import '../screens/planner_screen.dart';
 import '../screens/settings_screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/tonal_avatar.dart';
+import 'top_search_bar.dart';
 
 /// The single-window desktop shell: navigation rail on the left, destination
 /// content on the right (spec 5.3). Nothing opens a second OS window.
@@ -121,17 +122,27 @@ class _AppShellState extends ConsumerState<AppShell> {
       },
       child: Scaffold(
         backgroundColor: scheme.surface,
-        body: Row(
+        body: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Rail(destination: destination),
+            // Search, when open: across the top of the whole app.
+            const TopSearchBar(),
             Expanded(
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 200),
-                switchInCurve: Curves.easeOut,
-                switchOutCurve: Curves.easeIn,
-                // Chats and Feeds share one layout, so its widths and state
-                // carry across, and switching does not fade the whole pane.
-                child: KeyedSubtree(key: ValueKey(destination == Destination.feeds ? Destination.chats : destination), child: _content(destination)),
+              child: Row(
+                children: [
+                  _Rail(destination: destination),
+                  Expanded(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      // Chats and Feeds share one layout, so its widths and
+                      // state carry across, and switching does not fade the
+                      // whole pane.
+                      child: KeyedSubtree(key: ValueKey(destination == Destination.feeds ? Destination.chats : destination), child: _content(destination)),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -148,21 +159,30 @@ class _AppShellState extends ConsumerState<AppShell> {
       };
 }
 
-/// The Feeds icon, with the number of unread Feeds messages.
+/// The Feeds icon, with a plain dot when something new has come into Feeds
+/// since it was last open (no count). Opening Feeds clears it, and mail that
+/// arrives while it is open counts as seen.
 class _FeedsRailIcon extends ConsumerWidget {
   const _FeedsRailIcon({required this.icon});
   final IconData icon;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final n = ref.watch(feedsUnreadProvider).value ?? 0;
+    void markSeen() {
+      if (ref.read(destinationProvider) != Destination.feeds) return;
+      final newest = ref.read(newestFeedsIdProvider).value;
+      if (newest != null) unawaited(ref.read(feedsSeenUpToProvider.notifier).markSeen(newest));
+    }
+
+    ref.listen(destinationProvider, (_, _) => markSeen());
+    ref.listen(newestFeedsIdProvider, (_, _) => markSeen());
+    ref.listen(feedsSeenUpToProvider, (_, _) => markSeen());
     final scheme = Theme.of(context).colorScheme;
     return Badge(
       key: const ValueKey('feeds-badge'),
-      isLabelVisible: n > 0,
+      isLabelVisible: ref.watch(feedsHasNewProvider) && ref.watch(destinationProvider) != Destination.feeds,
       backgroundColor: scheme.primary,
-      textColor: scheme.onPrimary,
-      label: Text(n > 99 ? '99+' : '$n'),
+      smallSize: 8,
       child: Icon(icon),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'destinations.dart';
+import 'search_state.dart';
 
 /// Intents for app-wide keyboard shortcuts (spec 5.3 "Keyboard").
 class GoToDestinationIntent extends Intent {
@@ -78,6 +79,7 @@ class AppShortcutScope extends ConsumerWidget {
           FocusSearchIntent: CallbackAction<FocusSearchIntent>(onInvoke: (_) {
             // Feeds has the same search bar; anywhere else goes to Chats.
             if (ref.read(destinationProvider) != Destination.feeds) ref.read(destinationProvider.notifier).select(Destination.chats);
+            ref.read(searchOpenProvider.notifier).open();
             ref.read(searchFocusProvider).requestFocus();
             return null;
           }),

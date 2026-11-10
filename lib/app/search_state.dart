@@ -84,3 +84,24 @@ class ScrollToMessageNotifier extends Notifier<int?> {
   void request(int id) => state = id;
   void clear() => state = null;
 }
+
+/// Whether the search bar across the top is open. It also shows whenever
+/// there is search text (see [searchBarShownProvider]).
+final searchOpenProvider = NotifierProvider<SearchOpenNotifier, bool>(SearchOpenNotifier.new);
+
+class SearchOpenNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void open() => state = true;
+
+  /// Closes the bar and clears the search, so the list is whole again.
+  void close() {
+    state = false;
+    ref.read(peopleSearchProvider.notifier).set('');
+  }
+
+  void toggle() => state ? close() : open();
+}
+
+/// The search bar is shown when opened, or while a search is in effect.
+final searchBarShownProvider = Provider<bool>((ref) => ref.watch(searchOpenProvider) || ref.watch(searchActiveProvider));

@@ -179,6 +179,43 @@ void main() {
       expect(imap.log.where((l) => l.startsWith('search ') && l.contains('Sent')), isEmpty);
     });
 
+    test('mail Gmail files a little late moves to Feeds on the next check, not the next start', () async {
+      imap.capabilities = const ['X-GM-EXT-1'];
+      final inbox = imap.folder('INBOX');
+      for (final uid in inbox.messages.keys) {
+        inbox.categories.putIfAbsent(uid, () => 'primary');
+      }
+      await sync();
+      // A support desk writing from a plain address, no list headers, no
+      // name; Gmail has not filed the message yet when it is first read.
+      final fi = inbox.add(RemoteMessageHeader(uid: 0, from: const RemoteAddress('googlefi-support@google.example'), to: const [me], subject: 'Your Fi Support case', date: DateTime.now()));
+      await sync();
+      expect((await contact('googlefi-support@google.example')).classification, 'people', reason: 'nothing to go on yet');
+
+      inbox.categories[fi] = 'updates';
+      await sync();
+      expect((await contact('googlefi-support@google.example')).classification, 'feeds');
+      final m = (await db.messagesFromSender('googlefi-support@google.example')).single;
+      expect(m.providerCategory, 'updates');
+      expect(m.classification, 'feeds');
+    });
+
+    test('new mail is not listed until it is sorted', () async {
+      await sync();
+      final inbox = await (db.select(db.folders)..where((f) => f.role.equals('inbox'))).getSingle();
+      final filing = await db.loadFilingRule();
+      final before = (await db.peopleRows()).map((r) => r.rowKey).toSet();
+      await db.whileSorting(() async {
+        await db.upsertHeaders(inbox.accountId, inbox.id, [
+          RemoteMessageHeader(uid: 9001, from: const RemoteAddress('alerts@shop.example'), to: const [me], subject: 'Your order shipped', date: DateTime.now(), signals: const BulkSignals(listUnsubscribe: true, listId: true)),
+        ], filing);
+        expect((await db.peopleRows()).map((r) => r.rowKey).toSet(), before, reason: 'not in Chats while unsorted');
+        await ClassificationService(db).classifySenders(['alerts@shop.example']);
+      });
+      expect((await db.peopleRows()).map((r) => r.rowKey), isNot(contains('c:alerts@shop.example')));
+      expect((await db.peopleRows(tab: InboxTab.feeds)).map((r) => r.rowKey), contains('c:alerts@shop.example'));
+    });
+
     test('Gmail categories backfill once for mail synced before they were read', () async {
       await sync();
       expect((await db.select(db.messages).get()).every((m) => m.providerCategory == null), isTrue, reason: 'not a Gmail server');
@@ -526,21 +563,37 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('the Feeds rail badge counts unread Feeds mail and hides at zero', (tester) async {
-      await pumpApp(tester);
+    testWidgets('the Feeds icon shows a plain dot for mail new since Feeds was last open, and no count', (tester) async {
+      final container = await pumpApp(tester);
       final badge = find.descendant(of: find.byType(NavigationRail), matching: find.byKey(const ValueKey('feeds-badge')));
       Badge widget() => tester.widget<Badge>(badge);
-      final unread = (await db.select(db.messages).get()).where((m) => m.classification == 'feeds' && !m.isSeen && !m.isFromMe).length;
-      expect(unread, greaterThan(0));
-      expect(widget().isLabelVisible, isTrue);
-      expect(find.descendant(of: badge, matching: find.text('$unread')), findsOneWidget);
+      Future<void> settle() async {
+        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+        await tester.pumpAndSettle();
+      }
 
-      await db.update(db.messages).write(const MessagesCompanion(isSeen: Value(true)));
-      await db.refreshDirtyRows();
-      await tester.pumpAndSettle();
-      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
-      await tester.pumpAndSettle();
-      expect(widget().isLabelVisible, isFalse);
+      expect(widget().isLabelVisible, isTrue, reason: 'Feeds has never been opened');
+      expect(widget().label, isNull, reason: 'a dot, not a number');
+
+      container.read(destinationProvider.notifier).select(Destination.feeds);
+      await settle();
+      container.read(destinationProvider.notifier).select(Destination.chats);
+      await settle();
+      expect(widget().isLabelVisible, isFalse, reason: 'seen');
+
+      // Something new arrives in Feeds.
+      final feed = (await db.select(db.messages).get()).firstWhere((m) => m.classification == 'feeds' && !m.isFromMe);
+      await db.into(db.messages).insert(MessagesCompanion.insert(
+            accountId: feed.accountId,
+            folderId: feed.folderId,
+            uid: 99999,
+            fromAddress: Value(feed.fromAddress),
+            fromContactKey: Value(feed.fromContactKey),
+            classification: const Value('feeds'),
+            isSeen: const Value(true),
+          ));
+      await settle();
+      expect(widget().isLabelVisible, isTrue, reason: 'new since Feeds was open, read or not');
       await teardown(tester);
     });
 

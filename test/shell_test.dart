@@ -52,7 +52,22 @@ void main() {
     expect(find.text('Planner'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.text('Search people and mail'), findsNothing, reason: 'no search box until asked for');
+    await tester.tap(find.byKey(const ValueKey('search-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Search people and mail'), findsOneWidget, reason: 'the search icon opens the bar');
+    await tester.tap(find.byKey(const ValueKey('top-search-close')));
+    await tester.pumpAndSettle();
+    expect(find.text('Search people and mail'), findsNothing);
+    // Ctrl+F opens it too, ready to type; Esc closes it.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
     expect(find.text('Search people and mail'), findsOneWidget);
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.text('Search people and mail'), findsNothing);
     expect(find.text('Pick a person'), findsOneWidget);
     await _teardown(tester);
   });

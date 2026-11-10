@@ -143,6 +143,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('All').last);
     await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('search-button')));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'tom');
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
@@ -237,6 +239,49 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('picking a third row by hand offers to select them all, once', (tester) async {
+    final inbox = (await db.select(db.folders).get()).first;
+    final now = DateTime.now();
+    for (final (i, (addr, name)) in [('ann@x.com', 'Ann Lee'), ('bob@x.com', 'Bob Ray'), ('cat@x.com', 'Cat Moe')].indexed) {
+      final id = await db.into(db.messages).insert(MessagesCompanion.insert(
+            accountId: inbox.accountId,
+            folderId: inbox.id,
+            uid: 20 + i,
+            subject: const Value('Hi'),
+            fromAddress: Value(addr),
+            fromName: Value(name),
+            fromContactKey: Value(addr),
+            date: Value(now.subtract(Duration(days: 2 + i))),
+            isSeen: const Value(true),
+          ));
+      await db.into(db.messageRowAssignments).insert(MessageRowAssignmentsCompanion.insert(messageId: id, rowKey: 'c:$addr'));
+      await db.into(db.contacts).insert(ContactsCompanion.insert(key: addr, displayName: Value(name)), mode: InsertMode.insertOrIgnore);
+    }
+    await db.refreshDirtyRows();
+    await pumpList(tester);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+    await tester.tap(find.text('Sarah Chen'));
+    await tester.tap(find.text('Tom Andersen'));
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('select-all-toast')), findsNothing, reason: 'two is not yet a pattern');
+
+    await tester.tap(find.text('Ann Lee'));
+    await tester.pumpAndSettle();
+    expect(find.text('3 selected'), findsOneWidget);
+    expect(find.text('Select all 5 chats?'), findsOneWidget);
+    await tester.tap(find.text('Select all'));
+    await tester.pumpAndSettle();
+    expect(find.text('5 selected'), findsOneWidget);
+
+    // Cleared, the offer goes with it; picking again offers again.
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('select-all-toast')), findsNothing);
+    await teardown(tester);
+  });
+
   testWidgets('Ctrl+A picks every row; bulk Mark as read clears the badges', (tester) async {
     await pumpList(tester);
     await tester.tap(find.text('Tom Andersen'));
@@ -297,6 +342,8 @@ void main() {
     await db.refreshDirtyRows();
     await pumpList(tester);
 
+    await tester.tap(find.byKey(const ValueKey('search-button')));
+    await tester.pumpAndSettle();
     await tester.enterText(find.byType(SearchBar), 'sarah');
     await tester.pumpAndSettle();
     final results = find.byWidgetPredicate((w) => w.key is ValueKey<String> && (w.key! as ValueKey<String>).value.startsWith('search-person-'));
@@ -416,7 +463,7 @@ void main() {
     });
   });
 
-  testWidgets('hover actions never cover the name, and leave the time and the row height alone', (tester) async {
+  testWidgets('hover actions never cover or move the name, and leave the row height alone', (tester) async {
     await db.setContactLabel('sarah@x.com', 'A Rather Long Sender Name That Fills The Row');
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
@@ -437,14 +484,15 @@ void main() {
     expect(actions, findsOneWidget);
     expect(find.descendant(of: actions, matching: find.byType(IconButton)), findsNWidgets(5));
     final after = tester.getRect(name);
-    expect(after.width, before.width, reason: 'the name keeps all its room');
+    expect(after, before, reason: 'the name stays exactly where it was');
     expect(after.overlaps(tester.getRect(actions)), isFalse);
     expect(tester.getRect(find.ancestor(of: name, matching: find.byType(PersonRow))).height, rowBefore.height);
     final row = find.ancestor(of: name, matching: find.byType(PersonRow));
-    expect(find.descendant(of: row, matching: find.byType(CountBadge)), findsOneWidget, reason: 'the unread badge stays');
     await gesture.moveTo(Offset.zero);
     await tester.pumpAndSettle();
     expect(actions, findsNothing);
+    expect(tester.getRect(name), before);
+    expect(find.descendant(of: row, matching: find.byType(CountBadge)), findsOneWidget, reason: 'the unread count is back'); 
     await teardown(tester);
   });
 

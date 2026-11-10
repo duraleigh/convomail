@@ -132,8 +132,33 @@ class PeopleSortNotifier extends AsyncNotifier<PeopleSort> {
   }
 }
 
-/// Unread messages in Feeds for the rail badge, in the selected account.
-final feedsUnreadProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsUnread(accountId: ref.watch(accountScopeProvider)));
+/// The newest Feeds message (see [AppDatabase.watchNewestFeedsId]).
+final newestFeedsIdProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchNewestFeedsId());
+
+/// The newest Feeds message there was when Feeds was last open. Anything
+/// newer puts a dot on the Feeds icon.
+final feedsSeenUpToProvider = AsyncNotifierProvider<FeedsSeenUpTo, int>(FeedsSeenUpTo.new);
+
+class FeedsSeenUpTo extends AsyncNotifier<int> {
+  static const key = 'feeds.seenUpTo';
+
+  @override
+  Future<int> build() async => int.tryParse(await ref.read(databaseProvider).getSetting(key) ?? '') ?? 0;
+
+  Future<void> markSeen(int id) async {
+    final now = state.value;
+    if (now == null || id <= now) return;
+    state = AsyncData(id);
+    await ref.read(databaseProvider).putSetting(key, '$id');
+  }
+}
+
+/// Whether something has come into Feeds since it was last open.
+final feedsHasNewProvider = Provider<bool>((ref) {
+  final newest = ref.watch(newestFeedsIdProvider).value;
+  final seen = ref.watch(feedsSeenUpToProvider).value;
+  return newest != null && seen != null && newest > seen;
+});
 
 /// People rows for the current filter and search, live from the database.
 final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {

@@ -114,6 +114,22 @@ extension ClassificationQueries on AppDatabase {
     return lo == null || hi == null ? null : (lo, hi);
   }
 
+  /// UIDs in [folderId] of mail from the last while ([since]) that the
+  /// provider had not filed under any category when it was read, and that
+  /// sits in Chats. Gmail can file a message a little after it arrives, so
+  /// these are asked about again.
+  Future<(int, int)?> uidRangeUnfiledSince(int folderId, DateTime since) async {
+    final r = await customSelect(
+      "SELECT MIN(uid) AS lo, MAX(uid) AS hi FROM messages WHERE folder_id = ? AND provider_category = '' "
+      "AND is_from_me = 0 AND is_deleted = 0 AND classification <> 'feeds' AND COALESCE(date, internal_date) >= ?",
+      variables: [Variable.withInt(folderId), Variable.withDateTime(since)],
+      readsFrom: {messages},
+    ).getSingle();
+    final lo = r.readNullable<int>('lo');
+    final hi = r.readNullable<int>('hi');
+    return lo == null || hi == null ? null : (lo, hi);
+  }
+
   /// Stores the provider category for messages in [folderId]: [byCategory]
   /// maps a category to the UIDs the provider returned for it; every other
   /// message in `lo..hi` that is still unread gets `''` (searched, none).
@@ -337,11 +353,11 @@ extension ClassificationQueries on AppDatabase {
         source: source,
       ));
 
-  /// Unread incoming messages filed to Feeds (the rail badge).
-  Stream<int> watchFeedsUnread({int? accountId}) => customSelect(
-        "SELECT COUNT(*) AS n FROM messages WHERE classification = 'feeds' AND is_from_me = 0 AND is_deleted = 0 AND is_seen = 0 "
-        "AND folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash')) ${accountId == null ? '' : 'AND account_id = ?'}",
-        variables: [if (accountId != null) Variable.withInt(accountId)],
+  /// The newest incoming Feeds message, by arrival (ids only grow), across
+  /// accounts: the rail shows a dot when it is newer than the one seen.
+  Stream<int> watchNewestFeedsId() => customSelect(
+        "SELECT COALESCE(MAX(id), 0) AS n FROM messages WHERE classification = 'feeds' AND is_from_me = 0 AND is_deleted = 0 "
+        "AND folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))",
         readsFrom: {messages, folders},
       ).watchSingle().map((r) => r.read<int>('n'));
 

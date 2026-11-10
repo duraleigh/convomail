@@ -10,9 +10,10 @@ import 'people_list_pane.dart';
 import 'timely_strip.dart';
 
 /// One People-list row (spec 4.2): avatar, name, the user's optional
-/// subtitle, time, unread badge, pin marker; no message text. Hovering opens
-/// a line of action buttons under the name, so the name, time and badge stay
-/// in view; right-click opens the same actions as a context menu.
+/// subtitle, time, unread badge, pin marker; no message text. Hovering swaps
+/// the time and unread count, in their own fixed spot on the right, for the
+/// action buttons, with a short fade: nothing moves and the name is never
+/// covered. Right-click opens the same actions as a context menu.
 class PersonRow extends ConsumerStatefulWidget {
   const PersonRow({super.key, required this.row, required this.selected, required this.onAction, this.checked = false, this.selectionMode = false, this.onCheck, this.liveCode});
 
@@ -122,23 +123,24 @@ class _PersonRowState extends ConsumerState<PersonRow> {
           padding: const EdgeInsets.fromLTRB(14, 7, 10, 7),
           child: Row(
             children: [
-              if (widget.onCheck != null && (widget.selectionMode || _hover))
-                SizedBox(
-                  width: 36,
-                  height: 36,
-                  child: Checkbox(
-                    key: ValueKey('row-check-${row.rowKey}'),
-                    value: widget.checked,
-                    onChanged: (_) => widget.onCheck!(),
-                  ),
-                )
-              else
-                rowAvatar(row, size: 36),
+              // The avatar and the checkbox share one spot and crossfade.
+              SizedBox(
+                width: 36,
+                height: 36,
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 140),
+                  child: widget.onCheck != null && (widget.selectionMode || _hover)
+                      ? Checkbox(
+                          key: ValueKey('row-check-${row.rowKey}'),
+                          value: widget.checked,
+                          onChanged: (_) => widget.onCheck!(),
+                        )
+                      : KeyedSubtree(key: const ValueKey('avatar'), child: rowAvatar(row, size: 36)),
+                ),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: ConstrainedBox(
-                  // Tall enough for name plus actions, so hovering never
-                  // changes the row's height.
                   constraints: const BoxConstraints(minHeight: 44),
                   child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -202,22 +204,53 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        Text(
-                          relativeTime(row.lastActivity),
-                          style: text.labelSmall!.copyWith(
-                            color: unread ? scheme.primary : scheme.onSurfaceVariant,
-                            fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                            letterSpacing: 0,
+                        // One fixed spot: the time and unread count, or while
+                        // hovered the actions, fading in place of each other.
+                        SizedBox(
+                          width: _HoverActions.width,
+                          height: 24,
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 160),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeIn,
+                            layoutBuilder: (current, previous) => Stack(alignment: Alignment.centerRight, children: [...previous, ?current]),
+                            transitionBuilder: (child, animation) => FadeTransition(
+                              opacity: animation,
+                              child: child is _HoverActions
+                                  ? SlideTransition(position: Tween(begin: const Offset(0.06, 0), end: Offset.zero).animate(animation), child: child)
+                                  : child,
+                            ),
+                            child: _hover
+                                ? _HoverActions(key: const ValueKey('actions'), row: row, onAction: widget.onAction)
+                                : Row(
+                                    key: const ValueKey('time'),
+                                    mainAxisAlignment: MainAxisAlignment.end,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          relativeTime(row.lastActivity),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.fade,
+                                          softWrap: false,
+                                          style: text.labelSmall!.copyWith(
+                                            color: unread ? scheme.primary : scheme.onSurfaceVariant,
+                                            fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                                            letterSpacing: 0,
+                                          ),
+                                        ),
+                                      ),
+                                      if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
+                                    ],
+                                  ),
                           ),
                         ),
-                        if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
                       ],
                     ),
                     AnimatedSize(
                       duration: const Duration(milliseconds: 110),
                       curve: Curves.easeOut,
                       alignment: Alignment.topCenter,
-                      child: subtitle == null && !_hover && widget.liveCode == null
+                      child: subtitle == null && widget.liveCode == null
                           ? const SizedBox(width: double.infinity)
                           : Row(
                               children: [
@@ -245,7 +278,6 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                                           ),
                                         ),
                                 ),
-                                if (_hover) _HoverActions(row: row, onAction: widget.onAction),
                               ],
                             ),
                     ),
@@ -263,9 +295,12 @@ class _PersonRowState extends ConsumerState<PersonRow> {
 }
 
 class _HoverActions extends StatelessWidget {
-  const _HoverActions({required this.row, required this.onAction});
+  const _HoverActions({super.key, required this.row, required this.onAction});
   final PeopleRow row;
   final ValueChanged<RowAction> onAction;
+
+  static const double _button = 26;
+  static const double width = _button * 5;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +310,7 @@ class _HoverActions extends StatelessWidget {
           icon: Icon(icon),
           iconSize: 17,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 28, height: 24),
+          constraints: const BoxConstraints.tightFor(width: _button, height: 24),
           style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
           onPressed: () => onAction(a),
         );

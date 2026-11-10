@@ -262,6 +262,8 @@ void main() {
 
     testWidgets('typing in the search bar shows People and Message hits; opening a hit selects the row, expands, and highlights', (tester) async {
       await pumpApp(tester);
+      await tester.tap(find.byKey(const ValueKey('search-button')));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(SearchBar).first, 'figma');
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
@@ -297,6 +299,8 @@ void main() {
       final sarahFigma = (await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Figma access');
       await (db.update(db.messages)..where((m) => m.id.equals(sarahFigma.id))).write(const MessagesCompanion(isSeen: Value(true)));
       await db.refreshDirtyRows();
+      await tester.tap(find.byKey(const ValueKey('search-button')));
+      await tester.pumpAndSettle();
       await tester.enterText(find.byType(SearchBar).first, 'figma');
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();

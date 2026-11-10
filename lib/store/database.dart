@@ -556,6 +556,11 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   /// checks it, so mail it filed under the old rule is filed again.
   int filingGeneration = 0;
 
+  /// While above zero, the Chats and Feeds lists are not refreshed: new mail
+  /// is being sorted, and shows only once it has its place. See
+  /// [PeopleQueries.whileSorting].
+  int listRefreshHold = 0;
+
   /// In-memory database for tests.
   AppDatabase.memory() : super(NativeDatabase.memory());
 

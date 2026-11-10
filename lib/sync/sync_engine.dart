@@ -8,6 +8,7 @@ import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart';
+import '../store/people_queries.dart';
 import '../store/sync_queries.dart';
 import '../store/timely_queries.dart';
 import 'classification_service.dart';
@@ -294,6 +295,21 @@ class AccountSyncer {
     return db.storeProviderCategories(folderId, range, found, redecide: redecide);
   }
 
+  /// How far back mail Gmail had not filed yet is asked about again.
+  static const recheckCategoriesFor = Duration(days: 2);
+
+  /// Gmail can put a new message under Updates or Promotions a little after
+  /// it arrives, too late for the first look. Recent mail it had not filed
+  /// yet is asked about again on every check, and its senders decided again,
+  /// so it moves to Feeds within minutes instead of at the next start.
+  Future<void> _recheckUnfiledCategories(int folderId) async {
+    final range = await db.uidRangeUnfiledSince(folderId, DateTime.now().subtract(recheckCategoriesFor));
+    if (range == null) return;
+    final senders = await _readProviderCategories(folderId, range);
+    if (senders.isEmpty) return;
+    await db.whileSorting(() => classification.classifySenders(senders));
+  }
+
   /// Messages stored before categories were read get them once, and their
   /// senders are classified again. Those senders are marked undecided in the
   /// same transaction, so a pass cut short is finished later instead of
@@ -351,16 +367,21 @@ class AccountSyncer {
         final pageStart = math.max(highWater + 1, pageEnd - pageSize + 1);
         final headers = await transport.fetchHeaders(fromUid: pageStart, toUid: pageEnd);
         final newIds = <int>[];
-        fetched += await db.upsertHeaders(account.id, folderId, headers, filing, newIds: newIds);
-        if (readCategories && headers.isNotEmpty) await _readProviderCategories(folderId, (pageStart, pageEnd));
-        await classification.classifySenders({for (final h in headers) filing.identity.resolve(h.from.address).contactKey});
-        // Replies to mail the user sent are People messages even from a Feeds
-        // sender; Sent syncs after INBOX, so re-check once the originals land.
-        final mine = [for (final h in headers) if (h.messageId != null && filing.identity.resolve(h.from.address).isMe) h.messageId!];
-        if (mine.isNotEmpty) await classification.reclassifyRepliesTo(mine);
-        // The user's replies to mail that just arrived file with its sender.
-        final theirs = [for (final h in headers) if (h.messageId != null && !filing.identity.resolve(h.from.address).isMe) h.messageId!];
-        if (theirs.isNotEmpty) await db.refileRepliesTo(theirs, filing);
+        // Sorted before it is shown: stored, its Gmail category read, its
+        // sender decided, and only then the lists refreshed.
+        await db.whileSorting(() async {
+          fetched += await db.upsertHeaders(account.id, folderId, headers, filing, newIds: newIds);
+          if (readCategories && headers.isNotEmpty) await _readProviderCategories(folderId, (pageStart, pageEnd));
+          await classification.classifySenders({for (final h in headers) filing.identity.resolve(h.from.address).contactKey});
+          // Replies to mail the user sent are People messages even from a
+          // Feeds sender; Sent syncs after INBOX, so re-check once the
+          // originals land.
+          final mine = [for (final h in headers) if (h.messageId != null && filing.identity.resolve(h.from.address).isMe) h.messageId!];
+          if (mine.isNotEmpty) await classification.reclassifyRepliesTo(mine);
+          // The user's replies to mail that just arrived file with its sender.
+          final theirs = [for (final h in headers) if (h.messageId != null && !filing.identity.resolve(h.from.address).isMe) h.messageId!];
+          if (theirs.isNotEmpty) await db.refileRepliesTo(theirs, filing);
+        });
         if (highWater > 0 && newIds.isNotEmpty && _roleOf(folder) == FolderRole.inbox) onNewMessages?.call(newIds);
         // Record progress so an interrupted first sync resumes where it left
         // off; the high-water mark only advances once the top page is stored.
@@ -372,6 +393,7 @@ class AccountSyncer {
         _emit(_status.copyWith(messagesFetched: _status.messagesFetched + headers.length));
       }
     }
+    if (readCategories && highWater > 0 && !_stopRequested) await _recheckUnfiledCategories(folderId);
 
     // --- reconcile deletions and flags for what we already had.
     if (highWater > 0) {
@@ -446,9 +468,11 @@ class AccountSyncer {
       final headers = await transport.fetchHeaders(fromUid: start, toUid: end);
       final wanted = missing.sublist(i, i + count).toSet();
       final fresh = [for (final h in headers) if (wanted.contains(h.uid)) h];
-      stored += await db.upsertHeaders(account.id, folder.id, fresh, filing);
-      if (readCategories && fresh.isNotEmpty) await _readProviderCategories(folder.id, (start, end));
-      await classification.classifySenders({for (final h in fresh) filing.identity.resolve(h.from.address).contactKey});
+      await db.whileSorting(() async {
+        stored += await db.upsertHeaders(account.id, folder.id, fresh, filing);
+        if (readCategories && fresh.isNotEmpty) await _readProviderCategories(folder.id, (start, end));
+        await classification.classifySenders({for (final h in fresh) filing.identity.resolve(h.from.address).contactKey});
+      });
       i += count;
     }
     return stored;
