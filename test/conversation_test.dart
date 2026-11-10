@@ -245,6 +245,36 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets("a reply shows only what was written that time; 'Show earlier mail' brings back the copy", (tester) async {
+    final folder = (await db.select(db.folders).get()).first;
+    final day = (await db.messageById(sarahMsg2))!.date!;
+    final id = await seedMessage(
+      accountId: folder.accountId,
+      folderId: folder.id,
+      uid: 21,
+      from: 'sarah@x.com',
+      fromName: 'Sarah Chen',
+      subject: 'Re: Design review',
+      date: day.add(const Duration(hours: 4)),
+      messageId: '<q@x>',
+      inReplyTo: '<c@x>',
+      html: '<div>Newest words here</div><div class="gmail_quote gmail_quote_container"><div class="gmail_attr">On Mon, Me wrote:</div><blockquote class="gmail_quote">Copied older words</blockquote></div>',
+    );
+    await db.rebuildMissingThreads();
+    await openSarah(tester);
+    expect(find.textContaining('Newest words here', findRichText: true), findsWidgets);
+    expect(find.textContaining('Copied older words', findRichText: true), findsNothing);
+
+    await tester.tap(find.byKey(ValueKey('earlier-mail-$id')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Copied older words', findRichText: true), findsWidgets);
+    expect(find.text('Hide earlier mail'), findsOneWidget);
+    await tester.tap(find.byKey(ValueKey('earlier-mail-$id')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Copied older words', findRichText: true), findsNothing);
+    await teardown(tester);
+  });
+
   testWidgets('a plain-text message renders escaped, and opening the chat reads its newest message', (tester) async {
     expect((await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Lunch?').isSeen, isFalse);
     await openSarah(tester);

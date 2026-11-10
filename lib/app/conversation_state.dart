@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/html_sanitizer.dart';
+import '../domain/quoted_mail.dart';
 import '../domain/simple_mail.dart';
 import '../store/attachment_queries.dart';
 import '../store/database.dart';
@@ -83,8 +84,12 @@ final messageAttachmentsProvider = StreamProvider.family<List<Attachment>, int>(
 /// Rendered, sanitized HTML for a message plus what was blocked. Records
 /// tracker events (spec 4.13) as a side effect of rendering.
 class RenderedBody {
-  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = '', this.blocks});
+  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = '', this.blocks, this.hasQuoted = false});
   final String html;
+
+  /// Earlier mail copied below the new part was left out ("Show earlier
+  /// mail" brings it back).
+  final bool hasQuoted;
 
   /// A simple email as blocks to draw straight into the conversation; null
   /// for designed mail, which keeps its own look in the browser box.
@@ -104,7 +109,30 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   final allow = m.classification != 'feeds' || m.imagesAllowed || !settings.blockRemoteImages;
   const sanitizer = HtmlSanitizer();
   final isPlain = (m.bodyHtml ?? '').trim().isEmpty || ((m.bodyText ?? '').trim().isNotEmpty && !htmlHasContent(m.bodyHtml!));
-  final source = isPlain ? plainTextToHtml(m.bodyText ?? '') : m.bodyHtml!;
+  final highlight = ref.watch(conversationHighlightProvider);
+
+  // Each email shows what was written that time; the earlier mail copied
+  // below it is already in the thread. Feeds keep everything.
+  final showEarlier = m.classification == 'feeds' || ref.watch(earlierMailShownProvider.select((s) => s.contains(messageId)));
+  var text = m.bodyText ?? '';
+  var html = m.bodyHtml ?? '';
+  var hasQuoted = false;
+  if (!showEarlier) {
+    final split = isPlain ? splitQuotedText(text, subject: m.subject) : splitQuotedHtml(html, subject: m.subject);
+    // A search match only in the earlier mail keeps it in view.
+    final full = (isPlain ? text : html).toLowerCase();
+    final fresh = split.fresh.toLowerCase();
+    final matchHidden = highlight.any((h) => h.trim().isNotEmpty && full.contains(h.toLowerCase()) && !fresh.contains(h.toLowerCase()));
+    if (split.hasQuoted && !matchHidden) {
+      hasQuoted = true;
+      if (isPlain) {
+        text = split.fresh;
+      } else {
+        html = split.fresh;
+      }
+    }
+  }
+  final source = isPlain ? plainTextToHtml(text) : html;
 
   // Inline (cid:) images come from the message itself, never the network:
   // downloaded parts are embedded as data URIs. Missing ones are fetched
@@ -127,13 +155,21 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
     limit.cancel();
     inline = (await ref.read(databaseProvider).attachmentsForMessage(messageId)).where((a) => a.isInline).toList();
   }
-  final highlight = ref.watch(conversationHighlightProvider);
   final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid), highlight: highlight);
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
   // Feeds (newsletters, receipts) keep their designed look.
   final blocks = isPlain || m.classification == 'feeds' ? null : simpleMailBlocks(out.bodyInner);
-  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: m.bodyText ?? '', blocks: blocks);
+  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: text, blocks: blocks, hasQuoted: hasQuoted);
 }, retry: _noAutomaticRetry);
+
+/// Messages whose earlier mail the user chose to see.
+final earlierMailShownProvider = NotifierProvider<EarlierMailShown, Set<int>>(EarlierMailShown.new);
+
+class EarlierMailShown extends Notifier<Set<int>> {
+  @override
+  Set<int> build() => const {};
+  void toggle(int id) => state = state.contains(id) ? ({...state}..remove(id)) : {...state, id};
+}
 
 /// Thread messages across all participants (spec 4.20), oldest first.
 final threadMessagesProvider = StreamProvider.family<List<Message>, String>((ref, threadKey) {

@@ -153,6 +153,7 @@ class MessageCard extends ConsumerWidget {
                 SimpleMailBody(blocks: r.blocks!)
               else
                 ref.watch(htmlRendererProvider)(context, r.html),
+              if (r.hasQuoted || ref.watch(earlierMailShownProvider).contains(message.id)) _EarlierMailToggle(messageId: message.id, shown: !r.hasQuoted),
             ],
           ),
         ),
@@ -383,6 +384,31 @@ class _BodyPlaceholderState extends State<_BodyPlaceholder> {
 }
 
 /// Messages whose full sender and recipient details are open.
+/// "Show earlier mail" under an email whose copied earlier mail is hidden.
+class _EarlierMailToggle extends ConsumerWidget {
+  const _EarlierMailToggle({required this.messageId, required this.shown});
+  final int messageId;
+  final bool shown;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Padding(
+        padding: const EdgeInsets.only(top: AppSpace.xs),
+        child: TextButton.icon(
+          key: ValueKey('earlier-mail-$messageId'),
+          style: TextButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, padding: const EdgeInsets.symmetric(horizontal: 8), visualDensity: VisualDensity.compact),
+          onPressed: () => ref.read(earlierMailShownProvider.notifier).toggle(messageId),
+          icon: Icon(shown ? Icons.unfold_less_rounded : Icons.more_horiz_rounded, size: 18),
+          label: Text(shown ? 'Hide earlier mail' : 'Show earlier mail'),
+        ),
+      ),
+    );
+  }
+}
+
 final _detailsOpenProvider = NotifierProvider<_DetailsOpen, Set<int>>(_DetailsOpen.new);
 
 class _DetailsOpen extends Notifier<Set<int>> {
