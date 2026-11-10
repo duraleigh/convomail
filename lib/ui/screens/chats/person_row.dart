@@ -7,6 +7,7 @@ import '../../../app/account_scope.dart';
 
 import '../../../store/people_queries.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/category_color.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'people_list_pane.dart';
 import 'timely_strip.dart';
@@ -44,13 +45,13 @@ class _PersonRowState extends ConsumerState<PersonRow> {
   /// Screen-reader label (plan M12 accessibility): name, unread count,
   /// and row state, so the row reads as one item.
   static String semanticLabel(PeopleRow row) => [
-        row.title,
-        if (row.subtitle != null) row.subtitle!,
-        if (row.unread > 0) '${row.unread} unread',
-        if (row.pinned) 'pinned',
-        if (row.muted) 'muted',
-        if (row.snoozedUntil != null) 'snoozed',
-      ].join(', ');
+    row.title,
+    if (row.subtitle != null) row.subtitle!,
+    if (row.unread > 0) '${row.unread} unread',
+    if (row.pinned) 'pinned',
+    if (row.muted) 'muted',
+    if (row.snoozedUntil != null) 'snoozed',
+  ].join(', ');
 
   bool _pointerIn = false;
 
@@ -65,23 +66,44 @@ class _PersonRowState extends ConsumerState<PersonRow> {
       context: context,
       position: RelativeRect.fromRect(globalPosition & const Size(1, 1), Offset.zero & overlay.size),
       items: [
-        const PopupMenuItem(value: RowAction.archive, child: ListTile(leading: Icon(Icons.archive_outlined), title: Text('Archive all'), dense: true)),
-        const PopupMenuItem(value: RowAction.trash, child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Delete…'), dense: true)),
-        const PopupMenuItem(value: RowAction.markRead, child: ListTile(leading: Icon(Icons.mark_email_read_outlined), title: Text('Mark all as read'), dense: true)),
-        PopupMenuItem(value: RowAction.snooze, child: ListTile(leading: const Icon(Icons.snooze_outlined), title: Text(widget.row.isSnoozed ? 'Snoozed… (change)' : 'Snooze…'), dense: true)),
-        PopupMenuItem(value: RowAction.mute, child: ListTile(leading: Icon(widget.row.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined), title: Text(widget.row.muted ? 'Unmute notifications' : 'Mute notifications'), dense: true)),
+        const PopupMenuItem(
+          value: RowAction.archive,
+          child: ListTile(leading: Icon(Icons.archive_outlined), title: Text('Archive all'), dense: true),
+        ),
+        const PopupMenuItem(
+          value: RowAction.trash,
+          child: ListTile(leading: Icon(Icons.delete_outline_rounded), title: Text('Delete…'), dense: true),
+        ),
+        const PopupMenuItem(
+          value: RowAction.markRead,
+          child: ListTile(leading: Icon(Icons.mark_email_read_outlined), title: Text('Mark all as read'), dense: true),
+        ),
         PopupMenuItem(
-          value: RowAction.pin,
+          value: RowAction.snooze,
+          child: ListTile(leading: const Icon(Icons.snooze_outlined), title: Text(widget.row.isSnoozed ? 'Snoozed… (change)' : 'Snooze…'), dense: true),
+        ),
+        PopupMenuItem(
+          value: RowAction.mute,
           child: ListTile(
-            leading: Icon(widget.row.pinned ? Icons.push_pin : Icons.push_pin_outlined),
-            title: Text(widget.row.pinned ? 'Unpin' : 'Pin'),
+            leading: Icon(widget.row.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined),
+            title: Text(widget.row.muted ? 'Unmute notifications' : 'Mute notifications'),
             dense: true,
           ),
         ),
+        PopupMenuItem(
+          value: RowAction.pin,
+          child: ListTile(leading: Icon(widget.row.pinned ? Icons.push_pin : Icons.push_pin_outlined), title: Text(widget.row.pinned ? 'Unpin' : 'Pin'), dense: true),
+        ),
         if (!widget.row.isGroup && widget.row.identityKey != 'me')
-          const PopupMenuItem(value: RowAction.rename, child: ListTile(leading: Icon(Icons.drive_file_rename_outline_rounded), title: Text('Edit name and subtitle…'), dense: true)),
+          const PopupMenuItem(
+            value: RowAction.rename,
+            child: ListTile(leading: Icon(Icons.drive_file_rename_outline_rounded), title: Text('Edit name and subtitle…'), dense: true),
+          ),
         if (!widget.row.isGroup && widget.row.identityKey != 'me')
-          const PopupMenuItem(value: RowAction.mergeWith, child: ListTile(leading: Icon(Icons.merge_rounded), title: Text('Merge with…'), dense: true)),
+          const PopupMenuItem(
+            value: RowAction.mergeWith,
+            child: ListTile(leading: Icon(Icons.merge_rounded), title: Text('Merge with…'), dense: true),
+          ),
         if (!widget.row.isGroup) ...[
           const PopupMenuDivider(),
           PopupMenuItem(
@@ -102,7 +124,10 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                 dense: true,
               ),
             ),
-            const PopupMenuItem(value: RowAction.category, child: ListTile(leading: Icon(Icons.label_outline_rounded), title: Text('Category…'), dense: true)),
+            const PopupMenuItem(
+              value: RowAction.category,
+              child: ListTile(leading: Icon(Icons.label_outline_rounded), title: Text('Category…'), dense: true),
+            ),
           ],
         ],
       ],
@@ -123,185 +148,180 @@ class _PersonRowState extends ConsumerState<PersonRow> {
       selected: widget.selected,
       label: semanticLabel(row),
       child: MouseRegion(
-      onEnter: (_) => setState(() => _pointerIn = true),
-      onExit: (_) => setState(() => _pointerIn = false),
-      child: GestureDetector(
-        onSecondaryTapUp: (d) => _showMenu(d.globalPosition),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 7, 10, 7),
-          child: Row(
-            children: [
-              // The avatar and the checkbox share one spot and crossfade.
-              SizedBox(
-                width: 36,
-                height: 36,
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 140),
-                  child: widget.onCheck != null && (widget.selectionMode || _hover)
-                      ? Checkbox(
-                          key: ValueKey('row-check-${row.rowKey}'),
-                          value: widget.checked,
-                          onChanged: (_) => widget.onCheck!(),
-                        )
-                      : KeyedSubtree(key: const ValueKey('avatar'), child: rowAvatar(row, size: 36)),
+        onEnter: (_) => setState(() => _pointerIn = true),
+        onExit: (_) => setState(() => _pointerIn = false),
+        child: GestureDetector(
+          onSecondaryTapUp: (d) => _showMenu(d.globalPosition),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 7, 10, 7),
+            child: Row(
+              children: [
+                // The avatar and the checkbox share one spot and crossfade.
+                SizedBox(
+                  width: 36,
+                  height: 36,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 140),
+                    child: widget.onCheck != null && (widget.selectionMode || _hover)
+                        ? Checkbox(key: ValueKey('row-check-${row.rowKey}'), value: widget.checked, onChanged: (_) => widget.onCheck!())
+                        : KeyedSubtree(key: const ValueKey('avatar'), child: rowAvatar(row, size: 36)),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 44),
-                  child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (row.pinned) ...[
-                          Icon(Icons.push_pin, size: 14, color: scheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                        ],
-                        if (ref.watch(multiAccountProvider) && ref.watch(accountScopeProvider) == null && row.accountIds.isNotEmpty) ...[
-                          for (final id in row.accountIds.take(3))
-                            Padding(
-                              padding: const EdgeInsets.only(right: 3),
-                              child: Container(key: ValueKey('account-dot-${row.rowKey}-$id'), width: 8, height: 8, decoration: BoxDecoration(color: accountColor(id, scheme), shape: BoxShape.circle)),
-                            ),
-                          const SizedBox(width: 3),
-                        ],
-                        if (row.muted) ...[
-                          Tooltip(message: 'Notifications muted', child: Icon(Icons.notifications_off_outlined, size: 14, color: scheme.onSurfaceVariant)),
-                          const SizedBox(width: 4),
-                        ],
-                        if (row.isSnoozed) ...[
-                          Tooltip(message: 'Snoozed', child: Icon(Icons.snooze_rounded, size: 14, color: scheme.tertiary)),
-                          const SizedBox(width: 4),
-                        ],
-                        if (row.isFeeds && row.countsTowardUnread) ...[
-                          Tooltip(message: 'Counts toward unread', child: Icon(Icons.notifications_active, size: 14, color: scheme.primary)),
-                          const SizedBox(width: 4),
-                        ],
-                        Expanded(
-                          child: LayoutBuilder(
-                            builder: (context, box) => Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    row.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    key: ValueKey('row-name-${row.rowKey}'),
-                                    style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500, height: 1.2),
+                        Row(
+                          children: [
+                            if (row.pinned) ...[Icon(Icons.push_pin, size: 14, color: scheme.onSurfaceVariant), const SizedBox(width: 4)],
+                            if (ref.watch(multiAccountProvider) && ref.watch(accountScopeProvider) == null && row.accountIds.isNotEmpty) ...[
+                              for (final id in row.accountIds.take(3))
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 3),
+                                  child: Container(
+                                    key: ValueKey('account-dot-${row.rowKey}-$id'),
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(color: accountColor(id, scheme), shape: BoxShape.circle),
                                   ),
                                 ),
-                                if (row.onFeedsTab && row.category != null) ...[
-                                  const SizedBox(width: 8),
-                                  // Never more than half the room, so it cannot
-                                  // squeeze the name out or overflow the row.
-                                  ConstrainedBox(
-                                    constraints: BoxConstraints(maxWidth: box.maxWidth / 2),
-                                    child: Container(
-                                      key: ValueKey('category-pill-${row.rowKey}'),
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-                                      decoration: BoxDecoration(color: scheme.secondaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
-                                      child: Text(row.category!, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelSmall!.copyWith(color: scheme.onSecondaryContainer, letterSpacing: 0)),
+                              const SizedBox(width: 3),
+                            ],
+                            if (row.muted) ...[
+                              Tooltip(
+                                message: 'Notifications muted',
+                                child: Icon(Icons.notifications_off_outlined, size: 14, color: scheme.onSurfaceVariant),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            if (row.isSnoozed) ...[
+                              Tooltip(
+                                message: 'Snoozed',
+                                child: Icon(Icons.snooze_rounded, size: 14, color: scheme.tertiary),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            if (row.isFeeds && row.countsTowardUnread) ...[
+                              Tooltip(
+                                message: 'Counts toward unread',
+                                child: Icon(Icons.notifications_active, size: 14, color: scheme.primary),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            // The name, then right after it the category dot.
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      row.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      key: ValueKey('row-name-${row.rowKey}'),
+                                      style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500, height: 1.2),
+                                    ),
+                                  ),
+                                  // The category as a dot in its colour (the pills along
+                                  // the top say which colour is which): no written tag
+                                  // taking the name's room.
+                                  if (row.onFeedsTab && row.category != null) ...[
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: row.category!,
+                                      child: CategoryDot(key: ValueKey('category-pill-${row.rowKey}'), category: row.category!),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // The time and unread count take their own width only.
+                            // While hovered they fade out and one "more" button
+                            // fades in over the same spot: nothing moves.
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(minWidth: _RowMoreButton.size),
+                              child: Stack(
+                                alignment: Alignment.centerRight,
+                                children: [
+                                  AnimatedOpacity(
+                                    opacity: _hover ? 0 : 1,
+                                    duration: const Duration(milliseconds: 140),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          relativeTime(row.lastActivity),
+                                          style: text.labelSmall!.copyWith(
+                                            color: unread ? scheme.primary : scheme.onSurfaceVariant,
+                                            fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                                            letterSpacing: 0,
+                                          ),
+                                        ),
+                                        if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
+                                      ],
+                                    ),
+                                  ),
+                                  Positioned(
+                                    right: 0,
+                                    child: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 140),
+                                      child: _hover
+                                          ? _RowMoreButton(
+                                              key: ValueKey('row-more-${row.rowKey}'),
+                                              row: row,
+                                              onAction: widget.onAction,
+                                              onMenu: _showMenu,
+                                              onStripOpen: (open) {
+                                                if (mounted && open != _stripOpen) setState(() => _stripOpen = open);
+                                              },
+                                            )
+                                          : const SizedBox.shrink(),
                                     ),
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        // The time and unread count take their own width only.
-                        // While hovered they fade out and one "more" button
-                        // fades in over the same spot: nothing moves.
-                        ConstrainedBox(
-                          constraints: const BoxConstraints(minWidth: _RowMoreButton.size),
-                          child: Stack(
-                            alignment: Alignment.centerRight,
-                            children: [
-                              AnimatedOpacity(
-                                opacity: _hover ? 0 : 1,
-                                duration: const Duration(milliseconds: 140),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
+                        AnimatedSize(
+                          duration: const Duration(milliseconds: 110),
+                          curve: Curves.easeOut,
+                          alignment: Alignment.topCenter,
+                          child: subtitle == null && widget.liveCode == null
+                              ? const SizedBox(width: double.infinity)
+                              : Row(
                                   children: [
-                                    Text(
-                                      relativeTime(row.lastActivity),
-                                      style: text.labelSmall!.copyWith(
-                                        color: unread ? scheme.primary : scheme.onSurfaceVariant,
-                                        fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                                        letterSpacing: 0,
-                                      ),
+                                    if (widget.liveCode != null) ...[TimelyCodePill(key: ValueKey('row-code-${row.rowKey}'), code: widget.liveCode!), const SizedBox(width: 6)],
+                                    Expanded(
+                                      child: subtitle == null
+                                          ? const SizedBox.shrink()
+                                          : Padding(
+                                              padding: const EdgeInsets.only(top: 1),
+                                              child: Text(
+                                                subtitle,
+                                                key: ValueKey('row-subtitle-${row.rowKey}'),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: text.bodySmall!.copyWith(fontSize: 11.5, height: 1.25, letterSpacing: 0.2, fontWeight: FontWeight.w400, color: scheme.onSurfaceVariant),
+                                              ),
+                                            ),
                                     ),
-                                    if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
                                   ],
                                 ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 140),
-                                  child: _hover ? _RowMoreButton(
-                                          key: ValueKey('row-more-${row.rowKey}'),
-                                          row: row,
-                                          onAction: widget.onAction,
-                                          onMenu: _showMenu,
-                                          onStripOpen: (open) {
-                                            if (mounted && open != _stripOpen) setState(() => _stripOpen = open);
-                                          },
-                                        ) : const SizedBox.shrink(),
-                                ),
-                              ),
-                            ],
-                          ),
                         ),
                       ],
                     ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 110),
-                      curve: Curves.easeOut,
-                      alignment: Alignment.topCenter,
-                      child: subtitle == null && widget.liveCode == null
-                          ? const SizedBox(width: double.infinity)
-                          : Row(
-                              children: [
-                                if (widget.liveCode != null) ...[
-                                  TimelyCodePill(key: ValueKey('row-code-${row.rowKey}'), code: widget.liveCode!),
-                                  const SizedBox(width: 6),
-                                ],
-                                Expanded(
-                                  child: subtitle == null
-                                      ? const SizedBox.shrink()
-                                      : Padding(
-                                          padding: const EdgeInsets.only(top: 1),
-                                          child: Text(
-                                            subtitle,
-                                            key: ValueKey('row-subtitle-${row.rowKey}'),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: text.bodySmall!.copyWith(
-                                              fontSize: 11.5,
-                                              height: 1.25,
-                                              letterSpacing: 0.2,
-                                              fontWeight: FontWeight.w400,
-                                              color: scheme.onSurfaceVariant,
-                                            ),
-                                          ),
-                                        ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ],
+                  ),
                 ),
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -397,9 +417,7 @@ class _RowMoreButtonState extends State<_RowMoreButton> {
       overlayChildBuilder: (context, info) {
         final at = MatrixUtils.transformRect(info.childPaintTransform, Offset.zero & info.childSize);
         return Stack(
-          children: [
-            Positioned(right: info.overlaySize.width - at.right - 4, bottom: info.overlaySize.height - at.top + 2, child: strip),
-          ],
+          children: [Positioned(right: info.overlaySize.width - at.right - 4, bottom: info.overlaySize.height - at.top + 2, child: strip)],
         );
       },
       child: MouseRegion(
@@ -436,14 +454,14 @@ class _HoverActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     Widget btn(IconData icon, String tip, RowAction a) => IconButton(
-          tooltip: tip,
-          icon: Icon(icon),
-          iconSize: 17,
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: _button, height: 30),
-          style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-          onPressed: () => onAction(a),
-        );
+      tooltip: tip,
+      icon: Icon(icon),
+      iconSize: 17,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: _button, height: 30),
+      style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+      onPressed: () => onAction(a),
+    );
     return Row(
       key: ValueKey('row-actions-${row.rowKey}'),
       mainAxisSize: MainAxisSize.min,

@@ -22,7 +22,7 @@ class ClassificationService {
 
   /// Bumped when the rules change enough that existing automatic decisions
   /// should be redone. Stored under [versionKey].
-  static const classifierVersion = 5;
+  static const classifierVersion = 6;
   static const versionKey = 'classifier.version';
 
   /// Redoes automatic sender decisions once after a classifier upgrade;
@@ -32,7 +32,11 @@ class ClassificationService {
     if (stored >= classifierVersion) return false;
     await db.resetAutoClassifications();
     // Version 4 added Gmail Updates to how categories are chosen.
-    if (stored < 4) await db.resetAutoCategories();
+    // Version 6 added Delivery, Travel and OTP.
+    if (stored < 6) {
+      await db.addTravelDeliveryOtpCategories();
+      await db.resetAutoCategories();
+    }
     await db.putSetting(versionKey, '$classifierVersion');
     return true;
   }

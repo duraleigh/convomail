@@ -729,7 +729,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   }
 
   Future<void> _seedFeedsCategories() async {
-    const defaults = ['Newsletter', 'Receipt', 'Notification', 'Social', 'Promotion', 'Updates'];
+    const defaults = ['Newsletter', 'Receipt', 'Delivery', 'Travel', 'OTP', 'Notification', 'Social', 'Promotion', 'Updates'];
     for (var i = 0; i < defaults.length; i++) {
       await customStatement("INSERT OR IGNORE INTO feeds_categories(name, builtin, sort_order) VALUES ('${defaults[i]}', 1, $i)");
     }

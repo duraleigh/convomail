@@ -110,7 +110,7 @@ void main() {
       final msgs = await db.messagesFromSender('noreply@bank.com');
       final statement = msgs.firstWhere((m) => m.subject.contains('statement'));
       expect(statement.feedsCategory, 'Receipt');
-      expect(msgs.firstWhere((m) => m.subject.contains('verification')).feedsCategory, isNull, reason: 'same as sender default');
+      expect(msgs.firstWhere((m) => m.subject.contains('verification')).feedsCategory, 'OTP', reason: 'a code, unlike the rest of the bank mail');
       expect((await db.select(db.classificationEvents).get()).where((e) => e.source == 'auto'), isNotEmpty);
     });
 
@@ -448,6 +448,19 @@ void main() {
       expect(row.category, 'Promotion');
     });
 
+    test('an older install gets Delivery, Travel and OTP after Receipt, once', () async {
+      for (final n in ['Delivery', 'Travel', 'OTP']) {
+        final c = (await db.watchCategories().first).where((c) => c.name == n).firstOrNull;
+        if (c != null) await db.deleteCategory(c.id);
+      }
+      await db.addTravelDeliveryOtpCategories();
+      await db.addTravelDeliveryOtpCategories();
+      final names = await db.categoryNames();
+      final r = names.indexOf('Receipt');
+      expect(names.sublist(r, r + 4), ['Receipt', 'Delivery', 'Travel', 'OTP']);
+      expect(names.where((n) => n == 'OTP'), hasLength(1));
+    });
+
     test('categories: rename propagates, delete clears', () async {
       await sync();
       final cats = await db.watchCategories().first;
@@ -663,7 +676,7 @@ void main() {
       expect(container.read(inboxModeProvider), InboxMode.feeds);
       expect(find.text('The Daily Brief'), findsOneWidget);
       expect(find.byKey(const ValueKey('category-pill-c:hello@dailybrief.com')), findsOneWidget);
-      expect(find.text('Newsletter'), findsOneWidget);
+      expect(find.byTooltip('Newsletter'), findsOneWidget, reason: 'the tag is a coloured dot, named on hover');
       expect(find.text('Sarah Chen'), findsNothing);
       await teardown(tester);
     });

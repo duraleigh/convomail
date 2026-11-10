@@ -280,7 +280,10 @@ abstract final class FeedsCategories {
   static const social = 'Social';
   static const promotion = 'Promotion';
   static const updates = 'Updates';
-  static const defaults = [newsletter, receipt, notification, updates, social, promotion];
+  static const delivery = 'Delivery';
+  static const travel = 'Travel';
+  static const otp = 'OTP';
+  static const defaults = [newsletter, receipt, delivery, travel, otp, notification, updates, social, promotion];
 }
 
 class Classifier {
@@ -323,7 +326,7 @@ class Classifier {
   // the category patterns: words that also appear in business mail between
   // people ("offer", "itinerary", "invoice", "reminder") are left out.
   static final _strictReceipt = RegExp(
-    r'\b(receipt|order (confirmation|confirmed|#|number|received|update|placed|shipped)|your order|has shipped|out for delivery|payment (received|confirmation|successful|processed)|statement is (ready|available)|bill is ready|your (bill|statement)|refund|subscription (renewal|renewed|receipt)|booking confirmation|e-?ticket|tracking number)\b',
+    r'\b(receipt|order (confirmation|confirmed|#|number|received|placed)|your order|payment (received|confirmation|successful|processed)|statement is (ready|available)|bill is ready|your (bill|statement)|refund|subscription (renewal|renewed|receipt))\b',
     caseSensitive: false,
   );
   static final _strictNotification = RegExp(
@@ -334,6 +337,72 @@ class Classifier {
     r'(\d{1,2}% off|\$\d+ off|free shipping|coupon|promo code|limited time|last chance|ends (tonight|today|soon)|black friday|cyber monday|clearance|flash sale|new arrivals|just dropped|gift guide|bogo|shop now|% off)',
     caseSensitive: false,
   );
+  /// One-time codes: verification, login and two-step codes.
+  static final otpSubject = RegExp(
+    r'\b(verification code|verify code|one-?time (passcode|password|pass ?code|code|pin)|passcode|otp|security code|log ?in code|sign-?in code|access code|authentication code|auth code|2-?step (verification )?code|two-?(factor|step) (authentication )?code|is your [\w .-]{1,40} code|your [\w-]+ code is|code to (sign|log) ?in|magic (link|code))\b',
+    caseSensitive: false,
+  );
+
+  /// Flights, hotels, rental cars and trains.
+  static final travelSubject = RegExp(
+    r'\b(boarding pass|your (flight|trip|itinerary|stay|hotel|car rental|train|e-?ticket)s?\b|flight (confirmation|itinerary|receipt|reservation|change|update|status|delay(ed)?|cancell?ation|cancell?ed|reminder)|(online )?check[- ]?in (is )?(now )?(open|available|for your)|time to check[- ]?in|trip (confirmation|details|itinerary|reminder)|itinerary|e-?ticket|(hotel|room|stay) (confirmation|reservation|booking|receipt|folio)|reservation (confirmed|confirmation|for your stay)|booking (confirmation|confirmed|details|reference)|upcoming (stay|trip|flight)|car rental|rental car|rental (agreement|confirmation|reservation|receipt)|vehicle (pick-?up|return)|train (ticket|reservation|booking|confirmation|journey)|rail (ticket|pass|reservation)|seat (assignment|selection|upgrade)|gate change|departure (time|gate|reminder)|layover|amtrak|eurostar)\b',
+    caseSensitive: false,
+  );
+
+  /// Packages: shipped, on the way, out for delivery, delivered.
+  static final deliverySubject = RegExp(
+    r'\b(shipped|has shipped|have shipped|shipping (confirmation|update|notification)|ship(ment|ping) (update|notification|confirmation|status)|shipment|on (its|the) way|out for delivery|delivered|delivery (update|confirmation|attempt|exception|scheduled|notification|status|window|today|tomorrow)|arriving (today|tomorrow|soon|early|late|on|by)|arrives (today|tomorrow|on|by)|will arrive|is arriving|now arriving|package|parcel|tracking (number|update|info|information)|track your (order|package|shipment|delivery)|in transit|ready for pick-?up|was picked up|delayed delivery)\b',
+    caseSensitive: false,
+  );
+
+  /// Airlines, hotels, rental cars, rail and booking sites.
+  static const travelDomains = {
+    'delta.com', 'aa.com', 'united.com', 'southwest.com', 'iflysouthwest.com', 'jetblue.com', 'alaskaair.com', 'spirit.com',
+    'flyfrontier.com', 'hawaiianairlines.com', 'allegiantair.com', 'suncountry.com', 'britishairways.com', 'ba.com', 'aircanada.com', 'aircanada.ca',
+    'lufthansa.com', 'airfrance.com', 'airfrance.fr', 'klm.com', 'emirates.com', 'qatarairways.com', 'virginatlantic.com', 'aerlingus.com',
+    'icelandair.com', 'westjet.com', 'aeromexico.com', 'latam.com', 'singaporeair.com', 'cathaypacific.com', 'qantas.com', 'turkishairlines.com',
+    'expedia.com', 'expediamail.com', 'booking.com', 'hotels.com', 'priceline.com', 'kayak.com', 'orbitz.com', 'travelocity.com', 'hopper.com',
+    'tripit.com', 'trip.com', 'agoda.com', 'airbnb.com', 'vrbo.com', 'homeaway.com', 'marriott.com', 'email-marriott.com', 'hilton.com', 'hyatt.com',
+    'ihg.com', 'choicehotels.com', 'wyndhamhotels.com', 'bestwestern.com', 'radissonhotels.com', 'accor.com', 'fourseasons.com', 'omnihotels.com',
+    'hertz.com', 'avis.com', 'budget.com', 'enterprise.com', 'nationalcar.com', 'alamo.com', 'sixt.com', 'turo.com', 'thrifty.com', 'dollar.com',
+    'amtrak.com', 'eurostar.com', 'thetrainline.com', 'trainline.com', 'viarail.ca', 'brightline.com', 'flixbus.com', 'greyhound.com',
+  };
+
+  /// Carriers and shipment-tracking services.
+  static const deliveryDomains = {
+    'ups.com', 'fedex.com', 'usps.com', 'usps.gov', 'dhl.com', 'dhl.de', 'ontrac.com', 'lasership.com', 'narvar.com', 'aftership.com', 'route.com',
+    'shipstation.com', 'canadapost.ca', 'royalmail.com', 'purolator.com', 'veho.com',
+  };
+
+  /// Words that make mail from a travel company about a booking, not a sale.
+  static final _travelBookingWord = RegExp(r'\b(confirm(ed|ation)|itinerary|reservation|booking|trip|check[- ]?in|boarding|receipt|stay|rental|ticket|flight|seat|gate|departure|arrival|pick-?up|cancel(l?ed|lation)?)\b', caseSensitive: false);
+
+  static final _deliveryLocalPart = RegExp(r'shipment|tracking|shipping|delivery');
+
+  /// "Your payout is on the way": money moving, not a package.
+  static final _moneyMoving = RegExp(r'\b(payouts?|transfers?|deposits?|funds|refunds?|payments?|money|cash|wire)\b', caseSensitive: false);
+
+  /// "Your promo code is…": a code, but an offer, not a login.
+  static final _codeOffer = RegExp(r'promo|coupon|discount|gift|referral|reward|voucher|% off|\bsale\b|\boff\b', caseSensitive: false);
+
+  static bool _onDomain(String domain, Set<String> domains) => domains.any((d) => domain == d || domain.endsWith('.$d'));
+
+  /// OTP, Travel or Delivery from the subject and sender alone; null when
+  /// none fits. Checked before the other categories, in that order: a
+  /// login code from an airline is an OTP, a hotel "confirmation" is Travel,
+  /// and "Shipped:" is a Delivery rather than a Receipt.
+  static String? specificCategory(String subject, String from) {
+    final at = from.lastIndexOf('@');
+    final domain = at < 0 ? '' : from.substring(at + 1).toLowerCase();
+    final local = at < 0 ? '' : from.substring(0, at).toLowerCase();
+    if (otpSubject.hasMatch(subject) && !_codeOffer.hasMatch(subject)) return FeedsCategories.otp;
+    if (travelSubject.hasMatch(subject)) return FeedsCategories.travel;
+    if (_onDomain(domain, travelDomains) && _travelBookingWord.hasMatch(subject)) return FeedsCategories.travel;
+    if (deliverySubject.hasMatch(subject) && !_moneyMoving.hasMatch(subject)) return FeedsCategories.delivery;
+    if (_onDomain(domain, deliveryDomains) || _deliveryLocalPart.hasMatch(local)) return FeedsCategories.delivery;
+    return null;
+  }
+
   static final _strictNewsletter = RegExp(r'\b(newsletter|digest|issue #?\d+|this week in|the week in|top stories|in case you missed)\b', caseSensitive: false);
   static final _replyPrefix = RegExp(r'^\s*(re|fw|fwd|aw|sv|tr)\s*:', caseSensitive: false);
 
@@ -369,7 +438,7 @@ class Classifier {
   };
 
   static final _receiptSubject = RegExp(
-    r'\b(receipt|invoice|order (confirmation|confirmed|#|number|received|update|placed|shipped)|your order|has shipped|out for delivery|delivered|delivery (update|confirmation)|payment (received|confirmation|successful|processed)|purchase|statement is (ready|available)|bill is ready|your (bill|statement)|transaction|refund|subscription (renewal|renewed|receipt)|booking confirmation|reservation|itinerary|e-?ticket|tracking number)\b',
+    r'\b(receipt|invoice|order (confirmation|confirmed|#|number|received|update|placed)|your order|ordered|payment (received|confirmation|successful|processed)|purchase|statement is (ready|available)|bill is ready|your (bill|statement)|transaction|refund|subscription (renewal|renewed|receipt))\b',
     caseSensitive: false,
   );
   static final _notificationSubject = RegExp(
@@ -492,6 +561,12 @@ class Classifier {
 
   static String? _strictSubjectCategory(String subject) {
     if (_socialSubject.hasMatch(subject)) return FeedsCategories.social;
+    // A code is one message's tag, not a sender's: a bank that sends
+    // statements and the odd login code is not an OTP sender. Counted as a
+    // notification here, as before.
+    if (otpSubject.hasMatch(subject) && !_codeOffer.hasMatch(subject)) return FeedsCategories.notification;
+    if (travelSubject.hasMatch(subject)) return FeedsCategories.travel;
+    if (deliverySubject.hasMatch(subject) && !_moneyMoving.hasMatch(subject)) return FeedsCategories.delivery;
     if (_strictReceipt.hasMatch(subject)) return FeedsCategories.receipt;
     if (_strictNotification.hasMatch(subject)) return FeedsCategories.notification;
     if (_strictPromotion.hasMatch(subject)) return FeedsCategories.promotion;
@@ -567,7 +642,10 @@ class Classifier {
         return FeedsCategories.newsletter;
     }
     if (subjectCat != null) return subjectCat;
+    if (_onDomain(s.domain, deliveryDomains)) return FeedsCategories.delivery;
+    if (_onDomain(s.domain, travelDomains)) return FeedsCategories.travel;
     final lp = s.localPart;
+    if (_deliveryLocalPart.hasMatch(lp)) return FeedsCategories.delivery;
     if (RegExp(r'receipt|order|billing|invoice|statement|payment').hasMatch(lp)) return FeedsCategories.receipt;
     if (RegExp(r'newsletter|digest|news|weekly|daily').hasMatch(lp)) return FeedsCategories.newsletter;
     if (RegExp(r'marketing|promo|offers?|deals?|sales?').hasMatch(lp)) return FeedsCategories.promotion;
@@ -613,13 +691,15 @@ class Classifier {
     return inferred;
   }
 
-  /// Content-based category: Receipt, Notification, Social, Promotion, or
-  /// Newsletter; null when nothing fits.
+  /// Content-based category: Social, OTP, Travel, Delivery, Receipt,
+  /// Notification, Promotion, or Newsletter; null when nothing fits.
   String? inferCategory(MessageFacts m) {
     final subject = m.subject;
     final domain = m.from.contains('@') ? m.from.substring(m.from.indexOf('@') + 1).toLowerCase() : '';
     final provider = m.providerCategory;
     if (_socialDomains.any((d) => domain == d || domain.endsWith('.$d')) || _socialSubject.hasMatch(subject) || provider == 'social') return FeedsCategories.social;
+    final specific = specificCategory(subject, m.from);
+    if (specific != null) return specific;
     if (_receiptSubject.hasMatch(subject)) return FeedsCategories.receipt;
     if (_notificationSubject.hasMatch(subject)) return FeedsCategories.notification;
     if (_promotionSubject.hasMatch(subject) || provider == 'promotions') return FeedsCategories.promotion;

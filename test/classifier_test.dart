@@ -164,7 +164,7 @@ void main() {
         address: 'mark@vendor.com',
         messagesWithKnownSignals: 2,
         providerCategories: {'updates': 2},
-        subjects: ['Your order #1 has shipped', 'Receipt for your purchase'],
+        subjects: ['Order confirmation #1', 'Receipt for your purchase'],
       ));
       expect(receipts.category, FeedsCategories.receipt);
     });
@@ -191,7 +191,7 @@ void main() {
         subjects: ['Your order #4411 has shipped', 'Receipt for your purchase', 'Lunch?'],
       ));
       expect(shop.bucket, Bucket.feeds);
-      expect(shop.category, FeedsCategories.receipt);
+      expect(shop.category, anyOf(FeedsCategories.receipt, FeedsCategories.delivery));
       final agent = classifier.classifySender(const SenderFacts(
         address: 'dana@agency.com',
         name: 'Dana Smith',
@@ -243,13 +243,49 @@ void main() {
 
   group('categories', () {
     test('content categories', () {
-      expect(classifier.inferCategory(const MessageFacts(from: 'orders@shop.com', subject: 'Your order #1234 has shipped')), FeedsCategories.receipt);
-      expect(classifier.inferCategory(const MessageFacts(from: 'noreply@bank.com', subject: 'Your verification code is 123456')), FeedsCategories.notification);
+      expect(classifier.inferCategory(const MessageFacts(from: 'orders@shop.com', subject: 'Your order #1234 has been placed')), FeedsCategories.receipt);
+      expect(classifier.inferCategory(const MessageFacts(from: 'orders@shop.com', subject: 'Your order #1234 has shipped')), FeedsCategories.delivery);
+      expect(classifier.inferCategory(const MessageFacts(from: 'noreply@bank.com', subject: 'Your verification code is 123456')), FeedsCategories.otp);
       expect(classifier.inferCategory(const MessageFacts(from: 'notification@facebookmail.com', subject: 'Anna commented on your photo')), FeedsCategories.social);
       expect(classifier.inferCategory(const MessageFacts(from: 'deals@store.com', subject: 'Last chance: 40% off everything')), FeedsCategories.promotion);
       expect(classifier.inferCategory(const MessageFacts(from: 'editor@paper.com', subject: 'The Weekly Edition #42')), FeedsCategories.newsletter);
       expect(classifier.inferCategory(const MessageFacts(from: 'x@y.com', subject: 'hello', signals: BulkSignals(listUnsubscribe: true))), FeedsCategories.newsletter);
       expect(classifier.inferCategory(const MessageFacts(from: 'x@y.com', subject: 'hello')), isNull);
+    });
+
+    test('deliveries, travel and one-time codes', () {
+      String? cat(String subject, [String from = 'x@shop.example']) => classifier.inferCategory(MessageFacts(from: from, subject: subject));
+      // Deliveries.
+      expect(cat('Shipped: "Gtand Unisex Vintage Retro..."', 'shipment-tracking@amazon.com'), FeedsCategories.delivery);
+      expect(cat('Delivered: your package'), FeedsCategories.delivery);
+      expect(cat('Out for delivery today'), FeedsCategories.delivery);
+      expect(cat('Your UPS Package is arriving today', 'mcinfo@ups.com'), FeedsCategories.delivery);
+      expect(cat('Ordered: "Gtand Unisex..."', 'auto-confirm@amazon.com'), FeedsCategories.receipt, reason: 'ordering is the receipt');
+      expect(cat('Your payout of \$120.00 is on the way', 'notifications@stripe.com'), isNot(FeedsCategories.delivery), reason: 'money, not a package');
+      // Travel: flights, hotels, rental cars, trains.
+      expect(cat("It's time to check in for your flight to RDU", 'no-reply@info.email.aa.com'), FeedsCategories.travel);
+      expect(cat('Your boarding pass'), FeedsCategories.travel);
+      expect(cat('Reservation confirmation #12345', 'reservations@res-marriott.com'), FeedsCategories.travel);
+      expect(cat('Your stay at the Hilton Garden Inn'), FeedsCategories.travel);
+      expect(cat('Your Avis rental confirmation', 'avis@e.avis.com'), FeedsCategories.travel);
+      expect(cat('Your Amtrak eTicket'), FeedsCategories.travel);
+      expect(cat('Fares from \$99 this weekend', 'deals@delta.com'), isNot(FeedsCategories.travel), reason: 'a sale from an airline is not a booking');
+      expect(cat('Planning a trip to see family? Update your address first', 'x@ssa.gov'), isNot(FeedsCategories.travel));
+      // One-time codes.
+      expect(cat('Your Bitwarden verification code'), FeedsCategories.otp);
+      expect(cat('482913 is your Instacart verification code'), FeedsCategories.otp);
+      expect(cat('Your Spotify login code'), FeedsCategories.otp);
+      expect(cat('Your promo code is inside: 20% off'), isNot(FeedsCategories.otp));
+      // A login code from an airline is a code, not travel.
+      expect(cat('Your AAdvantage verification code', 'no-reply@info.email.aa.com'), FeedsCategories.otp);
+    });
+
+    test('a carrier or travel company is that category by default; a bank with the odd code is not an OTP sender', () {
+      expect(classifier.classifySender(const SenderFacts(address: 'mcinfo@ups.com')).category, FeedsCategories.delivery);
+      expect(classifier.classifySender(const SenderFacts(address: 'shipment-tracking@amazon.com')).category, FeedsCategories.delivery);
+      expect(classifier.classifySender(const SenderFacts(address: 'no-reply@info.email.aa.com')).category, FeedsCategories.travel);
+      final bank = classifier.classifySender(const SenderFacts(address: 'noreply@bank.com', subjects: ['Your statement is ready', 'Your verification code is 482913']));
+      expect(bank.category, isNot(FeedsCategories.otp));
     });
 
     test('sender default category from local part, list, or platform', () {

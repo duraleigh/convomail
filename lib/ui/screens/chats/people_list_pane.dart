@@ -22,6 +22,7 @@ import '../../../store/planner_queries.dart';
 import '../../../sync/classification_service.dart';
 import '../../../sync/row_actions.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/category_color.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
@@ -643,6 +644,8 @@ class _FeedsCategoryPills extends ConsumerWidget {
         'Receipt' => 'Receipts',
         'Notification' => 'Notifications',
         'Promotion' => 'Promotions',
+        'Delivery' => 'Deliveries',
+        'OTP' => 'OTPs',
         _ => category,
       };
 
@@ -665,7 +668,7 @@ class _FeedsCategoryPills extends ConsumerWidget {
             _FeedsPill(key: const ValueKey('feeds-pill-all'), label: 'All', selected: selected == null, onTap: () => ref.read(feedsCategoryFilterProvider.notifier).select(null)),
             for (final c in categories) ...[
               const SizedBox(width: 6),
-              _FeedsPill(key: ValueKey('feeds-pill-$c'), label: _label(c), selected: selected == c, onTap: () => ref.read(feedsCategoryFilterProvider.notifier).select(selected == c ? null : c)),
+              _FeedsPill(key: ValueKey('feeds-pill-$c'), label: _label(c), category: c, selected: selected == c, onTap: () => ref.read(feedsCategoryFilterProvider.notifier).select(selected == c ? null : c)),
             ],
           ],
         ),
@@ -675,8 +678,11 @@ class _FeedsCategoryPills extends ConsumerWidget {
 }
 
 class _FeedsPill extends StatelessWidget {
-  const _FeedsPill({super.key, required this.label, required this.selected, required this.onTap});
+  const _FeedsPill({super.key, required this.label, required this.selected, required this.onTap, this.category});
   final String label;
+
+  /// The category it filters to, for its colour; null for All.
+  final String? category;
   final bool selected;
   final VoidCallback onTap;
 
@@ -695,7 +701,13 @@ class _FeedsPill extends StatelessWidget {
           onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-            child: Text(label, style: style.copyWith(color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant, fontWeight: selected ? FontWeight.w600 : FontWeight.w500, letterSpacing: 0)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (category != null) ...[CategoryDot(category: category!, size: 8), const SizedBox(width: 6)],
+                Text(label, style: style.copyWith(color: selected ? scheme.onSecondaryContainer : scheme.onSurfaceVariant, fontWeight: selected ? FontWeight.w600 : FontWeight.w500, letterSpacing: 0)),
+              ],
+            ),
           ),
         ),
       ),

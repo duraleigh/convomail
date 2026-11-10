@@ -169,6 +169,20 @@ extension ClassificationQueries on AppDatabase {
     return senders;
   }
 
+  /// Adds Delivery, Travel and OTP (classifier 6) after Receipt, for
+  /// installs made before they existed. Names the user already has are left.
+  Future<void> addTravelDeliveryOtpCategories() => transaction(() async {
+        final receipt = (await (select(feedsCategoryRows)..where((c) => c.name.equals('Receipt'))).getSingleOrNull())?.sortOrder;
+        final at = receipt == null ? (await select(feedsCategoryRows).get()).length : receipt + 1;
+        const added = ['Delivery', 'Travel', 'OTP'];
+        final missing = [for (final n in added) if ((await (select(feedsCategoryRows)..where((c) => c.name.equals(n))).getSingleOrNull()) == null) n];
+        if (missing.isEmpty) return;
+        await customUpdate('UPDATE feeds_categories SET sort_order = sort_order + ? WHERE sort_order >= ?', variables: [Variable.withInt(missing.length), Variable.withInt(at)], updates: {feedsCategoryRows});
+        for (final (i, n) in missing.indexed) {
+          await into(feedsCategoryRows).insert(FeedsCategoryRowsCompanion.insert(name: n, builtin: const Value(true), sortOrder: Value(at + i)), mode: InsertMode.insertOrIgnore);
+        }
+      });
+
   /// Forgets every automatic sender decision so the classifier redoes them
   /// (after a classifier upgrade). Manual moves are kept.
   Future<void> resetAutoClassifications() => customUpdate(
