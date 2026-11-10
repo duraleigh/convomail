@@ -99,7 +99,9 @@ class RenderedBody {
 final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, messageId) async {
   final m = await ref.watch(messageBodyProvider(messageId).future);
   final settings = ref.watch(settingsProvider);
-  final allow = m.imagesAllowed || !settings.blockRemoteImages;
+  // Mail from people always shows its pictures; the blocking setting is for
+  // Feeds (newsletters, receipts).
+  final allow = m.classification != 'feeds' || m.imagesAllowed || !settings.blockRemoteImages;
   const sanitizer = HtmlSanitizer();
   final isPlain = (m.bodyHtml ?? '').trim().isEmpty;
   final source = isPlain ? plainTextToHtml(m.bodyText ?? '') : m.bodyHtml!;

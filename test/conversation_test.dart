@@ -20,7 +20,7 @@ import 'support/fake_mail_transport.dart';
 import 'support/test_db.dart';
 
 /// Conversation view through the UI (spec 4.3, 4.13, 4.20): thread cards,
-/// inline expansion with the sanitized body, privacy strip and Load images,
+/// inline expansion with the sanitized body and its pictures,
 /// and the cross-participant thread overlay.
 void main() {
   late AppDatabase db;
@@ -171,39 +171,50 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('expanding a card shows the sanitized body, privacy strip, and Load images works', (tester) async {
+  testWidgets('mail from people shows its pictures at once, with no pictures notice', (tester) async {
     await openSarah(tester);
     await tester.tap(find.text('Re: Design review'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Final version attached'), findsOneWidget);
-    expect(find.textContaining('The mockups are ready'), findsOneWidget, reason: 'both of Sarah\'s messages in the thread expand');
-    expect(find.textContaining('remote images blocked'), findsOneWidget);
-    expect(find.textContaining('1 tracker'), findsOneWidget);
+    expect(find.textContaining('The mockups are ready'), findsOneWidget, reason: "both of Sarah's messages in the thread expand");
+    expect(find.textContaining('remote images'), findsNothing);
+    expect(find.textContaining('Remote images'), findsNothing);
+    expect(find.text('Load images'), findsNothing);
+    expect(find.text('Image blocked'), findsNothing);
 
     // Expanding marks Sarah's unread messages read.
     final m2 = await db.messageById(sarahMsg2);
     expect(m2!.isSeen, isTrue);
 
-    // Tracker events recorded as blocked.
-    var events = await db.select(db.trackerEvents).get();
+    // Recorded as loaded, for the Privacy page.
+    final events = await db.select(db.trackerEvents).get();
     expect(events.where((e) => e.messageId == sarahMsg2).map((e) => e.host).toSet(), {'cdn.figma.example', 'open.mailtrack.io'});
-    expect(events.every((e) => e.blocked), isTrue);
-
-    await tester.tap(find.text('Blocked hosts'));
-    await tester.pumpAndSettle();
-    expect(find.text('open.mailtrack.io'), findsOneWidget);
-
-    await tester.tap(find.text('Load images'));
-    await tester.pumpAndSettle();
-    expect((await db.messageById(sarahMsg2))!.imagesAllowed, isTrue);
-    expect(find.textContaining('Remote images loaded'), findsOneWidget);
-    events = await db.select(db.trackerEvents).get();
-    expect(events.where((e) => e.messageId == sarahMsg2).every((e) => !e.blocked), isTrue);
-
-    final stats = await db.privacyStats();
-    expect(stats.sendersWhoKnowYouRead, 1);
+    expect(events.every((e) => !e.blocked), isTrue);
     await teardown(tester);
+  });
+
+  test('Feeds mail still keeps its pictures blocked until asked', () async {
+    Future<bool> loaded() async {
+      final container = ProviderContainer(overrides: [
+        settingsStoreProvider.overrideWith((ref) => InMemorySettingsStore()),
+        databaseProvider.overrideWith((ref) => db),
+        credentialStoreProvider.overrideWith((ref) => InMemoryCredentialStore()),
+      ]);
+      final sub = container.listen(renderedBodyProvider(sarahMsg2), (_, _) {});
+      try {
+        return (await container.read(renderedBodyProvider(sarahMsg2).future)).sanitized.allowedRemote;
+      } finally {
+        sub.close();
+        container.dispose();
+      }
+    }
+
+    expect(await loaded(), isTrue, reason: 'from a person: shown');
+    await (db.update(db.messages)..where((m) => m.id.equals(sarahMsg2))).write(const MessagesCompanion(classification: Value('feeds')));
+    expect(await loaded(), isFalse, reason: 'a feed: blocked');
+    await db.setImagesAllowed(sarahMsg2, true);
+    expect(await loaded(), isTrue, reason: 'a feed after Load images');
   });
 
   testWidgets('"N more in this thread" opens the whole thread: every participant, including my reply', (tester) async {

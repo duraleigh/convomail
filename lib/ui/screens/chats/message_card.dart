@@ -141,8 +141,10 @@ class MessageCard extends ConsumerWidget {
           data: (r) => Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (r.sanitized.hasRemoteContent) _PrivacyStrip(message: message, rendered: r),
-              if (r.sanitized.hasRemoteContent) const SizedBox(height: AppSpace.sm),
+              // The pictures notice is for Feeds only; mail from people just
+              // shows its pictures.
+              if (r.sanitized.hasRemoteContent && message.classification == 'feeds') _PrivacyStrip(message: message, rendered: r),
+              if (r.sanitized.hasRemoteContent && message.classification == 'feeds') const SizedBox(height: AppSpace.sm),
               if (r.isPlainText && !r.sanitized.hasRemoteContent)
                 PlainTextBody(text: r.text, highlight: ref.watch(conversationHighlightProvider))
               // Simple mail prints straight into the conversation; only

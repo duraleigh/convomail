@@ -186,8 +186,8 @@ class _PrivacyDetail extends ConsumerWidget {
           children: [
             SwitchListTile(
               secondary: Icon(Icons.shield_outlined, color: scheme.primary),
-              title: const Text('Block remote images'),
-              subtitle: const Text('Images and tracking pixels in incoming mail are not loaded until you choose to. Off restores automatic loading.'),
+              title: const Text('Block remote images in Feeds'),
+              subtitle: const Text('Pictures and tracking pixels in newsletters and receipts are not loaded until you choose to. Mail from people always shows its pictures.'),
               value: settings.blockRemoteImages,
               onChanged: (v) => ref.read(settingsProvider.notifier).setBlockRemoteImages(v),
             ),
