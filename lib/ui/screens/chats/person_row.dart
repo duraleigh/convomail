@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,10 +12,11 @@ import 'people_list_pane.dart';
 import 'timely_strip.dart';
 
 /// One People-list row (spec 4.2): avatar, name, the user's optional
-/// subtitle, time, unread badge, pin marker; no message text. Hovering swaps
-/// the time and unread count, in their own fixed spot on the right, for the
-/// action buttons, with a short fade: nothing moves and the name is never
-/// covered. Right-click opens the same actions as a context menu.
+/// subtitle, time, unread badge, pin marker; no message text. Hovering fades
+/// the time and unread count into one "more" button in the same spot, so
+/// nothing moves and names keep their room; hovering that button pops up the
+/// actions above the row, and clicking it (or right-clicking the row) opens
+/// the full menu.
 class PersonRow extends ConsumerStatefulWidget {
   const PersonRow({super.key, required this.row, required this.selected, required this.onAction, this.checked = false, this.selectionMode = false, this.onCheck, this.liveCode});
 
@@ -49,7 +52,12 @@ class _PersonRowState extends ConsumerState<PersonRow> {
         if (row.snoozedUntil != null) 'snoozed',
       ].join(', ');
 
-  bool _hover = false;
+  bool _pointerIn = false;
+
+  /// The actions strip is open (the pointer may be on it, outside the row).
+  bool _stripOpen = false;
+
+  bool get _hover => _pointerIn || _stripOpen;
 
   Future<void> _showMenu(Offset globalPosition) async {
     final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
@@ -115,8 +123,8 @@ class _PersonRowState extends ConsumerState<PersonRow> {
       selected: widget.selected,
       label: semanticLabel(row),
       child: MouseRegion(
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
+      onEnter: (_) => setState(() => _pointerIn = true),
+      onExit: (_) => setState(() => _pointerIn = false),
       child: GestureDetector(
         onSecondaryTapUp: (d) => _showMenu(d.globalPosition),
         child: Padding(
@@ -204,44 +212,48 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        // One fixed spot: the time and unread count, or while
-                        // hovered the actions, fading in place of each other.
-                        SizedBox(
-                          width: _HoverActions.width,
-                          height: 24,
-                          child: AnimatedSwitcher(
-                            duration: const Duration(milliseconds: 160),
-                            switchInCurve: Curves.easeOutCubic,
-                            switchOutCurve: Curves.easeIn,
-                            layoutBuilder: (current, previous) => Stack(alignment: Alignment.centerRight, children: [...previous, ?current]),
-                            transitionBuilder: (child, animation) => FadeTransition(
-                              opacity: animation,
-                              child: child is _HoverActions
-                                  ? SlideTransition(position: Tween(begin: const Offset(0.06, 0), end: Offset.zero).animate(animation), child: child)
-                                  : child,
-                            ),
-                            child: _hover
-                                ? _HoverActions(key: const ValueKey('actions'), row: row, onAction: widget.onAction)
-                                : Row(
-                                    key: const ValueKey('time'),
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          relativeTime(row.lastActivity),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.fade,
-                                          softWrap: false,
-                                          style: text.labelSmall!.copyWith(
-                                            color: unread ? scheme.primary : scheme.onSurfaceVariant,
-                                            fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
-                                            letterSpacing: 0,
-                                          ),
-                                        ),
+                        // The time and unread count take their own width only.
+                        // While hovered they fade out and one "more" button
+                        // fades in over the same spot: nothing moves.
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minWidth: _RowMoreButton.size),
+                          child: Stack(
+                            alignment: Alignment.centerRight,
+                            children: [
+                              AnimatedOpacity(
+                                opacity: _hover ? 0 : 1,
+                                duration: const Duration(milliseconds: 140),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      relativeTime(row.lastActivity),
+                                      style: text.labelSmall!.copyWith(
+                                        color: unread ? scheme.primary : scheme.onSurfaceVariant,
+                                        fontWeight: unread ? FontWeight.w600 : FontWeight.w500,
+                                        letterSpacing: 0,
                                       ),
-                                      if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
-                                    ],
-                                  ),
+                                    ),
+                                    if (unread) ...[const SizedBox(width: 8), CountBadge(row.unread)],
+                                  ],
+                                ),
+                              ),
+                              Positioned(
+                                right: 0,
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 140),
+                                  child: _hover ? _RowMoreButton(
+                                          key: ValueKey('row-more-${row.rowKey}'),
+                                          row: row,
+                                          onAction: widget.onAction,
+                                          onMenu: _showMenu,
+                                          onStripOpen: (open) {
+                                            if (mounted && open != _stripOpen) setState(() => _stripOpen = open);
+                                          },
+                                        ) : const SizedBox.shrink(),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
@@ -294,13 +306,131 @@ class _PersonRowState extends ConsumerState<PersonRow> {
   }
 }
 
+/// The one button a hovered row shows. Hovering it pops up the row's
+/// actions in a small strip just above the row (so the row's name stays in
+/// view); clicking it opens the full menu.
+class _RowMoreButton extends StatefulWidget {
+  const _RowMoreButton({super.key, required this.row, required this.onAction, required this.onMenu, required this.onStripOpen});
+  final PeopleRow row;
+  final ValueChanged<RowAction> onAction;
+  final Future<void> Function(Offset globalPosition) onMenu;
+  final ValueChanged<bool> onStripOpen;
+
+  static const double size = 28;
+
+  @override
+  State<_RowMoreButton> createState() => _RowMoreButtonState();
+}
+
+class _RowMoreButtonState extends State<_RowMoreButton> {
+  final _portal = OverlayPortalController();
+  Timer? _hide;
+
+  void _open() {
+    _hide?.cancel();
+    if (_portal.isShowing) return;
+    _portal.show();
+    widget.onStripOpen(true);
+  }
+
+  void _close() {
+    _hide?.cancel();
+    if (!_portal.isShowing) return;
+    _portal.hide();
+    widget.onStripOpen(false);
+  }
+
+  /// Closes a moment after the pointer leaves, so it can cross the gap
+  /// between the button and the strip.
+  void _leave() {
+    _hide?.cancel();
+    _hide = Timer(const Duration(milliseconds: 220), () {
+      if (mounted) _close();
+    });
+  }
+
+  @override
+  void dispose() {
+    _hide?.cancel();
+    if (_portal.isShowing) {
+      final report = widget.onStripOpen;
+      WidgetsBinding.instance.addPostFrameCallback((_) => report(false));
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final strip = MouseRegion(
+      onEnter: (_) => _open(),
+      onExit: (_) => _leave(),
+      child: TweenAnimationBuilder<double>(
+        tween: Tween(begin: 0, end: 1),
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        builder: (context, t, child) => Opacity(
+          opacity: t,
+          child: Transform.translate(offset: Offset(0, 4 * (1 - t)), child: child),
+        ),
+        child: Material(
+          color: scheme.surfaceContainerHigh,
+          elevation: 3,
+          shadowColor: Colors.black,
+          borderRadius: BorderRadius.circular(AppShapes.full),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: _HoverActions(
+              row: widget.row,
+              onAction: (a) {
+                _close();
+                widget.onAction(a);
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    return OverlayPortal.overlayChildLayoutBuilder(
+      controller: _portal,
+      // Just above the button, right edges lined up.
+      overlayChildBuilder: (context, info) {
+        final at = MatrixUtils.transformRect(info.childPaintTransform, Offset.zero & info.childSize);
+        return Stack(
+          children: [
+            Positioned(right: info.overlaySize.width - at.right - 4, bottom: info.overlaySize.height - at.top + 2, child: strip),
+          ],
+        );
+      },
+      child: MouseRegion(
+        onEnter: (_) => _open(),
+        onExit: (_) => _leave(),
+        child: Builder(
+          builder: (context) => IconButton(
+            tooltip: 'More',
+            icon: const Icon(Icons.more_horiz_rounded),
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: _RowMoreButton.size, height: 24),
+            style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+            onPressed: () {
+              _close();
+              final box = context.findRenderObject() as RenderBox;
+              widget.onMenu(box.localToGlobal(box.size.bottomRight(Offset.zero)));
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _HoverActions extends StatelessWidget {
-  const _HoverActions({super.key, required this.row, required this.onAction});
+  const _HoverActions({required this.row, required this.onAction});
   final PeopleRow row;
   final ValueChanged<RowAction> onAction;
 
-  static const double _button = 26;
-  static const double width = _button * 5;
+  static const double _button = 30;
 
   @override
   Widget build(BuildContext context) {
@@ -310,7 +440,7 @@ class _HoverActions extends StatelessWidget {
           icon: Icon(icon),
           iconSize: 17,
           padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: _button, height: 24),
+          constraints: const BoxConstraints.tightFor(width: _button, height: 30),
           style: IconButton.styleFrom(foregroundColor: scheme.onSurfaceVariant, tapTargetSize: MaterialTapTargetSize.shrinkWrap),
           onPressed: () => onAction(a),
         );

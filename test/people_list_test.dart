@@ -168,7 +168,12 @@ void main() {
     addTearDown(gesture.removePointer);
     await gesture.moveTo(tester.getCenter(find.text('Sarah Chen')));
     await tester.pumpAndSettle();
-
+    expect(find.byTooltip('Mark all as read'), findsNothing, reason: 'one button on hover, not all of them');
+    await gesture.moveTo(tester.getCenter(find.byKey(const ValueKey('row-more-c:sarah@x.com'))));
+    await tester.pumpAndSettle();
+    // Across to the strip above; it stays open on the way.
+    await gesture.moveTo(tester.getCenter(find.byTooltip('Mark all as read')));
+    await tester.pumpAndSettle();
     expect(find.byTooltip('Mark all as read'), findsOneWidget);
     await tester.tap(find.byTooltip('Mark all as read'));
     await tester.pumpAndSettle();
@@ -479,6 +484,12 @@ void main() {
     addTearDown(gesture.removePointer);
     await gesture.moveTo(tester.getCenter(name));
     await tester.pumpAndSettle();
+    expect(tester.getRect(name), before, reason: 'hovering the row moves nothing');
+    final more = find.byKey(const ValueKey('row-more-c:sarah@x.com'));
+    expect(more, findsOneWidget);
+    expect(tester.getRect(more).overlaps(before), isFalse);
+    await gesture.moveTo(tester.getCenter(more));
+    await tester.pumpAndSettle();
 
     final actions = find.byKey(const ValueKey('row-actions-c:sarah@x.com'));
     expect(actions, findsOneWidget);
@@ -489,6 +500,8 @@ void main() {
     expect(tester.getRect(find.ancestor(of: name, matching: find.byType(PersonRow))).height, rowBefore.height);
     final row = find.ancestor(of: name, matching: find.byType(PersonRow));
     await gesture.moveTo(Offset.zero);
+    // The strip waits a moment before closing, so the pointer can cross to it.
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
     expect(actions, findsNothing);
     expect(tester.getRect(name), before);
