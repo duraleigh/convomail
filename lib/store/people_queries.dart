@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart';
 
 import '../domain/filing.dart';
@@ -148,10 +150,12 @@ extension PeopleQueries on AppDatabase {
       variables: accountId == null ? const [] : [Variable.withInt(accountId)],
       readsFrom: {rowSummaries, rowPrefs, contacts, peopleGroups, groupMembers, messages, messageRowAssignments},
     );
-    return q.watch().asyncMap((rows) async {
-      // Summaries may be stale right after a migration or a direct write;
-      // refreshing here is a no-op when nothing is dirty.
-      await refreshDirtyRows();
+    return q.watch().asyncMap((rows) {
+      // Summaries may be stale right after a migration or a direct write.
+      // They are brought up to date behind the list, never in front of it:
+      // waiting here held the list on a spinner while a large re-sort ran.
+      // The refresh rewrites the summaries, and this stream shows them.
+      unawaited(refreshDirtyRows().catchError((Object _) {}));
       return _materialize(rows, filter: filter, search: search.trim().toLowerCase(), tab: tab, category: category, sort: sort);
     });
   }

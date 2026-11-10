@@ -185,8 +185,11 @@ extension ClassificationQueries on AppDatabase {
 
   /// Forgets every automatic sender decision so the classifier redoes them
   /// (after a classifier upgrade). Manual moves are kept.
-  Future<void> resetAutoClassifications() => customUpdate(
-        "UPDATE contacts SET class_reasons = '' WHERE classification_source <> 'override'",
+  ///
+  /// [feedsOnly] redoes only Feeds senders: for an upgrade that changed how
+  /// Feeds categories are chosen and nothing about who is in Feeds.
+  Future<void> resetAutoClassifications({bool feedsOnly = false}) => customUpdate(
+        "UPDATE contacts SET class_reasons = '' WHERE classification_source <> 'override'${feedsOnly ? " AND classification = 'feeds'" : ''}",
         updates: {contacts},
       );
 

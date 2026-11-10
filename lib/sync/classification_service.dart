@@ -30,7 +30,9 @@ class ClassificationService {
   Future<bool> upgradeIfNeeded() async {
     final stored = int.tryParse(await db.getSetting(versionKey) ?? '') ?? 1;
     if (stored >= classifierVersion) return false;
-    await db.resetAutoClassifications();
+    // Version 6 only changed Feeds categories: Feeds senders are enough, and
+    // the far larger re-sort of everyone is not needed.
+    await db.resetAutoClassifications(feedsOnly: stored == 5);
     // Version 4 added Gmail Updates to how categories are chosen.
     // Version 6 added Delivery, Travel and OTP.
     if (stored < 6) {
