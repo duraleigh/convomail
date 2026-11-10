@@ -98,6 +98,15 @@ List<MailBlock>? simpleMailBlocks(String bodyInner) {
   return blocks.isEmpty ? null : blocks;
 }
 
+/// Whether an HTML body shows anything: text or a picture. Some mail sends
+/// an empty HTML part with the words only in the plain-text part.
+bool htmlHasContent(String html) {
+  final doc = html_parser.parse(html);
+  final body = doc.body;
+  if (body == null) return false;
+  return body.text.trim().isNotEmpty || body.querySelector('img') != null;
+}
+
 // --- Telling simple from designed ------------------------------------------
 
 const _inlineTags = {'span', 'font', 'b', 'strong', 'i', 'em', 'u', 'mark', 'small', 'big', 'sub', 'sup', 's', 'strike', 'del', 'ins', 'code', 'tt', 'abbr', 'cite', 'q', 'label'};
@@ -108,9 +117,17 @@ final _cssBackground = RegExp(r'(?:^|;)\s*background(?:-color|-image)?\s*:\s*([^
 bool _isDesigned(dom.Node root) {
   var images = 0;
   var links = 0;
+  // Outlook puts the earlier mail after its "From: … Sent: …" block rather
+  // than in a quote; everything from there on is quoted.
+  var outlookQuote = false;
   for (final el in _elements(root)) {
     final tag = el.localName ?? '';
     final style = el.attributes['style'] ?? '';
+    final id = el.id;
+    if (id.endsWith('divRplyFwdMsg') || id.endsWith('appendonsend')) outlookQuote = true;
+    // Only the new message decides: earlier mail quoted below a reply (an
+    // old newsletter, a fancy signature) does not, nor does a link preview.
+    if (outlookQuote || _inQuote(el) || _inLinkPreview(el)) continue;
     if (_hidden(style)) continue;
     if (tag == 'center') return true;
     if (el.attributes.containsKey('bgcolor')) return true;
@@ -118,14 +135,19 @@ bool _isDesigned(dom.Node root) {
     // a big one is a page layout.
     if (tag == 'table') {
       final widest = el.querySelectorAll('tr').map((r) => _cells(r).length).fold(0, (a, b) => a > b ? a : b);
-      if (widest > 1 && (widest > 3 || el.text.trim().length > 500 || el.querySelector('table') != null)) return true;
+      final textLength = el.text.trim().length;
+      // A table inside a table is a page layout, unless it is small (a
+      // banner or signature: an icon beside a line of text).
+      if (widest > 1 && (widest > 3 || textLength > 500 || (el.querySelector('table') != null && textLength > 200))) return true;
     }
+    // Emoji and small icons are not pictures that make a layout.
     if (tag == 'img') {
-      if (!_tiny(el)) images++;
+      if (!_tiny(el) && !_isEmoji(el) && !_icon(el)) images++;
       continue;
     }
     if (tag == 'a') links++;
-    if (_layoutCss.hasMatch(style)) return true;
+    // Outlook writes lists as flex boxes; they are still lists.
+    if (tag != 'ul' && tag != 'ol' && tag != 'li' && _layoutCss.hasMatch(style)) return true;
     final w = _cssWidth.firstMatch(style);
     if (w != null && int.parse(w.group(1)!) >= 400) return true;
     final wAttr = int.tryParse((el.attributes['width'] ?? '').replaceAll('px', '').trim());
@@ -138,7 +160,27 @@ bool _isDesigned(dom.Node root) {
   return images > 8 || links > 30;
 }
 
-/// White or see-through backgrounds change nothing on a light page.
+/// Pale named colours: banners and highlights, not a designed panel.
+const _paleNames = {
+  'whitesmoke', 'lightgrey', 'lightgray', 'gainsboro', 'aliceblue', 'ghostwhite', 'snow', 'ivory', 'azure', 'mintcream', 'honeydew', 'seashell', 'floralwhite',
+  'oldlace', 'linen', 'lavenderblush', 'lavender', 'beige', 'lightyellow', 'lightcyan', 'lightblue', 'cornsilk', 'lemonchiffon', 'papayawhip', 'mistyrose',
+};
+
+/// A hex or rgb() colour whose every channel is pale.
+bool _pale(String w) {
+  List<int>? ch;
+  final hex = RegExp(r'^#([0-9a-f]{3}|[0-9a-f]{6})$').firstMatch(w);
+  if (hex != null) {
+    var h = hex.group(1)!;
+    if (h.length == 3) h = h.split('').map((c) => '$c$c').join();
+    ch = [for (var i = 0; i < 6; i += 2) int.parse(h.substring(i, i + 2), radix: 16)];
+  }
+  final rgb = RegExp(r'^rgba?\((\d+),(\d+),(\d+)').firstMatch(w);
+  if (rgb != null) ch = [for (var i = 1; i <= 3; i++) int.parse(rgb.group(i)!)];
+  return ch != null && ch.every((c) => c >= 0xD0);
+}
+
+/// White, see-through or pale backgrounds change nothing that matters.
 bool _plainBackground(String v) {
   final s = v.trim().toLowerCase().replaceAll('!important', '').trim();
   if (s.contains('url(')) return false;
@@ -147,7 +189,8 @@ bool _plainBackground(String v) {
       .replaceAllMapped(RegExp(r'\([^)]*\)'), (m) => m.group(0)!.replaceAll(' ', ''))
       .replaceAll(RegExp(r'\d+%|\b0\b|no-repeat|repeat|scroll|fixed|center|top|left|none'), ' ')
       .trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
-  return words.isEmpty || words.every((w) => const {'white', '#fff', '#ffffff', 'rgb(255,255,255)', 'inherit', 'initial', 'unset', 'revert', 'window'}.contains(w.replaceAll(' ', '')));
+  return words.isEmpty ||
+      words.every((w) => const {'white', 'inherit', 'initial', 'unset', 'revert', 'window'}.contains(w) || _paleNames.contains(w) || _pale(w));
 }
 
 /// A row's cells that hold something.
@@ -173,6 +216,35 @@ double? _dim(dom.Element img, String which) {
   if (attr != null && attr > 0) return attr;
   final m = RegExp('(?:^|;)\\s*$which\\s*:\\s*([0-9.]+)px').firstMatch(img.attributes['style'] ?? '');
   return m == null ? null : double.tryParse(m.group(1)!);
+}
+
+bool _inQuote(dom.Element el) {
+  for (var p = el.parent; p != null; p = p.parent) {
+    if (p.localName == 'blockquote' || p.classes.any((c) => c == 'gmail_quote' || c.endsWith('_gmail_quote'))) return true;
+  }
+  return false;
+}
+
+/// Apple Mail's preview card for a pasted link.
+bool _inLinkPreview(dom.Element el) {
+  for (dom.Element? p = el; p != null; p = p.parent) {
+    if (p.classes.any((c) => c.startsWith('lp-rich-link') || c == 'apple-rich-link')) return true;
+  }
+  return false;
+}
+
+/// Gmail's emoji pictures, drawn as the emoji itself.
+bool _isEmoji(dom.Element img) {
+  final alt = (img.attributes['alt'] ?? '').trim();
+  final w = _dim(img, 'width');
+  return img.attributes.containsKey('data-emoji') || (alt.isNotEmpty && alt.runes.length <= 2 && alt.runes.first > 0x2000 && (w == null || w <= 32));
+}
+
+/// A small icon (a signature's social links, say).
+bool _icon(dom.Element img) {
+  final w = _dim(img, 'width');
+  final h = _dim(img, 'height');
+  return (w != null && w <= 48) && (h == null || h <= 48);
 }
 
 bool _tiny(dom.Element img) {
@@ -363,7 +435,7 @@ class _Builder {
     final alt = (img.attributes['alt'] ?? '').trim();
     final w = _dim(img, 'width');
     // Gmail's emoji pictures: the emoji itself, as text.
-    if (img.attributes.containsKey('data-emoji') || (alt.isNotEmpty && alt.runes.length <= 2 && alt.runes.first > 0x2000 && (w == null || w <= 32))) {
+    if (_isEmoji(img)) {
       if (alt.isNotEmpty) _text(alt, s);
       return;
     }

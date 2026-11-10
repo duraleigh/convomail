@@ -103,7 +103,7 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   // Feeds (newsletters, receipts).
   final allow = m.classification != 'feeds' || m.imagesAllowed || !settings.blockRemoteImages;
   const sanitizer = HtmlSanitizer();
-  final isPlain = (m.bodyHtml ?? '').trim().isEmpty;
+  final isPlain = (m.bodyHtml ?? '').trim().isEmpty || ((m.bodyText ?? '').trim().isNotEmpty && !htmlHasContent(m.bodyHtml!));
   final source = isPlain ? plainTextToHtml(m.bodyText ?? '') : m.bodyHtml!;
 
   // Inline (cid:) images come from the message itself, never the network:

@@ -72,7 +72,7 @@ void main() {
     test('columns, coloured panels, fixed widths, centring', () {
       expect(blocks('<table><tr><td>A</td><td>B</td><td>C</td><td>D</td></tr></table>'), isNull, reason: 'four columns: a page layout');
       expect(blocks('<table><tr><td>${'Long story. ' * 60}</td><td>Side</td></tr></table>'), isNull, reason: 'a big two-column page');
-      expect(blocks('<table><tr><td><table><tr><td>x</td></tr></table></td><td>y</td></tr></table>'), isNull, reason: 'tables inside tables');
+      expect(blocks('<table><tr><td><table><tr><td>${'Story. ' * 40}</td></tr></table></td><td>y</td></tr></table>'), isNull, reason: 'tables inside tables');
       expect(blocks('<div style="background-color:#1a73e8;padding:20px">Sale!</div>'), isNull);
       expect(blocks('<table width="600"><tr><td>Hi</td></tr></table>'), isNull);
       expect(blocks('<div style="width:640px">Hi</div>'), isNull);
@@ -91,7 +91,26 @@ void main() {
       expect(blocks('<div style="background:0% 0% repeat white">Hi</div>'), isNotNull);
       expect(blocks('<div style="background-color:rgb(255, 255, 255)">Hi</div>'), isNotNull);
       expect(blocks('<div style="display:inline-block">Hi</div>'), isNotNull);
-      expect(blocks('<div style="background:lightgrey">Hi</div>'), isNull);
+      expect(blocks('<div style="background:lightgrey">Hi</div>'), isNotNull, reason: 'pale: a banner, not a panel');
+      expect(blocks('<table style="background-color:#EFF6FC"><tr><td>Note</td></tr></table>'), isNotNull);
+      expect(blocks('<div style="background:#3e3e3e">Hi</div>'), isNull);
+    });
+
+    test('a reply with emoji and a quoted newsletter below is still simple', () {
+      final emoji = [for (var i = 0; i < 12; i++) '<img data-emoji="😀" alt="😀" src="https://fonts.gstatic.com/e$i.png" width="20" height="20">'].join();
+      final icons = [for (var i = 0; i < 4; i++) '<a href="https://social.example/$i"><img src="https://cdn.example/i$i.png" width="19" height="19"></a>'].join();
+      const quotedNewsletter = '<div class="gmail_quote"><blockquote class="gmail_quote"><table bgcolor="#04689b" width="600"><tr><td>A</td><td>B</td><td>C</td><td>D</td></tr></table></blockquote></div>';
+      expect(blocks('<div>Fine with Thursday $emoji</div><div>$icons</div>$quotedNewsletter'), isNotNull);
+      const outlook = '<div>Sounds good</div><hr><div id="divRplyFwdMsg">From: Sam</div><div style="background:#260559;width:600px">Old newsletter</div>';
+      expect(blocks(outlook), isNotNull, reason: "Outlook's quoted mail follows divRplyFwdMsg");
+      expect(blocks('<div>See this</div><table class="lp-rich-link" bgcolor="#E6E6E6" style="width:300px"><tr><td>Preview</td></tr></table>'), isNotNull);
+      expect(blocks('<ul style="display:flex"><li>One</li></ul>'), isNotNull, reason: 'Outlook lists are flex boxes');
+    });
+
+    test('an empty HTML part has no content; the plain text is shown instead', () {
+      expect(htmlHasContent('<div dir="auto"></div>'), isFalse);
+      expect(htmlHasContent('<div>Hi</div>'), isTrue);
+      expect(htmlHasContent('<img src="cid:x">'), isTrue);
     });
 
     test('a signature with the logo beside the name is drawn as columns', () {
