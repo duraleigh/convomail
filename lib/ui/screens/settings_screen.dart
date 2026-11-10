@@ -12,6 +12,7 @@ import '../widgets/grouped_list.dart';
 import 'chats/compose/compose_editor.dart';
 import 'destination_frame.dart';
 import 'settings/accounts_section.dart';
+import 'settings/calendar_section.dart';
 import 'settings/contacts_section.dart';
 import 'settings/feeds_section.dart';
 import 'settings/misc_sections.dart';
@@ -104,6 +105,8 @@ class _Detail extends ConsumerWidget {
         return const FeedsDetail();
       case SettingsSection.contacts:
         return const GoogleContactsDetail();
+      case SettingsSection.calendar:
+        return const GoogleCalendarDetail();
       case SettingsSection.tags:
         return const TagsDetail();
       case SettingsSection.about:

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/calendar_state.dart';
 import '../../app/conversation_state.dart';
 import '../../app/people_state.dart';
 import '../../app/search_state.dart';
 import '../../store/database.dart';
 import '../../store/planner_queries.dart';
 import '../../store/sync_queries.dart';
+import '../../sync/calendar_sync.dart';
 import '../theme/tokens.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/grouped_list.dart';
@@ -21,11 +23,23 @@ const double _hourHeight = 56;
 /// Planner (spec 4.10, 5.3): mini month calendar and to-dos on the left,
 /// the week grid in the middle, and the selected item's details with its
 /// link back to the source conversation on the right.
-class PlannerScreen extends ConsumerWidget {
+class PlannerScreen extends ConsumerStatefulWidget {
   const PlannerScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<PlannerScreen> createState() => _PlannerScreenState();
+}
+
+class _PlannerScreenState extends ConsumerState<PlannerScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Opening the Planner brings Google Calendar up to date.
+    ref.read(calendarSyncProvider).syncNow().catchError((Object _) {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final weekStart = ref.watch(plannerWeekStartProvider);
     final selected = ref.watch(plannerSelectedEventProvider);
     final weekEnd = weekStart.add(const Duration(days: 6));
@@ -206,7 +220,11 @@ class _MiniMonth extends ConsumerWidget {
 final _monthEventDaysProvider = StreamProvider.family<Set<int>, DateTime>((ref, month) {
   final start = DateTime(month.year, month.month, 1);
   final end = DateTime(month.year, month.month + 1, 1);
-  return ref.watch(databaseProvider).watchEventsBetween(start, end).map((list) => {for (final e in list) if (e.startAt != null) e.startAt!.day});
+  final days = [for (var d = start; d.isBefore(end); d = DateTime(d.year, d.month, d.day + 1)) d];
+  return watchShownEvents(ref, start, end).map((list) => {
+        for (final e in list)
+          if (e.startAt != null) ...(e.allDay ? [for (final d in days) if (allDayCovers(e, d)) d.day] : [if (e.startAt!.month == month.month) e.startAt!.day]),
+      });
 });
 
 class _WeekView extends ConsumerStatefulWidget {
@@ -238,11 +256,10 @@ class _WeekViewState extends ConsumerState<_WeekView> {
     final timed = events.where((e) => !e.allDay && e.startAt != null).toList();
 
     Widget block(PlannerEvent e, {bool compact = false}) {
-      final color = plannerColor(context, e.colorKey);
-      final tentative = e.kind == 'extracted';
+      final color = eventColor(context, e);
       return Material(
         key: ValueKey('event-${e.id}'),
-        color: selected == e.id ? color : color.withValues(alpha: tentative ? 0.14 : 0.22),
+        color: selected == e.id ? color : color.withValues(alpha: 0.22),
         borderRadius: BorderRadius.circular(6),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
@@ -258,11 +275,9 @@ class _WeekViewState extends ConsumerState<_WeekView> {
                     e.title,
                     maxLines: compact ? 1 : 3,
                     overflow: TextOverflow.ellipsis,
-                    style: text.labelMedium!.copyWith(color: selected == e.id ? scheme.onPrimary : scheme.onSurface, fontStyle: tentative ? FontStyle.italic : null, letterSpacing: 0),
+                    style: text.labelMedium!.copyWith(color: selected == e.id ? scheme.onPrimary : scheme.onSurface, letterSpacing: 0),
                   ),
                 ),
-                if (e.kind == 'invite') Icon(Icons.mail_outline_rounded, size: 12, color: color),
-                if (tentative) Icon(Icons.help_outline_rounded, size: 12, color: color),
               ],
             ),
           ),
@@ -289,10 +304,19 @@ class _WeekViewState extends ConsumerState<_WeekView> {
                         decoration: BoxDecoration(color: _sameDay(d, now) ? scheme.primary : null, shape: BoxShape.circle),
                         child: Text('${d.day}', style: text.titleMedium!.copyWith(color: _sameDay(d, now) ? scheme.onPrimary : scheme.onSurface)),
                       ),
-                      SizedBox(
-                        height: 28,
-                        child: Column(children: [for (final e in allDay.where((e) => _sameDay(e.startAt!, d)).take(1)) Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: SizedBox(height: 22, child: block(e, compact: true)))]),
-                      ),
+                      Builder(builder: (context) {
+                        // All-day items on each day they cover; past two, a count.
+                        final today = allDay.where((e) => allDayCovers(e, d)).toList();
+                        return SizedBox(
+                          height: 50,
+                          child: Column(
+                            children: [
+                              for (final e in today.take(today.length > 2 ? 1 : 2)) Padding(padding: const EdgeInsets.fromLTRB(2, 0, 2, 2), child: SizedBox(height: 22, child: block(e, compact: true))),
+                              if (today.length > 2) Text('+${today.length - 1} more', style: text.labelSmall!.copyWith(color: scheme.onSurfaceVariant, letterSpacing: 0)),
+                            ],
+                          ),
+                        );
+                      }),
                     ],
                   ),
                 ),
@@ -302,7 +326,7 @@ class _WeekViewState extends ConsumerState<_WeekView> {
         Divider(height: 1, color: scheme.outlineVariant),
         Expanded(
           child: events.isEmpty && !_sameWeek(now, weekStart)
-              ? const EmptyState(icon: Icons.calendar_month_outlined, title: 'Nothing this week', message: 'Events found in your mail, invitations, and anything you add show up here.')
+              ? const EmptyState(icon: Icons.calendar_month_outlined, title: 'Nothing this week', message: 'Your Google Calendar and anything you add show up here.')
               : SingleChildScrollView(
                   controller: _scroll,
                   child: SizedBox(
@@ -410,11 +434,10 @@ class _DetailPanel extends ConsumerWidget {
     final event = ref.watch(plannerEventProvider(eventId)).value;
     final db = ref.read(databaseProvider);
     if (event == null) return const SizedBox(width: 360);
-    final color = plannerColor(context, event.colorKey);
+    final color = eventColor(context, event);
     final kindLabel = switch (event.kind) {
-      'invite' => 'Calendar invitation',
-      'extracted' => 'Found in a message',
       'todo' => 'To-do',
+      'google' => ref.watch(googleCalendarNameProvider(event.calendarId)) ?? 'Google Calendar',
       _ => 'Event',
     };
     String when() {
@@ -445,14 +468,6 @@ class _DetailPanel extends ConsumerWidget {
           Text(when(), style: text.bodyMedium),
           if (event.location != null && event.location!.isNotEmpty) ...[const SizedBox(height: 4), Text(event.location!, style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))],
           if (event.notes.isNotEmpty) ...[const SizedBox(height: AppSpace.md), Text(event.notes, style: text.bodyMedium)],
-          if (event.kind == 'extracted' && event.evidence.isNotEmpty) ...[
-            const SizedBox(height: AppSpace.md),
-            Container(
-              padding: const EdgeInsets.all(AppSpace.md),
-              decoration: BoxDecoration(color: scheme.surfaceContainer, borderRadius: BorderRadius.circular(AppShapes.md)),
-              child: Text('"${event.evidence}"', style: text.bodySmall!.copyWith(fontStyle: FontStyle.italic)),
-            ),
-          ],
           const SizedBox(height: AppSpace.lg),
           Wrap(
             spacing: 8,
@@ -472,18 +487,33 @@ class _DetailPanel extends ConsumerWidget {
                   icon: const Icon(Icons.forum_outlined, size: 18),
                   label: const Text('Open conversation'),
                 ),
-              if (event.kind == 'extracted') ...[
-                FilledButton.icon(key: const ValueKey('event-confirm'), onPressed: () => db.confirmEvent(event.id), icon: const Icon(Icons.check_rounded, size: 18), label: const Text('Keep')),
-                OutlinedButton.icon(key: const ValueKey('event-dismiss'), onPressed: () {
-                  db.dismissEvent(event.id);
-                  ref.read(plannerSelectedEventProvider.notifier).select(null);
-                }, icon: const Icon(Icons.close_rounded, size: 18), label: const Text('Not an event')),
-              ],
               if (event.kind == 'todo') FilledButton.tonalIcon(onPressed: () => db.setEventDone(event.id, !event.done), icon: Icon(event.done ? Icons.undo_rounded : Icons.check_rounded, size: 18), label: Text(event.done ? 'Mark not done' : 'Mark done')),
               OutlinedButton.icon(onPressed: () => showEventEditor(context, ref, existing: event), icon: const Icon(Icons.edit_outlined, size: 18), label: const Text('Edit')),
               TextButton.icon(
-                onPressed: () {
-                  db.deleteEvent(event.id);
+                key: const ValueKey('event-delete'),
+                onPressed: () async {
+                  if (event.kind == 'google') {
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: const Text('Delete from Google Calendar?'),
+                        content: Text('"${event.title}" is deleted from your Google Calendar too. For a repeating event, only this occurrence.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                          FilledButton(key: const ValueKey('event-delete-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    try {
+                      await ref.read(calendarSyncProvider).delete(event);
+                    } catch (e) {
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+                      return;
+                    }
+                  } else {
+                    await db.deleteEvent(event.id);
+                  }
                   ref.read(plannerSelectedEventProvider.notifier).select(null);
                 },
                 icon: const Icon(Icons.delete_outline_rounded, size: 18),

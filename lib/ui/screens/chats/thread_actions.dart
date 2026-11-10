@@ -113,9 +113,9 @@ class LinkedPlannerChips extends ConsumerWidget {
           for (final e in events)
             ActionChip(
               key: ValueKey('linked-event-${e.id}'),
-              avatar: Icon(e.kind == 'todo' ? Icons.check_circle_outline_rounded : (e.kind == 'invite' ? Icons.mail_outline_rounded : Icons.event_outlined), size: 16, color: plannerColor(context, e.colorKey)),
+              avatar: Icon(e.kind == 'todo' ? Icons.check_circle_outline_rounded : Icons.event_outlined, size: 16, color: eventColor(context, e)),
               label: Text(e.startAt == null ? e.title : '${e.title} · ${describeSnooze(e.startAt!)}'),
-              tooltip: e.kind == 'extracted' ? 'Found in this message: "${e.evidence}"' : 'Open in Planner',
+              tooltip: 'Open in Planner',
               onPressed: () => openPlannerAt(ref, e.id),
             ),
           for (final r in reminders)

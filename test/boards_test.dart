@@ -14,7 +14,7 @@ import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/planner_screen.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
-import 'package:drift/drift.dart' show OrderingTerm, Value;
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart' hide Card;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -214,12 +214,11 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('Planner shows an extracted event block; detail panel opens the source conversation', (tester) async {
+    testWidgets('Planner shows an event added from a thread; detail panel opens the source conversation', (tester) async {
       final container = await pumpApp(tester);
       final sarah = (await db.select(db.messages).get()).firstWhere((m) => m.subject == 'Figma access');
       final start = DateTime.now().add(const Duration(days: 1));
-      final id = await db.addEvent(title: 'Design review', start: DateTime(start.year, start.month, start.day, 10), end: DateTime(start.year, start.month, start.day, 11), kind: 'extracted', sourceMessageId: sarah.id, threadKey: sarah.threadKey);
-      await (db.update(db.plannerEvents)..where((e) => e.id.equals(id))).write(const PlannerEventsCompanion(evidence: Value('Design review tomorrow at 10am')));
+      final id = await db.addEvent(title: 'Design review', start: DateTime(start.year, start.month, start.day, 10), end: DateTime(start.year, start.month, start.day, 11), sourceMessageId: sarah.id, threadKey: sarah.threadKey);
       container.read(destinationProvider.notifier).select(Destination.planner);
       await tester.pumpAndSettle();
       expect(find.byType(PlannerScreen), findsOneWidget);
@@ -232,8 +231,7 @@ void main() {
       await tester.tap(find.byKey(ValueKey('event-$id')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('planner-detail')), findsOneWidget);
-      expect(find.text('Found in a message'), findsOneWidget);
-      expect(find.textContaining('Design review tomorrow at 10am'), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('planner-detail')), matching: find.text('Event')), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('event-open-conversation')));
       await tester.pumpAndSettle();
       expect(container.read(destinationProvider), Destination.chats);

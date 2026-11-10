@@ -503,7 +503,9 @@ class PlannerEvents extends Table {
   DateTimeColumn get endAt => dateTime().nullable()();
   BoolColumn get allDay => boolean().withDefault(const Constant(false))();
 
-  /// `manual`, `extracted`, `invite`, or `todo`.
+  /// `manual` (added here, not in Google), `google` (an event in the user's
+  /// Google Calendar), or `todo`. Older installs also had `extracted` and
+  /// `invite`, removed in schema 18.
   TextColumn get kind => text()();
 
   /// Color key: `personal`, `work`, `travel`, `health`, `other`.
@@ -515,8 +517,15 @@ class PlannerEvents extends Table {
   BoolColumn get done => boolean().withDefault(const Constant(false))();
   BoolColumn get dismissed => boolean().withDefault(const Constant(false))();
   RealColumn get confidence => real().withDefault(const Constant(1.0))();
+  /// For `google` events: the Google event ID.
   TextColumn get uid => text().nullable()();
   TextColumn get evidence => text().withDefault(const Constant(''))();
+
+  /// For `google` events: the Google calendar it is in.
+  TextColumn get calendarId => text().nullable()();
+
+  /// For `google` events: the calendar's colour (ARGB).
+  IntColumn get color => integer().nullable()();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -565,7 +574,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -689,6 +698,12 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           }
           if (from < 17) {
             await m.addColumn(identities, identities.signatureJson);
+          }
+          if (from < 18) {
+            await m.addColumn(plannerEvents, plannerEvents.calendarId);
+            await m.addColumn(plannerEvents, plannerEvents.color);
+            // Dates read out of mail and invitations: the user adds their own.
+            await customStatement("DELETE FROM planner_events WHERE kind IN ('extracted', 'invite')");
           }
         },
         beforeOpen: (details) async {

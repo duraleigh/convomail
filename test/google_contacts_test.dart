@@ -27,7 +27,7 @@ class FakeGoogle {
 
   GoogleResponse _json(int status, Object body) => GoogleResponse(status, Uint8List.fromList(utf8.encode(jsonEncode(body))));
 
-  Future<GoogleResponse> call(String method, Uri uri, {Map<String, String> headers = const {}, String? form}) async {
+  Future<GoogleResponse> call(String method, Uri uri, {Map<String, String> headers = const {}, String? form, String? json}) async {
     calls.add('$method ${uri.host}${uri.path}');
     if (form != null) forms.add(form);
     if (uri.path == '/token') {
@@ -126,7 +126,7 @@ void main() {
       );
       await flow.connect();
       final q = opened!.queryParameters;
-      expect(q['scope'], 'https://www.googleapis.com/auth/contacts.readonly');
+      expect(q['scope'], 'https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/calendar');
       expect(q['code_challenge_method'], 'S256');
       expect(q['code_challenge'], isNotEmpty);
       expect(q['redirect_uri'], startsWith('http://127.0.0.1:'));

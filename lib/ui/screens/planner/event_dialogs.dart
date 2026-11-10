@@ -1,8 +1,11 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/calendar_state.dart';
 import '../../../store/database.dart';
 import '../../../store/planner_queries.dart';
+import '../../../sync/calendar_sync.dart';
 import '../../theme/tokens.dart';
 
 /// Sentinel returned by [showSnoozePicker] for "bring it back now".
@@ -115,7 +118,12 @@ Color plannerColor(BuildContext context, String key) {
   };
 }
 
-/// Create or edit an event or to-do (spec 4.10). Returns the id.
+/// An item's colour: its Google calendar's, or the colour picked here.
+Color eventColor(BuildContext context, PlannerEvent e) => e.color != null ? Color(e.color!) : plannerColor(context, e.colorKey);
+
+/// Create or edit an event or to-do (spec 4.10). Events can go to one of
+/// the user's Google calendars (added, changed there too) or stay here only.
+/// Returns the id.
 Future<int?> showEventEditor(
   BuildContext context,
   WidgetRef ref, {
@@ -156,6 +164,15 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
   late TimeOfDay _end = TimeOfDay.fromDateTime(widget.existing?.endAt ?? (widget.existing?.startAt ?? _roundUp(widget.initialDate ?? DateTime.now())).add(const Duration(hours: 1)));
   late String _color = widget.existing?.colorKey ?? 'other';
 
+  /// The Google calendar the event goes to; null keeps it here only.
+  /// [_calendarChosen] stops the default from replacing the user's pick.
+  String? _calendar;
+  bool _calendarChosen = false;
+  bool _saving = false;
+  String? _error;
+
+  bool get _isGoogle => widget.existing?.kind == 'google';
+
   static DateTime _roundUp(DateTime t) => DateTime(t.year, t.month, t.day, t.hour + 1);
 
   @override
@@ -168,6 +185,7 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
 
   Future<void> _save() async {
     final db = ref.read(databaseProvider);
+    final calendar = _isGoogle ? widget.existing!.calendarId : (_isTodo ? null : _calendar);
     DateTime? start;
     DateTime? end;
     if (_date != null) {
@@ -179,7 +197,34 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
     }
     if (!_isTodo && start == null) return;
     int id;
-    if (widget.existing == null) {
+    if (calendar != null) {
+      // In Google first; what Google stores is what the Planner shows.
+      final draft = CalendarEventDraft(title: _title.text, start: start!, end: end, allDay: _allDay, location: _location.text.trim().isEmpty ? null : _location.text.trim(), notes: _notes.text);
+      setState(() {
+        _saving = true;
+        _error = null;
+      });
+      try {
+        final sync = ref.read(calendarSyncProvider);
+        if (_isGoogle) {
+          await sync.update(widget.existing!, draft);
+          id = widget.existing!.id;
+        } else {
+          id = await sync.create(calendar, draft);
+          if (widget.sourceMessageId != null || widget.threadKey != null) {
+            await (db.update(db.plannerEvents)..where((e) => e.id.equals(id))).write(PlannerEventsCompanion(sourceMessageId: Value(widget.sourceMessageId), threadKey: Value(widget.threadKey)));
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _saving = false;
+            _error = '$e';
+          });
+        }
+        return;
+      }
+    } else if (widget.existing == null) {
       id = await db.addEvent(
         title: _title.text,
         start: start,
@@ -203,6 +248,11 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
     final scheme = Theme.of(context).colorScheme;
+    final calendars = ref.watch(googleCalendarsProvider).value ?? const <GoogleCalendarInfo>[];
+    final writable = [for (final c in calendars) if (c.writable) c];
+    // New events go to the default calendar unless the user picks otherwise.
+    if (!_calendarChosen && widget.existing == null) _calendar = ref.watch(defaultCalendarIdProvider).value;
+    final calendar = _calendar;
     String fmtTime(TimeOfDay t) => t.format(context);
     String fmtDate(DateTime d) => '${const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d.weekday - 1]}, ${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.month - 1]} ${d.day}';
     return AlertDialog(
@@ -260,6 +310,30 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
               if (!_isTodo)
                 CheckboxListTile(contentPadding: EdgeInsets.zero, dense: true, controlAffinity: ListTileControlAffinity.leading, value: _allDay, onChanged: (v) => setState(() => _allDay = v ?? false), title: const Text('All day')),
               const SizedBox(height: AppSpace.sm),
+              if (!_isTodo && (writable.isNotEmpty || _isGoogle)) ...[
+                DropdownButtonFormField<String?>(
+                  key: const ValueKey('event-calendar'),
+                  initialValue: _isGoogle ? widget.existing!.calendarId : calendar,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: 'Calendar', border: OutlineInputBorder(), isDense: true),
+                  items: [
+                    for (final c in _isGoogle ? calendars.where((c) => c.id == widget.existing!.calendarId) : writable)
+                      DropdownMenuItem(
+                        value: c.id,
+                        child: Row(children: [CircleAvatar(backgroundColor: Color(c.color), radius: 6), const SizedBox(width: 8), Flexible(child: Text(c.name, overflow: TextOverflow.ellipsis))]),
+                      ),
+                    if (!_isGoogle && widget.existing == null) const DropdownMenuItem(value: null, child: Text('ConvoMail only (not in Google)')),
+                  ],
+                  onChanged: _isGoogle || widget.existing != null
+                      ? null
+                      : (v) => setState(() {
+                            _calendar = v;
+                            _calendarChosen = true;
+                          }),
+                ),
+                const SizedBox(height: AppSpace.md),
+              ],
+              if (_isTodo || calendar == null && !_isGoogle)
               Wrap(
                 spacing: 8,
                 children: [
@@ -276,6 +350,14 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
               if (!_isTodo) TextField(controller: _location, decoration: const InputDecoration(labelText: 'Location', border: OutlineInputBorder(), isDense: true)),
               if (!_isTodo) const SizedBox(height: AppSpace.md),
               TextField(controller: _notes, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Notes', border: OutlineInputBorder(), isDense: true, alignLabelWithHint: true)),
+              if (_isGoogle) ...[
+                const SizedBox(height: AppSpace.sm),
+                Text('Changes are saved to Google Calendar. For a repeating event, only this occurrence changes.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+              ],
+              if (_error != null) ...[
+                const SizedBox(height: AppSpace.sm),
+                Text(_error!, key: const ValueKey('event-error'), style: text.bodySmall!.copyWith(color: scheme.error)),
+              ],
               if (widget.sourceMessageId != null || widget.existing?.sourceMessageId != null) ...[
                 const SizedBox(height: AppSpace.sm),
                 Text('Linked to a message in Chats.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
@@ -286,7 +368,7 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(key: const ValueKey('event-save'), onPressed: _title.text.trim().isEmpty && widget.initialTitle == null ? null : _save, child: Text(widget.existing == null ? 'Add' : 'Save')),
+        FilledButton(key: const ValueKey('event-save'), onPressed: _saving || (_title.text.trim().isEmpty && widget.initialTitle == null) ? null : _save, child: Text(_saving ? 'Saving…' : (widget.existing == null ? 'Add' : 'Save'))),
       ],
     );
   }

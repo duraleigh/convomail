@@ -12,7 +12,6 @@ import '../store/people_queries.dart';
 import '../store/sync_queries.dart';
 import '../store/timely_queries.dart';
 import 'classification_service.dart';
-import 'planner_service.dart';
 import 'timely_service.dart';
 
 enum SyncPhase { idle, connecting, listingFolders, syncingFolder, waitingForMail, backoff, error, stopped }
@@ -79,19 +78,16 @@ class AccountSyncer {
     this.sleep = _defaultSleep,
     this.onStatus,
     ClassificationService? classification,
-    PlannerService? planner,
     this.onNewMessages,
     TimelyService? timely,
   })  : _onDemand = onDemandTransport ?? transport,
         classification = classification ?? ClassificationService(db),
-        planner = planner ?? PlannerService(db),
         _status = SyncStatus(accountId: account.id, phase: SyncPhase.idle) {
     this.timely = timely ?? TimelyService(db, this.classification);
   }
 
   final ClassificationService classification;
   late final TimelyService timely;
-  final PlannerService planner;
 
   /// New messages that arrived after the first sync of a folder (local
   /// ids), for notifications. Not called for the initial download.
@@ -247,7 +243,6 @@ class AccountSyncer {
       if (!_stopRequested) await _backfillProviderCategories(targets);
       // Anything an interrupted pass left undecided is finished here.
       while (!_stopRequested && await classification.classifyPending() > 0) {}
-      if (!_stopRequested) await planner.recentPass(this);
       await db.setAccountSyncResult(account.id);
       _consecutiveFailures = 0;
       _emit(_status.copyWith(phase: SyncPhase.idle, folderDone: done, folderTotal: targets.length, folderPath: null));
@@ -490,7 +485,6 @@ class AccountSyncer {
     }, timeout: onDemandDownloadTimeout);
     await db.storeBody(messageDbId, body);
     await classification.reclassifyMessage(messageDbId);
-    await planner.extractFromMessage(messageDbId);
     await timely.processMessage(messageDbId);
     return body;
   }

@@ -1,4 +1,3 @@
-import 'package:convomail/domain/event_extractor.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/mail/transport_factory.dart';
 import 'package:convomail/platform/credential_store.dart';
@@ -6,19 +5,17 @@ import 'package:convomail/store/database.dart' hide Tags;
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/planner_queries.dart';
 import 'package:convomail/store/settings_store.dart';
-import 'package:convomail/sync/planner_service.dart';
 import 'package:convomail/sync/schedule_service.dart';
 import 'package:convomail/sync/sync_engine.dart';
-import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_mail_transport.dart';
 import 'support/test_db.dart';
 
-/// Planner, snooze, and reminders (spec 4.9, 4.10, plan M9): extraction
-/// through sync (invitation part and text), de-duplication, the recent
-/// pass, snooze hide/resurface with re-sort, reminders firing, to-dos.
+/// Planner, snooze, and reminders (spec 4.9, 4.10, plan M9): nothing is
+/// added from mail, snooze hide/resurface with re-sort, reminders firing,
+/// to-dos.
 void main() {
   const me = RemoteAddress('me@example.com');
   late AppDatabase db;
@@ -42,81 +39,25 @@ void main() {
     return syncer;
   }
 
-  group('extraction through sync', () {
-    test('an invitation part becomes an invite event when the body is fetched; an update moves it', () async {
-      final uid = imap.folder('INBOX').add(
-        RemoteMessageHeader(uid: 0, from: const RemoteAddress('calendar-notification@google.com', 'Google Calendar'), to: const [me], subject: 'Invitation: Design review', date: DateTime.now(), signals: const BulkSignals(autoSubmitted: true)),
-        body: const RemoteMessageBody(text: 'You have been invited', calendar: 'BEGIN:VCALENDAR\nMETHOD:REQUEST\nBEGIN:VEVENT\nUID:ev-1@cal\nDTSTART:20261105T150000\nDTEND:20261105T160000\nSUMMARY:Design review\nLOCATION:Room 4\nEND:VEVENT\nEND:VCALENDAR'),
+  group('no guesses', () {
+    test('mail with dates and invitations adds nothing to the Planner', () async {
+      final inbox = imap.folder('INBOX');
+      final uid = inbox.add(
+        RemoteMessageHeader(uid: 0, from: const RemoteAddress('sarah@x.com', 'Sarah'), to: const [me], subject: 'Lunch Tuesday at 12:30?', date: DateTime(2026, 11, 2, 9)),
+        body: const RemoteMessageBody(text: 'Can we meet Tuesday at 12:30pm at Cafe Rio?', calendar: r'BEGIN:VCALENDAR\nMETHOD:REQUEST\nBEGIN:VEVENT\nUID:ev-1@cal\nDTSTART:20261105T150000\nDTEND:20261105T160000\nSUMMARY:Design review\nEND:VEVENT\nEND:VCALENDAR'),
       );
       final syncer = await sync();
-      final msg = (await db.select(db.messages).get()).single;
-      expect((await db.select(db.plannerEvents).get()), isEmpty, reason: 'nothing until the body is read');
-      await syncer.fetchBody(msg.id);
-      final events = await db.select(db.plannerEvents).get();
-      expect(events, hasLength(1));
-      expect(events.single.kind, 'invite');
-      expect(events.single.title, 'Design review');
-      expect(events.single.startAt, DateTime(2026, 11, 5, 15));
-      expect(events.single.location, 'Room 4');
-      expect(events.single.sourceMessageId, msg.id);
-      expect(events.single.uid, 'ev-1@cal');
-
-      // An updated invitation (same UID) moves the event instead of adding one.
-      final uid2 = imap.folder('INBOX').add(
-        RemoteMessageHeader(uid: 0, from: const RemoteAddress('calendar-notification@google.com'), to: const [me], subject: 'Updated: Design review', date: DateTime.now()),
-        body: const RemoteMessageBody(text: 'moved', calendar: 'BEGIN:VEVENT\nUID:ev-1@cal\nDTSTART:20261106T150000\nDTEND:20261106T160000\nSUMMARY:Design review\nEND:VEVENT'),
-      );
-      expect(uid2, greaterThan(uid));
-      await syncer.syncOnce();
-      final m2 = (await db.select(db.messages).get()).firstWhere((m) => m.subject.startsWith('Updated'));
-      await syncer.fetchBody(m2.id);
-      final after = await db.select(db.plannerEvents).get();
-      expect(after, hasLength(1));
-      expect(after.single.startAt, DateTime(2026, 11, 6, 15));
+      final m = (await db.select(db.messages).get()).firstWhere((m) => m.uid == uid);
+      await syncer.fetchBody(m.id);
+      expect(await db.select(db.plannerEvents).get(), isEmpty);
     });
 
-    test('text extraction runs for People mail only; the recent pass fetches unopened bodies', () async {
-      final soon = DateTime.now().add(const Duration(days: 2));
-      imap.folder('INBOX').add(
-        RemoteMessageHeader(uid: 0, from: const RemoteAddress('sarah@chen.me', 'Sarah Chen'), to: const [me], subject: 'Catch up', date: DateTime.now()),
-        body: RemoteMessageBody(text: 'Hi! Coffee on ${_weekday(soon)} at 10am at Blue Bottle?'),
-      );
-      imap.folder('INBOX').add(
-        RemoteMessageHeader(uid: 0, from: const RemoteAddress('noreply@deals.com', 'Deals'), to: const [me], subject: 'Sale', date: DateTime.now(), signals: const BulkSignals(listUnsubscribe: true)),
-        body: RemoteMessageBody(text: 'Flash sale on ${_weekday(soon)} at 10am! Meeting your needs.'),
-      );
-      await sync(); // syncOnce runs the recent pass, which fetches Sarah's body
-      final events = await db.select(db.plannerEvents).get();
-      expect(events, hasLength(1), reason: 'the newsletter never contributes text events');
-      expect(events.single.kind, 'extracted');
-      expect(events.single.title, 'Coffee');
-      expect(events.single.startAt!.hour, 10);
-      expect(events.single.location, 'Blue Bottle');
-      expect(events.single.confidence, greaterThan(0.8));
-      final sarah = (await db.select(db.messages).get()).firstWhere((m) => m.fromAddress == 'sarah@chen.me');
-      expect(sarah.bodyFetchedAt, isNotNull);
-      expect(sarah.extractedAt, isNotNull);
-      // Re-running extraction does not duplicate.
-      await PlannerService(db).extractFromMessage(sarah.id);
-      expect(await db.select(db.plannerEvents).get(), hasLength(1));
-    });
-
-    test('dismissed events stay dismissed across re-extraction; confirm turns extracted into manual', () async {
-      imap.folder('INBOX').add(
-        RemoteMessageHeader(uid: 0, from: const RemoteAddress('tom@andersen.me', 'Tom'), to: const [me], subject: 'Plan', date: DateTime.now()),
-        body: const RemoteMessageBody(text: 'Demo tomorrow at 3pm.'),
-      );
-      await sync();
-      final e = (await db.select(db.plannerEvents).get()).single;
-      await db.dismissEvent(e.id);
-      final tom = (await db.select(db.messages).get()).single;
-      await PlannerService(db).extractFromMessage(tom.id);
-      final all = await db.select(db.plannerEvents).get();
-      expect(all, hasLength(1));
-      expect(all.single.dismissed, isTrue);
-      expect(await db.watchEventsBetween(DateTime.now().subtract(const Duration(days: 7)), DateTime.now().add(const Duration(days: 7))).first, isEmpty);
-      await db.confirmEvent(e.id);
-      expect((await db.eventById(e.id))!.kind, 'manual');
+    test('guesses left by an older version are removed; what the user added stays', () async {
+      final mine = await db.addEvent(title: 'Dentist', start: DateTime(2026, 11, 3, 9));
+      await db.addEvent(title: 'Guess', start: DateTime(2026, 11, 3, 10), kind: 'extracted');
+      await db.addEvent(title: 'Invite', start: DateTime(2026, 11, 3, 11), kind: 'invite');
+      expect(await db.deleteMailGuesses(), 2);
+      expect((await db.select(db.plannerEvents).get()).map((e) => e.id), [mine]);
     });
   });
 
@@ -215,21 +156,4 @@ void main() {
       expect(await db.watchRemindersForMessage(msg.id).first, isEmpty);
     });
   });
-
-  test('ExtractedEvent from ics via the service handles cancelled invitations by adding nothing', () async {
-    final id = await db.into(db.messages).insert(MessagesCompanion.insert(
-      accountId: account.id,
-      folderId: await db.into(db.folders).insert(FoldersCompanion.insert(accountId: account.id, path: 'INBOX', name: 'INBOX', role: const Value('inbox'))),
-      uid: 1,
-      subject: const Value('Cancelled'),
-      fromAddress: const Value('x@y.com'),
-      fromContactKey: const Value('x@y.com'),
-      date: Value(DateTime.now()),
-      icsText: const Value('BEGIN:VCALENDAR\nMETHOD:CANCEL\nBEGIN:VEVENT\nUID:z\nDTSTART:20261105T150000\nSUMMARY:Gone\nEND:VEVENT\nEND:VCALENDAR'),
-    ));
-    expect(await PlannerService(db).extractFromMessage(id), 0);
-    expect(const EventExtractor().fromICalendar('BEGIN:VEVENT\nDTSTART:20261105T150000\nSUMMARY:Ok\nEND:VEVENT'), hasLength(1));
-  });
 }
-
-String _weekday(DateTime d) => const ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][d.weekday - 1];

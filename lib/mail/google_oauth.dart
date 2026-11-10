@@ -16,10 +16,11 @@ class GoogleResponse {
   String get text => utf8.decode(bytes, allowMalformed: true);
 }
 
-/// The HTTP call, replaceable in tests.
-typedef GoogleHttp = Future<GoogleResponse> Function(String method, Uri uri, {Map<String, String> headers, String? form});
+/// The HTTP call, replaceable in tests. [form] is sent as a web form,
+/// [json] as JSON (calendar events).
+typedef GoogleHttp = Future<GoogleResponse> Function(String method, Uri uri, {Map<String, String> headers, String? form, String? json});
 
-Future<GoogleResponse> defaultGoogleHttp(String method, Uri uri, {Map<String, String> headers = const {}, String? form}) async {
+Future<GoogleResponse> defaultGoogleHttp(String method, Uri uri, {Map<String, String> headers = const {}, String? form, String? json}) async {
   if (uri.scheme != 'https') throw const GoogleAuthException('Google requests must use https.');
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 15);
   try {
@@ -28,6 +29,9 @@ Future<GoogleResponse> defaultGoogleHttp(String method, Uri uri, {Map<String, St
     if (form != null) {
       request.headers.contentType = ContentType('application', 'x-www-form-urlencoded', charset: 'utf-8');
       request.write(form);
+    } else if (json != null) {
+      request.headers.contentType = ContentType('application', 'json', charset: 'utf-8');
+      request.add(utf8.encode(json));
     }
     final response = await request.close().timeout(const Duration(seconds: 30));
     final bytes = BytesBuilder(copy: false);
@@ -49,10 +53,11 @@ class GoogleAuthException implements Exception {
   String toString() => message;
 }
 
-/// Google sign-in for reading contacts (spec 4.2). The user supplies their
-/// own OAuth client as a downloaded file, the browser does the signing in,
-/// and the app only ever holds tokens, in Windows Credential Manager. It asks
-/// for read-only contacts access and nothing else.
+/// Google sign-in for contacts (spec 4.2) and the calendar. The user
+/// supplies their own OAuth client as a downloaded file, the browser does the
+/// signing in, and the app only ever holds tokens, in Windows Credential
+/// Manager. It asks for read-only contacts access and for the calendar
+/// (shown in the Planner, and changed from there).
 class GoogleOAuth {
   GoogleOAuth({required this.store, GoogleHttp? http, required this.openBrowser, DateTime Function()? clock})
       : http = http ?? defaultGoogleHttp,
@@ -63,9 +68,14 @@ class GoogleOAuth {
   final Future<void> Function(Uri uri) openBrowser;
   final DateTime Function() _clock;
 
-  static const scope = 'https://www.googleapis.com/auth/contacts.readonly';
+  static const contactsScope = 'https://www.googleapis.com/auth/contacts.readonly';
+  static const calendarScope = 'https://www.googleapis.com/auth/calendar';
+  static const scope = '$contactsScope $calendarScope';
   static const clientKey = 'google.client';
   static const refreshKey = 'google.refreshToken';
+
+  /// What Google granted at the last sign-in or token renewal (not secret).
+  static const grantedKey = 'google.grantedScopes';
   static final _authUri = Uri.parse('https://accounts.google.com/o/oauth2/v2/auth');
   static final _tokenUri = Uri.parse('https://oauth2.googleapis.com/token');
 
@@ -74,6 +84,24 @@ class GoogleOAuth {
 
   Future<bool> get hasClient async => await store.read(clientKey) != null;
   Future<bool> get isConnected async => await store.read(refreshKey) != null;
+
+  /// Whether the saved permission covers the calendar. A connection made
+  /// before calendar access was asked for does not; signing in again adds it.
+  Future<bool> get hasCalendar async {
+    if (!await isConnected) return false;
+    var granted = await store.read(grantedKey);
+    if (granted == null) {
+      // Connected before this was kept: a renewal says what is granted.
+      try {
+        invalidateAccess();
+        await accessToken();
+      } on GoogleAuthException {
+        return false;
+      }
+      granted = await store.read(grantedKey);
+    }
+    return (granted ?? '').split(' ').contains(calendarScope);
+  }
 
   /// Checks and keeps the client file Google gives for a Desktop app.
   Future<void> saveClientFile(String fileContents) async {
@@ -136,6 +164,7 @@ class GoogleOAuth {
       final body = _json(response);
       if (response.status != 200 || body['refresh_token'] == null) throw GoogleAuthException('Google did not grant access (${body['error'] ?? response.status}).');
       await store.write(refreshKey, '${body['refresh_token']}');
+      await _keepGranted(body);
       _keepAccess(body);
     } finally {
       await server.close(force: true);
@@ -170,19 +199,25 @@ class GoogleOAuth {
     if (_access != null && until != null && _clock().isBefore(until)) return _access!;
     final refresh = await store.read(refreshKey);
     final saved = await store.read(clientKey);
-    if (refresh == null || saved == null) throw const GoogleAuthException('Google Contacts is not connected.', needsReconnect: true);
+    if (refresh == null || saved == null) throw const GoogleAuthException('Google is not connected.', needsReconnect: true);
     final (clientId, clientSecret) = _parseClient(saved);
     final response = await http('POST', _tokenUri, form: _form({'client_id': clientId, 'client_secret': clientSecret, 'refresh_token': refresh, 'grant_type': 'refresh_token'}));
     final body = _json(response);
     if (response.status != 200) {
       if (body['error'] == 'invalid_grant') {
         await store.delete(refreshKey);
-        throw const GoogleAuthException('Google Contacts needs to be connected again.', needsReconnect: true);
+        throw const GoogleAuthException('Google needs to be connected again.', needsReconnect: true);
       }
       throw GoogleAuthException('Could not reach Google (${response.status}).');
     }
+    await _keepGranted(body);
     _keepAccess(body);
     return _access!;
+  }
+
+  Future<void> _keepGranted(Map<String, dynamic> body) async {
+    final granted = body['scope'];
+    if (granted is String && granted.isNotEmpty) await store.write(grantedKey, granted);
   }
 
   void invalidateAccess() {
@@ -195,6 +230,7 @@ class GoogleOAuth {
   Future<void> disconnect() async {
     final refresh = await store.read(refreshKey);
     await store.delete(refreshKey);
+    await store.delete(grantedKey);
     invalidateAccess();
     if (refresh == null) return;
     try {

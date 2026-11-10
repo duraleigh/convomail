@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 
-import '../domain/event_extractor.dart';
 import 'database.dart';
 import 'people_queries.dart';
 
@@ -65,71 +64,12 @@ extension PlannerQueries on AppDatabase {
 
   Future<void> setEventDone(int id, bool done) => (update(plannerEvents)..where((e) => e.id.equals(id))).write(PlannerEventsCompanion(done: Value(done)));
 
-  /// Extracted events the user rejects stay in the table (so they are not
-  /// re-extracted) but never show again.
-  Future<void> dismissEvent(int id) => (update(plannerEvents)..where((e) => e.id.equals(id))).write(const PlannerEventsCompanion(dismissed: Value(true)));
-
-  /// Confirming an extracted event makes it a regular one.
-  Future<void> confirmEvent(int id) => (update(plannerEvents)..where((e) => e.id.equals(id))).write(const PlannerEventsCompanion(kind: Value('manual'), confidence: Value(1.0)));
-
   Future<void> deleteEvent(int id) => (delete(plannerEvents)..where((e) => e.id.equals(id))).go();
 
-  /// Stores extraction results for a message, skipping ones already there
-  /// (same invitation UID, or same title and start from this message).
-  /// Returns the number inserted.
-  Future<int> upsertExtracted(Message m, List<ExtractedEvent> found) async {
-    var inserted = 0;
-    await transaction(() async {
-      final existing = await (select(plannerEvents)..where((e) => e.sourceMessageId.equals(m.id))).get();
-      final byUid = {for (final e in await (select(plannerEvents)..where((e) => e.uid.isNotNull())).get()) e.uid!: e};
-      for (final ev in found) {
-        if (ev.uid != null && byUid.containsKey(ev.uid)) {
-          final cur = byUid[ev.uid]!;
-          // An updated invitation moves the existing event.
-          if (cur.startAt != ev.start || cur.endAt != ev.end || cur.title != ev.title) {
-            await (update(plannerEvents)..where((e) => e.id.equals(cur.id))).write(PlannerEventsCompanion(
-              title: Value(ev.title),
-              startAt: Value(ev.start),
-              endAt: Value(ev.end),
-              allDay: Value(ev.allDay),
-              location: Value(ev.location),
-              sourceMessageId: Value(m.id),
-              threadKey: Value(m.threadKey),
-            ));
-          }
-          continue;
-        }
-        if (existing.any((e) => e.title == ev.title && e.startAt == ev.start)) continue;
-        await into(plannerEvents).insert(PlannerEventsCompanion.insert(
-          title: ev.title,
-          startAt: Value(ev.start),
-          endAt: Value(ev.end),
-          allDay: Value(ev.allDay),
-          kind: ev.source == 'invite' ? 'invite' : 'extracted',
-          colorKey: Value(ev.source == 'invite' ? 'work' : 'other'),
-          sourceMessageId: Value(m.id),
-          threadKey: Value(m.threadKey),
-          location: Value(ev.location),
-          confidence: Value(ev.confidence),
-          uid: Value(ev.uid),
-          evidence: Value(ev.evidence),
-        ));
-        inserted++;
-      }
-      await (update(messages)..where((x) => x.id.equals(m.id))).write(MessagesCompanion(extractedAt: Value(DateTime.now())));
-    });
-    return inserted;
-  }
-
-  /// Recent People messages whose body (and so event text) was never fetched.
-  Future<List<Message>> messagesNeedingExtraction({int limit = 50, Duration window = const Duration(days: 14)}) {
-    final since = DateTime.now().subtract(window);
-    return (select(messages)
-          ..where((m) => m.extractedAt.isNull() & m.isDeleted.equals(false) & m.isFromMe.equals(false) & m.classification.equals('people') & m.date.isBiggerThanValue(since))
-          ..orderBy([(m) => OrderingTerm.desc(m.date)])
-          ..limit(limit))
-        .get();
-  }
+  /// Removes everything the app once added to the Planner by itself:
+  /// dates read out of mail and calendar invitations. Only what the user
+  /// adds, and their Google Calendar, belong there.
+  Future<int> deleteMailGuesses() => (delete(plannerEvents)..where((e) => e.kind.isIn(const ['extracted', 'invite']))).go();
 
   // ---- reminders -------------------------------------------------------------
 

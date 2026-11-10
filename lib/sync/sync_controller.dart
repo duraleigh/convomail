@@ -10,6 +10,7 @@ import '../platform/credential_store.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
+import 'calendar_sync.dart';
 import 'classification_service.dart';
 import 'contacts_sync.dart';
 import 'notification_center.dart';
@@ -78,6 +79,12 @@ class SyncController {
     unawaited(_db.pruneOrphanEvents().catchError((Object _) => 0));
     // Photos and address-book status, when Google Contacts is connected.
     unawaited(_ref.read(contactsSyncProvider.future).then((s) => s.start()).catchError((Object _) {}));
+    // Google Calendar, for the Planner, when connected with calendar access.
+    try {
+      _ref.read(calendarSyncProvider).start();
+    } catch (_) {
+      // Not connected: nothing to keep in step.
+    }
     unawaited(_db.rebuildMissingThreads(batch: 500).catchError((Object e) {
       // Threading backfill is best effort; new mail is threaded as it syncs.
       return 0;

@@ -13636,6 +13636,26 @@ class $PlannerEventsTable extends PlannerEvents
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _calendarIdMeta = const VerificationMeta(
+    'calendarId',
+  );
+  @override
+  late final GeneratedColumn<String> calendarId = GeneratedColumn<String>(
+    'calendar_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<int> color = GeneratedColumn<int>(
+    'color',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -13666,6 +13686,8 @@ class $PlannerEventsTable extends PlannerEvents
     confidence,
     uid,
     evidence,
+    calendarId,
+    color,
     createdAt,
   ];
   @override
@@ -13780,6 +13802,18 @@ class $PlannerEventsTable extends PlannerEvents
         evidence.isAcceptableOrUnknown(data['evidence']!, _evidenceMeta),
       );
     }
+    if (data.containsKey('calendar_id')) {
+      context.handle(
+        _calendarIdMeta,
+        calendarId.isAcceptableOrUnknown(data['calendar_id']!, _calendarIdMeta),
+      );
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -13859,6 +13893,14 @@ class $PlannerEventsTable extends PlannerEvents
         DriftSqlType.string,
         data['${effectivePrefix}evidence'],
       )!,
+      calendarId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}calendar_id'],
+      ),
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -13879,7 +13921,9 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
   final DateTime? endAt;
   final bool allDay;
 
-  /// `manual`, `extracted`, `invite`, or `todo`.
+  /// `manual` (added here, not in Google), `google` (an event in the user's
+  /// Google Calendar), or `todo`. Older installs also had `extracted` and
+  /// `invite`, removed in schema 18.
   final String kind;
 
   /// Color key: `personal`, `work`, `travel`, `health`, `other`.
@@ -13891,8 +13935,16 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
   final bool done;
   final bool dismissed;
   final double confidence;
+
+  /// For `google` events: the Google event ID.
   final String? uid;
   final String evidence;
+
+  /// For `google` events: the Google calendar it is in.
+  final String? calendarId;
+
+  /// For `google` events: the calendar's colour (ARGB).
+  final int? color;
   final DateTime createdAt;
   const PlannerEvent({
     required this.id,
@@ -13911,6 +13963,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
     required this.confidence,
     this.uid,
     required this.evidence,
+    this.calendarId,
+    this.color,
     required this.createdAt,
   });
   @override
@@ -13944,6 +13998,12 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
       map['uid'] = Variable<String>(uid);
     }
     map['evidence'] = Variable<String>(evidence);
+    if (!nullToAbsent || calendarId != null) {
+      map['calendar_id'] = Variable<String>(calendarId);
+    }
+    if (!nullToAbsent || color != null) {
+      map['color'] = Variable<int>(color);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -13976,6 +14036,12 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
       confidence: Value(confidence),
       uid: uid == null && nullToAbsent ? const Value.absent() : Value(uid),
       evidence: Value(evidence),
+      calendarId: calendarId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(calendarId),
+      color: color == null && nullToAbsent
+          ? const Value.absent()
+          : Value(color),
       createdAt: Value(createdAt),
     );
   }
@@ -14002,6 +14068,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
       confidence: serializer.fromJson<double>(json['confidence']),
       uid: serializer.fromJson<String?>(json['uid']),
       evidence: serializer.fromJson<String>(json['evidence']),
+      calendarId: serializer.fromJson<String?>(json['calendarId']),
+      color: serializer.fromJson<int?>(json['color']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -14025,6 +14093,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
       'confidence': serializer.toJson<double>(confidence),
       'uid': serializer.toJson<String?>(uid),
       'evidence': serializer.toJson<String>(evidence),
+      'calendarId': serializer.toJson<String?>(calendarId),
+      'color': serializer.toJson<int?>(color),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -14046,6 +14116,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
     double? confidence,
     Value<String?> uid = const Value.absent(),
     String? evidence,
+    Value<String?> calendarId = const Value.absent(),
+    Value<int?> color = const Value.absent(),
     DateTime? createdAt,
   }) => PlannerEvent(
     id: id ?? this.id,
@@ -14066,6 +14138,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
     confidence: confidence ?? this.confidence,
     uid: uid.present ? uid.value : this.uid,
     evidence: evidence ?? this.evidence,
+    calendarId: calendarId.present ? calendarId.value : this.calendarId,
+    color: color.present ? color.value : this.color,
     createdAt: createdAt ?? this.createdAt,
   );
   PlannerEvent copyWithCompanion(PlannerEventsCompanion data) {
@@ -14090,6 +14164,10 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
           : this.confidence,
       uid: data.uid.present ? data.uid.value : this.uid,
       evidence: data.evidence.present ? data.evidence.value : this.evidence,
+      calendarId: data.calendarId.present
+          ? data.calendarId.value
+          : this.calendarId,
+      color: data.color.present ? data.color.value : this.color,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -14113,6 +14191,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
           ..write('confidence: $confidence, ')
           ..write('uid: $uid, ')
           ..write('evidence: $evidence, ')
+          ..write('calendarId: $calendarId, ')
+          ..write('color: $color, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -14136,6 +14216,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
     confidence,
     uid,
     evidence,
+    calendarId,
+    color,
     createdAt,
   );
   @override
@@ -14158,6 +14240,8 @@ class PlannerEvent extends DataClass implements Insertable<PlannerEvent> {
           other.confidence == this.confidence &&
           other.uid == this.uid &&
           other.evidence == this.evidence &&
+          other.calendarId == this.calendarId &&
+          other.color == this.color &&
           other.createdAt == this.createdAt);
 }
 
@@ -14178,6 +14262,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
   final Value<double> confidence;
   final Value<String?> uid;
   final Value<String> evidence;
+  final Value<String?> calendarId;
+  final Value<int?> color;
   final Value<DateTime> createdAt;
   const PlannerEventsCompanion({
     this.id = const Value.absent(),
@@ -14196,6 +14282,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
     this.confidence = const Value.absent(),
     this.uid = const Value.absent(),
     this.evidence = const Value.absent(),
+    this.calendarId = const Value.absent(),
+    this.color = const Value.absent(),
     this.createdAt = const Value.absent(),
   });
   PlannerEventsCompanion.insert({
@@ -14215,6 +14303,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
     this.confidence = const Value.absent(),
     this.uid = const Value.absent(),
     this.evidence = const Value.absent(),
+    this.calendarId = const Value.absent(),
+    this.color = const Value.absent(),
     this.createdAt = const Value.absent(),
   }) : title = Value(title),
        kind = Value(kind);
@@ -14235,6 +14325,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
     Expression<double>? confidence,
     Expression<String>? uid,
     Expression<String>? evidence,
+    Expression<String>? calendarId,
+    Expression<int>? color,
     Expression<DateTime>? createdAt,
   }) {
     return RawValuesInsertable({
@@ -14254,6 +14346,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
       if (confidence != null) 'confidence': confidence,
       if (uid != null) 'uid': uid,
       if (evidence != null) 'evidence': evidence,
+      if (calendarId != null) 'calendar_id': calendarId,
+      if (color != null) 'color': color,
       if (createdAt != null) 'created_at': createdAt,
     });
   }
@@ -14275,6 +14369,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
     Value<double>? confidence,
     Value<String?>? uid,
     Value<String>? evidence,
+    Value<String?>? calendarId,
+    Value<int?>? color,
     Value<DateTime>? createdAt,
   }) {
     return PlannerEventsCompanion(
@@ -14294,6 +14390,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
       confidence: confidence ?? this.confidence,
       uid: uid ?? this.uid,
       evidence: evidence ?? this.evidence,
+      calendarId: calendarId ?? this.calendarId,
+      color: color ?? this.color,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -14349,6 +14447,12 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
     if (evidence.present) {
       map['evidence'] = Variable<String>(evidence.value);
     }
+    if (calendarId.present) {
+      map['calendar_id'] = Variable<String>(calendarId.value);
+    }
+    if (color.present) {
+      map['color'] = Variable<int>(color.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -14374,6 +14478,8 @@ class PlannerEventsCompanion extends UpdateCompanion<PlannerEvent> {
           ..write('confidence: $confidence, ')
           ..write('uid: $uid, ')
           ..write('evidence: $evidence, ')
+          ..write('calendarId: $calendarId, ')
+          ..write('color: $color, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -25696,6 +25802,8 @@ typedef $$PlannerEventsTableCreateCompanionBuilder =
       Value<double> confidence,
       Value<String?> uid,
       Value<String> evidence,
+      Value<String?> calendarId,
+      Value<int?> color,
       Value<DateTime> createdAt,
     });
 typedef $$PlannerEventsTableUpdateCompanionBuilder =
@@ -25716,6 +25824,8 @@ typedef $$PlannerEventsTableUpdateCompanionBuilder =
       Value<double> confidence,
       Value<String?> uid,
       Value<String> evidence,
+      Value<String?> calendarId,
+      Value<int?> color,
       Value<DateTime> createdAt,
     });
 
@@ -25805,6 +25915,16 @@ class $$PlannerEventsTableFilterComposer
 
   ColumnFilters<String> get evidence => $composableBuilder(
     column: $table.evidence,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get calendarId => $composableBuilder(
+    column: $table.calendarId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get color => $composableBuilder(
+    column: $table.color,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -25903,6 +26023,16 @@ class $$PlannerEventsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get calendarId => $composableBuilder(
+    column: $table.calendarId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -25970,6 +26100,14 @@ class $$PlannerEventsTableAnnotationComposer
   GeneratedColumn<String> get evidence =>
       $composableBuilder(column: $table.evidence, builder: (column) => column);
 
+  GeneratedColumn<String> get calendarId => $composableBuilder(
+    column: $table.calendarId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
@@ -26021,6 +26159,8 @@ class $$PlannerEventsTableTableManager
                 Value<double> confidence = const Value.absent(),
                 Value<String?> uid = const Value.absent(),
                 Value<String> evidence = const Value.absent(),
+                Value<String?> calendarId = const Value.absent(),
+                Value<int?> color = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PlannerEventsCompanion(
                 id: id,
@@ -26039,6 +26179,8 @@ class $$PlannerEventsTableTableManager
                 confidence: confidence,
                 uid: uid,
                 evidence: evidence,
+                calendarId: calendarId,
+                color: color,
                 createdAt: createdAt,
               ),
           createCompanionCallback:
@@ -26059,6 +26201,8 @@ class $$PlannerEventsTableTableManager
                 Value<double> confidence = const Value.absent(),
                 Value<String?> uid = const Value.absent(),
                 Value<String> evidence = const Value.absent(),
+                Value<String?> calendarId = const Value.absent(),
+                Value<int?> color = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
               }) => PlannerEventsCompanion.insert(
                 id: id,
@@ -26077,6 +26221,8 @@ class $$PlannerEventsTableTableManager
                 confidence: confidence,
                 uid: uid,
                 evidence: evidence,
+                calendarId: calendarId,
+                color: color,
                 createdAt: createdAt,
               ),
           withReferenceMapper: (p0) => p0
