@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/html_sanitizer.dart';
+import '../domain/simple_mail.dart';
 import '../store/attachment_queries.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
@@ -82,8 +83,12 @@ final messageAttachmentsProvider = StreamProvider.family<List<Attachment>, int>(
 /// Rendered, sanitized HTML for a message plus what was blocked. Records
 /// tracker events (spec 4.13) as a side effect of rendering.
 class RenderedBody {
-  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = ''});
+  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = '', this.blocks});
   final String html;
+
+  /// A simple email as blocks to draw straight into the conversation; null
+  /// for designed mail, which keeps its own look in the browser box.
+  final List<MailBlock>? blocks;
   final SanitizedHtml sanitized;
   final bool isPlainText;
 
@@ -123,7 +128,9 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   final highlight = ref.watch(conversationHighlightProvider);
   final out = sanitizer.sanitize(source, allowRemoteImages: allow, resolveCid: (cid) => AttachmentService.dataUriFor(inline, cid), highlight: highlight);
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
-  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: m.bodyText ?? '');
+  // Feeds (newsletters, receipts) keep their designed look.
+  final blocks = isPlain || m.classification == 'feeds' ? null : simpleMailBlocks(out.bodyInner);
+  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: m.bodyText ?? '', blocks: blocks);
 }, retry: _noAutomaticRetry);
 
 /// Thread messages across all participants (spec 4.20), oldest first.

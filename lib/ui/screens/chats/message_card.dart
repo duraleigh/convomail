@@ -19,6 +19,7 @@ import 'files/attachment_ui.dart';
 import 'html_body_view.dart';
 import 'people_list_pane.dart';
 import 'rule_proposal_dialog.dart';
+import 'simple_mail_view.dart';
 import 'thread_actions.dart';
 
 /// One expanded message (spec 4.3): header with To/CC and time, privacy
@@ -144,6 +145,10 @@ class MessageCard extends ConsumerWidget {
               if (r.sanitized.hasRemoteContent) const SizedBox(height: AppSpace.sm),
               if (r.isPlainText && !r.sanitized.hasRemoteContent)
                 PlainTextBody(text: r.text, highlight: ref.watch(conversationHighlightProvider))
+              // Simple mail prints straight into the conversation; only
+              // designed mail needs the browser box.
+              else if (r.blocks != null)
+                SimpleMailBody(blocks: r.blocks!)
               else
                 ref.watch(htmlRendererProvider)(context, r.html),
             ],

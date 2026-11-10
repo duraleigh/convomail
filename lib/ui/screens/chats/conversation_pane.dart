@@ -447,7 +447,7 @@ class _ThreadCard extends StatelessWidget {
                     for (var i = messages.length - 1; i >= 0; i--) ...[
                       if (i != messages.length - 1) Divider(height: 24, color: scheme.outlineVariant),
                       if (openIds.contains(messages[i].id))
-                        MessageCard(key: ValueKey('message-card-${messages[i].id}'), message: messages[i],threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread)
+                        MessageCard(key: ValueKey('message-card-${messages[i].id}'), message: messages[i], threadCount: threadCount, inChat: messages.length, onViewThread: onViewThread)
                       else
                         _CollapsedMessage(message: messages[i], onOpen: () => onOpenMessage?.call(messages[i].id)),
                     ],

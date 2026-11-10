@@ -244,16 +244,15 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('an open email is kept, not loaded again, when the chat redraws', (tester) async {
-    // Each time the email's view starts from scratch it loads the page again:
-    // on screen, a flash.
-    var starts = 0;
-    await openSarah(tester, renderer: (context, html, {maxHeight = 1200}) => _CountingBody(html: html, onStart: () => starts++));
+  testWidgets('an open email is kept, not built again, when the chat redraws', (tester) async {
+    // Each time a card was built from scratch its email loaded again: on
+    // screen, a flash.
+    await openSarah(tester);
     await tester.tap(find.text('Re: Design review'));
     await tester.pumpAndSettle();
     expect(find.textContaining('Final version attached'), findsOneWidget);
-    final before = starts;
-    expect(before, greaterThan(0));
+    final card = find.byKey(ValueKey('message-card-$sarahMsg2'));
+    final before = tester.element(card);
 
     // Starred, and another message changing: both redraw the chat.
     await (db.update(db.messages)..where((m) => m.id.equals(sarahMsg2))).write(const MessagesCompanion(isFlagged: Value(true)));
@@ -261,7 +260,7 @@ void main() {
     await (db.update(db.messages)..where((m) => m.subject.equals('Lunch?'))).write(const MessagesCompanion(isSeen: Value(false)));
     await tester.pumpAndSettle();
     expect(find.textContaining('Final version attached'), findsOneWidget);
-    expect(starts, before, reason: 'the open emails were kept');
+    expect(identical(tester.element(card), before), isTrue, reason: 'the same card, kept');
     await teardown(tester);
   });
 
@@ -269,24 +268,4 @@ void main() {
     expect(tagMailPage('<!DOCTYPE html><html><head></head><body>Hi</body></html>', '7'), '<!DOCTYPE html><html data-cm="7"><head></head><body>Hi</body></html>');
     expect(tagMailPage('<p>Hi</p>', '8'), contains('<html data-cm="8">'));
   });
-}
-
-class _CountingBody extends StatefulWidget {
-  const _CountingBody({required this.html, required this.onStart});
-  final String html;
-  final VoidCallback onStart;
-
-  @override
-  State<_CountingBody> createState() => _CountingBodyState();
-}
-
-class _CountingBodyState extends State<_CountingBody> {
-  @override
-  void initState() {
-    super.initState();
-    widget.onStart();
-  }
-
-  @override
-  Widget build(BuildContext context) => PlainHtmlFallback(html: widget.html);
 }
