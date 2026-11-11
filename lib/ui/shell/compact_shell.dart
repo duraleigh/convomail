@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/compose_state.dart';
 import '../../app/conversation_state.dart';
 import '../../app/destinations.dart';
+import '../../app/layout.dart';
 import '../../app/mail_state.dart';
 import '../../app/people_state.dart';
 import '../../app/settings_navigation.dart';
@@ -55,15 +56,9 @@ class CompactShell extends ConsumerWidget {
 
     // Something is open and filling the screen: the bar and the compose
     // button step aside, and Back belongs to what is open.
-    final detail = page == CompactPage.main &&
-        switch (destination) {
-          Destination.today => ref.watch(openThreadProvider) != null,
-          Destination.focus => ref.watch(openMailProvider('focus')) != null,
-          Destination.chats => ref.watch(composeProvider) != null || ref.watch(selectedRowProvider) != null,
-          Destination.feed => ref.watch(openMailProvider('feed')) != null,
-          Destination.noise => ref.watch(openNoiseGroupProvider) != null,
-          Destination.settings => ref.watch(settingsDetailOpenProvider),
-        };
+    // The screen itself says when it is showing something full screen, so
+    // the bar is hidden exactly when a Back arrow is on screen, never otherwise.
+    final detail = page == CompactPage.main && (destination == Destination.today ? ref.watch(openThreadProvider) != null : ref.watch(compactDetailProvider));
     final underMore = page != CompactPage.main || destination == Destination.noise || destination == Destination.settings;
     final index = underMore ? tabs.length : tabs.indexOf(destination);
     final focusCount = ref.watch(focusMailProvider).value?.length ?? 0;

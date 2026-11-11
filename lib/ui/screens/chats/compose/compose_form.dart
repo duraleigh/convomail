@@ -38,7 +38,7 @@ final allIdentitiesProvider = StreamProvider<List<Identity>>((ref) => ref.watch(
 /// (spec 4.4). Owns recipients, subject, editor, attachments, autosave, and
 /// the send flow with progress and failure feedback.
 class ComposeForm extends ConsumerStatefulWidget {
-  const ComposeForm({super.key, required this.request, required this.onClose, this.compact = false, this.existingDraft, this.header});
+  const ComposeForm({super.key, required this.request, required this.onClose, this.compact = false, this.fill = false, this.existingDraft, this.header});
 
   final ComposeRequest request;
 
@@ -47,6 +47,12 @@ class ComposeForm extends ConsumerStatefulWidget {
 
   /// Inline reply layout: bounded editor height, tighter padding.
   final bool compact;
+
+  /// With [compact]: the writing area takes all the height there is and
+  /// gives it up as the keyboard rises, so the words being typed and the
+  /// Send button are never behind the keyboard. Used on a phone, where a
+  /// reply has the whole screen.
+  final bool fill;
 
   /// A saved draft to resume instead of starting fresh.
   final Draft? existingDraft;
@@ -194,7 +200,9 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       if (_to.isEmpty) {
         _toFocus.requestFocus();
       } else {
+        // A reply: the cursor goes in the message, at its start.
         _editorFocus.requestFocus();
+        _editor?.cursorToStart();
       }
     });
   }
@@ -447,7 +455,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       children: [
         if (widget.header != null) widget.header!,
         Padding(padding: EdgeInsets.fromLTRB(widget.compact ? 8 : 12, 0, widget.compact ? 8 : 12, 0), child: fields),
-        if (widget.compact)
+        if (widget.compact && !widget.fill)
           ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 180, maxHeight: 340),
             child: SizedBox(height: 260, child: editor),

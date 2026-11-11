@@ -48,7 +48,19 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
   double _fieldWidth = 360;
 
   @override
+  void initState() {
+    super.initState();
+    // The typing space opens when the row is tapped and folds away after.
+    _focus.addListener(_focusChanged);
+  }
+
+  void _focusChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
   void dispose() {
+    _focus.removeListener(_focusChanged);
     _controller.dispose();
     if (widget.focusNode == null) _focus.dispose();
     super.dispose();
@@ -106,7 +118,15 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                 return LayoutBuilder(
                   builder: (context, constraints) {
                     _fieldWidth = constraints.maxWidth;
-                    return Focus(
+                    // On a phone, a row that already has a name keeps to one
+                    // line: the space for typing another name is folded to a
+                    // sliver at the end, and opens when the row is tapped.
+                    final narrow = constraints.maxWidth < 300;
+                    final folded = narrow && widget.recipients.isNotEmpty && !focusNode.hasFocus && controller.text.isEmpty;
+                    return GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: focusNode.requestFocus,
+                      child: Focus(
                       onKeyEvent: (node, event) {
                         if (event is! KeyDownEvent) return KeyEventResult.ignored;
                         if (event.logicalKey == LogicalKeyboardKey.backspace && controller.text.isEmpty && widget.recipients.isNotEmpty) {
@@ -132,6 +152,9 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                               child: Align(
                                 alignment: Alignment.centerLeft,
                                 widthFactor: 1,
+                                child: ConstrainedBox(
+                                // On a phone a long name ends in dots before it pushes anything onto a second line.
+                                constraints: BoxConstraints(maxWidth: narrow ? (constraints.maxWidth - 32).clamp(80, 400).toDouble() : double.infinity),
                                 child: InputChip(
                               key: ValueKey('chip-${widget.label}-${r.address}'),
                               avatar: TonalAvatar(identityKey: r.address.toLowerCase(), name: r.name.isEmpty ? r.address : r.name, size: 20),
@@ -145,11 +168,12 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               shape: const StadiumBorder(),
                             ),
+                                ),
                               ),
                             ),
                           ConstrainedBox(
-                            // On a narrow screen the typing space takes what is left beside a name, and does not push onto a line of its own.
-                            constraints: BoxConstraints(minWidth: constraints.maxWidth < 300 ? 72 : 160, maxWidth: 420),
+                            key: ValueKey('recipient-typing-${widget.label}'),
+                            constraints: folded ? const BoxConstraints.tightFor(width: 24) : BoxConstraints(minWidth: narrow ? 72 : 160, maxWidth: 420),
                             child: IntrinsicWidth(
                               child: TextField(
                                 controller: controller,
@@ -182,6 +206,7 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                           ),
                         ],
                       ),
+                    ),
                     );
                   },
                 );

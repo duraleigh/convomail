@@ -37,6 +37,13 @@ class FocusScreen extends ConsumerWidget {
     final later = ref.watch(focusLaterProvider).value ?? const <MailItem>[];
     final openId = ref.watch(openMailProvider('focus'));
     final open = [...items, ...later, ...done].where((i) => i.id == openId).firstOrNull;
+    // The open email left Focus (you answered it, or dealt with it on
+    // another device): nothing is open any more.
+    if (openId != null && open == null && ref.watch(focusMailProvider).hasValue && ref.watch(focusLaterProvider).hasValue && ref.watch(focusDoneTodayProvider).hasValue && !dealt.contains(openId)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted && ref.read(openMailProvider('focus')) == openId) ref.read(openMailProvider('focus').notifier).open(null);
+      });
+    }
 
     if (!shown && items.isEmpty && later.isEmpty) {
       return const Column(

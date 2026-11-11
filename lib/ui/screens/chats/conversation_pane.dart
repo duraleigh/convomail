@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
+import '../../../app/layout.dart';
 import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../store/database.dart';
@@ -67,6 +68,7 @@ class ConversationPane extends ConsumerWidget {
       }
     });
 
+    final phoneReply = row != null && ref.watch(replyRequestProvider) != null && isCompactLayout(context, ref);
     return Padding(
       // Runs to the window's own edges: no inset border of its own.
       padding: EdgeInsets.zero,
@@ -84,6 +86,7 @@ class ConversationPane extends ConsumerWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      if (!phoneReply)
                       Padding(
                         padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
                         child: Row(
@@ -125,7 +128,8 @@ class ConversationPane extends ConsumerWidget {
                           ],
                         ),
                       ),
-                      if (convSearch != null) _ConversationSearchBar(query: convSearch, matchCount: matches?.length),
+                      if (convSearch != null && !phoneReply) _ConversationSearchBar(query: convSearch, matchCount: matches?.length),
+                      if (!phoneReply)
                       Expanded(
                         child: messages.when(
                           loading: () => const Center(child: CircularProgressIndicator()),
@@ -140,7 +144,11 @@ class ConversationPane extends ConsumerWidget {
                           },
                         ),
                       ),
-                      if (row != null) ReplyComposer(row: row, messages: messages.value ?? const []),
+                      // On a phone an open reply has the whole screen above the keyboard.
+                      if (row != null && phoneReply)
+                        Expanded(child: ReplyComposer(row: row, messages: messages.value ?? const [], fill: true))
+                      else if (row != null)
+                        ReplyComposer(row: row, messages: messages.value ?? const []),
                     ],
                   ),
                   if (openThread != null) ThreadViewPanel(threadKey: openThread),

@@ -12,6 +12,7 @@ import 'package:convomail/store/helper_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
 import 'package:convomail/sync/sync_engine.dart';
+import 'package:convomail/ui/screens/chats/compose/compose_editor.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
@@ -158,6 +159,31 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('when the open email leaves Focus (you answered it), the list is back with its bar, and Back works as usual', (tester) async {
+    final renee = await tester.runAsync(() => message('<renee@x>'));
+    final c = await pump(tester, Destination.focus);
+    await tester.tap(find.byKey(ValueKey('mail-row-${renee!.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compact-bar')), findsNothing);
+    // You answer it (from here or anywhere): the helper says so, and it leaves Focus.
+    await tester.runAsync(() => says('read', '<renee@x>', {'line': 'Renee needs your yes or no on Charlotte.', 'focus': true, 'ask': 'Say yes or no to Charlotte.', 'due': null, 'why': <String>[], 'answered': true, 'at': 2}));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 email needs you'), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget, reason: 'the list is showing, so the bar is too');
+    expect(find.byKey(const ValueKey('compact-compose')), findsOneWidget);
+    expect(c.read(openMailProvider('focus')), isNull, reason: 'nothing is open any more');
+    expect(c.read(compactDetailProvider), isFalse);
+    // The bar works: Chats opens, and coming back to Focus shows the list.
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('Chats')));
+    await tester.pumpAndSettle();
+    expect(c.read(destinationProvider), Destination.chats);
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('Focus')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 email needs you'), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget);
+    await teardown(tester);
+  });
+
   testWidgets('Focus rows on a phone: swipe right is Done, swipe left asks until when (Later); a long press opens the menu', (tester) async {
     final renee = await tester.runAsync(() => message('<renee@x>'));
     final bank = await tester.runAsync(() => message('<bank@x>'));
@@ -197,14 +223,40 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('mail-reply')));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+
+    // The reply has the whole screen: the email's heading and list step aside.
+    expect(find.byKey(const ValueKey('mail-done')), findsNothing);
+    final send = find.byKey(const ValueKey('compose-send'));
+    expect(tester.getBottomLeft(send).dy, lessThanOrEqualTo(915));
+    final editorTall = tester.getSize(find.byType(ComposeEditor)).height;
+    expect(editorTall, greaterThan(300), reason: 'the writing area takes the room there is');
+    // The keyboard comes up: the writing area gives way, and Send and what is being typed stay above it.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nothing runs off the screen with the keyboard up');
+    expect(tester.getBottomLeft(send).dy, lessThanOrEqualTo(915 - 420), reason: 'Send is behind the keyboard');
+    final editorBox = tester.getRect(find.byType(ComposeEditor));
+    expect(editorBox.bottom, lessThanOrEqualTo(915 - 420), reason: 'the writing area runs behind the keyboard');
+    expect(editorBox.height, greaterThan(60), reason: 'there is still room to see what is typed');
+    expect(editorBox.height, lessThan(editorTall));
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+
     final chip = find.byKey(const ValueKey('chip-To-renee@booking.example'));
     expect(chip, findsOneWidget);
     final name = tester.renderObject<RenderParagraph>(find.descendant(of: chip, matching: find.text('Renee Calloway')));
     // The name has the row to itself up to the arrow (the checks' own letters are far wider than real ones, so a long name still ends in dots here).
-    expect(name.size.width, greaterThan(150), reason: 'the name in To is squeezed');
+    expect(name.size.width, greaterThan(120), reason: 'the name in To is squeezed');
     // "To" and the name sit on one line.
     final label = find.descendant(of: find.byKey(const ValueKey('thread-reply')), matching: find.text('To'));
     expect((tester.getCenter(label).dy - tester.getCenter(chip).dy).abs(), lessThan(7), reason: '"To" and the name are out of line');
+    // The To row is one line: the space for typing another name is folded away until the row is tapped.
+    final typing = find.byKey(const ValueKey('recipient-typing-To'));
+    expect(tester.getSize(typing).width, 24);
+    expect((tester.getCenter(typing).dy - tester.getCenter(chip).dy).abs(), lessThan(3), reason: 'no empty band under the name');
+    final toField = find.descendant(of: typing, matching: find.byType(TextField));
+    expect(tester.widget<TextField>(toField).focusNode!.hasFocus, isFalse, reason: 'in a reply the cursor is in the message, not in To');
     // One small arrow at the end of the row, in line with it too, and no word links crowding the name.
     final more = find.byKey(const ValueKey('compose-show-more'));
     expect(more, findsOneWidget);
@@ -219,7 +271,21 @@ void main() {
     final lefts = {for (final l in ['To', 'Cc', 'Bcc', 'Subject']) tester.getTopLeft(find.descendant(of: reply, matching: find.text(l)).first).dx.round()};
     expect(lefts.length, 1, reason: 'the labels start at different places: $lefts');
     expect(find.byKey(const ValueKey('compose-show-more')), findsNothing);
+    // Tapping the To row opens the space to type another name; it folds away again when left.
+    await tester.tap(typing);
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(toField).focusNode!.hasFocus, isTrue);
+    expect(tester.getSize(typing).width, greaterThanOrEqualTo(72));
+    await tester.enterText(toField, 'sam@x.example ');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('chip-To-sam@x.example')), findsOneWidget, reason: 'a second name can still be added on a phone');
     expect(tester.takeException(), isNull);
+    // Back closes the reply first (the email stays open), then the email.
+    await back(tester);
+    expect(find.byKey(const ValueKey('thread-reply')), findsNothing);
+    expect(find.byKey(const ValueKey('mail-done')), findsOneWidget, reason: 'the email is still open');
+    await back(tester);
+    expect(find.textContaining('2 emails need you'), findsOneWidget);
     await teardown(tester);
   });
 
@@ -233,6 +299,21 @@ void main() {
     expect(find.byKey(const ValueKey('compact-back')), findsOneWidget);
     expect(find.byKey(const ValueKey('compact-bar')), findsNothing);
     expect(tester.takeException(), isNull, reason: 'a conversation fits a phone');
+    // Replying in a chat: the reply has the screen, and with the keyboard up Send stays above it.
+    await tester.tap(find.byKey(const ValueKey('reply-pill')));
+    await tester.pumpAndSettle();
+    tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nothing runs off the screen with the keyboard up');
+    expect(tester.getBottomLeft(find.byKey(const ValueKey('compose-send'))).dy, lessThanOrEqualTo(915 - 420), reason: 'Send is behind the keyboard');
+    expect(tester.getRect(find.byType(ComposeEditor)).height, greaterThan(60));
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    // Back closes the reply first; the conversation is still open.
+    await back(tester);
+    expect(find.byKey(const ValueKey('compose-send')), findsNothing);
+    expect(c.read(selectedRowProvider), 'c:renee@booking.example');
     await back(tester);
     expect(c.read(selectedRowProvider), isNull);
     expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget);

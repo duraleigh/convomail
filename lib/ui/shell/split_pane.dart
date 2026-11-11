@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../app/layout.dart';
 
 /// Two panes side by side with a draggable divider. The left pane has a
 /// fixed, user-adjustable width clamped to [minLeft]..[maxLeft]; the right
 /// pane takes the rest but never shrinks below [minRight].
-class SplitPane extends StatefulWidget {
+class SplitPane extends ConsumerStatefulWidget {
   const SplitPane({
     super.key,
     required this.left,
@@ -35,13 +38,38 @@ class SplitPane extends StatefulWidget {
   final ValueChanged<double>? onLeftWidthChanged;
 
   @override
-  State<SplitPane> createState() => _SplitPaneState();
+  ConsumerState<SplitPane> createState() => _SplitPaneState();
 }
 
-class _SplitPaneState extends State<SplitPane> {
+class _SplitPaneState extends ConsumerState<SplitPane> {
   late double _left = widget.initialLeftWidth;
   bool _hover = false;
   bool _drag = false;
+
+  /// On a phone: whether this pane is showing something full screen, as
+  /// last told to the bar along the bottom.
+  late final CompactDetail _detail = ref.read(compactDetailProvider.notifier);
+  bool _told = false;
+
+  void _tell(bool showing) {
+    if (showing == _told) return;
+    _told = showing;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _detail.set(this, showing));
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _detail;
+  }
+
+  @override
+  void dispose() {
+    // Whatever was open here is gone with the screen.
+    final detail = _detail;
+    if (_told) Future.microtask(() => detail.set(this, false));
+    super.dispose();
+  }
 
   @override
   void didUpdateWidget(SplitPane old) {
@@ -53,6 +81,7 @@ class _SplitPaneState extends State<SplitPane> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    _tell(widget.compact && widget.detailOpen);
     if (widget.compact) {
       if (!widget.detailOpen) return widget.left;
       return PopScope(

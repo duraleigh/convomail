@@ -46,7 +46,12 @@ class _ThreadViewPanelState extends ConsumerState<ThreadViewPanel> with SingleTi
       child: PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) _close();
+          if (didPop) return;
+          if (ref.read(replyRequestProvider) != null) {
+            ref.read(replyRequestProvider.notifier).close();
+          } else {
+            _close();
+          }
         },
         child: Stack(
         children: [
@@ -103,6 +108,8 @@ class ThreadView extends ConsumerStatefulWidget {
   ConsumerState<ThreadView> createState() => _ThreadViewState();
 }
 
+Widget _maybeExpanded(bool expand, Widget child) => expand ? Expanded(child: child) : child;
+
 class _ThreadViewState extends ConsumerState<ThreadView> {
   /// Emails the user folded or opened by hand; the rest follow [ThreadView.focusId].
   final Map<int, bool> _open = {};
@@ -149,7 +156,10 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
         final asked = ref.watch(replyRequestProvider);
         final request = asked != null && list.any((m) => m.id == asked.messageId) ? asked : null;
         _showing = request;
-        final below = widget.actions.isNotEmpty && isCompactLayout(context, ref);
+        final phone = isCompactLayout(context, ref);
+        final below = widget.actions.isNotEmpty && phone;
+        // On a phone an open reply has the whole screen above the keyboard.
+        final fullReply = request != null && phone;
         final rowKey = request?.rowKey;
         final draft = rowKey == null ? null : ref.watch(rowDraftProvider(rowKey)).value;
         final people = <String, String>{};
@@ -159,6 +169,7 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (!fullReply)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 8, 6),
               child: Column(
@@ -184,10 +195,12 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
                 ],
               ),
             ),
+            if (!fullReply)
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
               child: Wrap(spacing: -8, children: [for (final e in people.entries) TonalAvatar(identityKey: e.key, name: e.value, size: 28)]),
             ),
+            if (!fullReply)
             Expanded(
               child: ListView.builder(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
@@ -232,7 +245,9 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
               ),
             ),
             if (request != null)
-              Padding(
+              _maybeExpanded(
+                fullReply,
+                Padding(
                 padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                 child: Material(
                   key: const ValueKey('thread-reply'),
@@ -245,6 +260,7 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
                     key: ValueKey('thread-reply-${request.hashCode}'),
                     request: request,
                     compact: true,
+                    fill: fullReply,
                     // A draft already begun for this same email, in the same way, is picked up again.
                     existingDraft: draft != null && draft.kind == request.kind && draft.inReplyToMessageId == request.messageId ? draft : null,
                     onClose: () => ref.read(replyRequestProvider.notifier).close(),
@@ -268,6 +284,7 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
                     ),
                   ),
                 ),
+              ),
               ),
           ],
         );

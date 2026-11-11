@@ -70,7 +70,14 @@ class MailSplit extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) => SplitPane(
         compact: isCompactLayout(context, ref),
         detailOpen: detailOpen,
-        onCloseDetail: onCloseDetail,
+        // Back closes an open reply first, then the email.
+        onCloseDetail: () {
+          if (ref.read(replyRequestProvider) != null) {
+            ref.read(replyRequestProvider.notifier).close();
+          } else {
+            onCloseDetail?.call();
+          }
+        },
         initialLeftWidth: ref.watch(settingsProvider.select((s) => s.middlePaneWidth)),
         onLeftWidthChanged: (w) => ref.read(settingsProvider.notifier).setMiddlePaneWidth(w),
         minLeft: AppLayout.middlePaneMin,

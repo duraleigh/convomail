@@ -11,6 +11,32 @@ final forceCompactProvider = Provider<bool?>((ref) => null);
 /// no hovering, no right click). Replaceable in tests.
 final isTouchDeviceProvider = Provider<bool>((ref) => Platform.isAndroid);
 
+/// On a phone: whether something is open and filling the screen right now
+/// (an email, a conversation, a settings page). The screen that is showing
+/// it says so itself, so the bar along the bottom can never disagree with
+/// what is on screen.
+final compactDetailProvider = NotifierProvider<CompactDetail, bool>(CompactDetail.new);
+
+class CompactDetail extends Notifier<bool> {
+  /// The screen that is showing something full screen. One screen leaving
+  /// never clears what the next one has just said.
+  Object? _by;
+
+  @override
+  bool build() => false;
+
+  void set(Object screen, bool showing) {
+    if (!ref.mounted) return;
+    if (showing) {
+      _by = screen;
+    } else if (identical(_by, screen)) {
+      _by = null;
+    }
+    final now = _by != null;
+    if (state != now) state = now;
+  }
+}
+
 /// The phone layout: one pane at a time with a bar along the bottom.
 ///
 /// A phone gets it either way up. A tablet gets it upright, and the PC's

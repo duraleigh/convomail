@@ -16,9 +16,12 @@ final rowDraftProvider = StreamProvider.family<Draft?, String>((ref, rowKey) => 
 /// 4.4). Collapsed: a "Reply to X…" pill with reply-all and forward
 /// buttons, or a "Resume draft" pill. Expanded: the full [ComposeForm].
 class ReplyComposer extends ConsumerWidget {
-  const ReplyComposer({super.key, required this.row, required this.messages});
+  const ReplyComposer({super.key, required this.row, required this.messages, this.fill = false});
   final PeopleRow row;
   final List<Message> messages;
+
+  /// On a phone, an open reply has the whole screen above the keyboard.
+  final bool fill;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -49,6 +52,7 @@ class ReplyComposer extends ConsumerWidget {
             key: ValueKey('reply-${request.hashCode}'),
             request: request,
             compact: true,
+            fill: fill,
             // Resume the row's draft only for the same kind of request: a
             // Forward while a reply draft exists starts fresh and keeps the draft.
             existingDraft: draft != null && draft.kind == request.kind ? draft : null,

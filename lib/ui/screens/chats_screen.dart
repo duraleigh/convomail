@@ -27,6 +27,9 @@ class ChatsScreen extends ConsumerWidget {
       onCloseDetail: () {
         if (ref.read(composeProvider) != null) {
           ref.read(composeProvider.notifier).close();
+        } else if (ref.read(replyRequestProvider) != null) {
+          // An open reply closes first, then the conversation.
+          ref.read(replyRequestProvider.notifier).close();
         } else {
           ref.read(selectedRowProvider.notifier).select(null);
         }

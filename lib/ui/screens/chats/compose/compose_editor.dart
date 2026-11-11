@@ -38,6 +38,15 @@ class ComposeEditorController extends ChangeNotifier {
 
   late final EditorState editorState;
 
+  /// Puts the cursor at the start of the message, where a reply is written
+  /// (above the signature). On a phone this is also what brings the
+  /// keyboard up for the message, not for another field.
+  void cursorToStart() {
+    final first = editorState.document.root.children.firstOrNull;
+    if (first == null) return;
+    editorState.updateSelectionWithReason(Selection.collapsed(Position(path: first.path)), reason: SelectionUpdateReason.uiEvent);
+  }
+
   /// The signature blocks this composer put in, so a change of From address
   /// can swap them for the new address's signature.
   final List<Node> _signature = [];
