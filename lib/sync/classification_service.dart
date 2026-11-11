@@ -6,6 +6,7 @@ import '../domain/classifier.dart';
 import '../domain/identity.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart' hide ClassificationRule;
+import '../store/helper_queries.dart';
 import '../store/merge_queries.dart';
 import '../store/people_queries.dart';
 import '../store/sync_queries.dart';
@@ -90,7 +91,10 @@ class ClassificationService {
     if (before == null) return false;
     final facts = await db.senderFacts(key);
     if (facts == null) return false;
-    final decision = classifier.classifySender(facts);
+    // While this device follows a helper, the helper decides who is a
+    // person, so every device agrees. The user's own move still wins here,
+    // and a sender the helper has not decided yet is decided by the rules.
+    final decision = (facts.override == null ? await db.helperSender(key) : null) ?? classifier.classifySender(facts);
     await db.writeSenderDecision(key, decision, keepSource: before.classificationSource == 'override');
     final senderDefault = (await (db.select(db.contacts)..where((c) => c.key.equals(key))).getSingle()).feedsCategory;
     await _classifyMessagesOf(key, decision.bucket, classifier, senderDefault: senderDefault);
@@ -126,6 +130,12 @@ class ClassificationService {
       category = inferred == senderDefault ? m.feedsCategory : inferred;
       // A category the user set on this message is kept.
       if (m.feedsCategory != null && m.feedsCategory != senderDefault) category = m.feedsCategory;
+    }
+    // What the helper decided for this one email stands.
+    final verdict = m.isFromMe ? null : await db.helperVerdict(m.messageId);
+    if (verdict != null) {
+      bucket = verdict.bucket;
+      category = verdict.bucket == Bucket.feeds ? verdict.category : null;
     }
     if (m.classification != bucket.name || m.feedsCategory != category) {
       await db.writeMessageClassification(m.id, bucket, category: category);
@@ -210,11 +220,21 @@ class ClassificationService {
     await db.logClassification(contactKey: contactKey, decision: Bucket.feeds, category: category, reasons: const ['sender category set'], source: 'correction');
   }
 
+  /// A fix to one email goes to the helper too, by the email's own
+  /// Message-ID, so every device shows it the same way.
+  Future<void> _noteFix(Message m, Map<String, Object?> fix) async {
+    final id = m.messageId;
+    if (id == null || id.isEmpty) return;
+    await db.noteForHelper('msgfix', id, fix);
+  }
+
   /// "Just this once": fix one message without a rule.
   Future<void> setMessageCategory(int messageId, String? category) async {
     final m = await db.messageById(messageId);
     if (m == null) return;
     await db.setMessageCategory(messageId, category);
+    await _noteFix(m, {'cat': category});
+    await db.rememberLocalVerdict(m.messageId, Bucket.feeds, category);
     await db.logClassification(messageId: messageId, contactKey: m.fromContactKey, decision: Bucket.feeds, category: category, reasons: const ['message category set'], source: 'correction');
   }
 
@@ -223,6 +243,8 @@ class ClassificationService {
     final m = await db.messageById(messageId);
     if (m == null) return;
     await db.writeMessageClassification(messageId, bucket, category: bucket == Bucket.feeds ? m.feedsCategory : null);
+    await _noteFix(m, {'cls': bucket.name});
+    await db.rememberLocalVerdict(m.messageId, bucket, m.feedsCategory);
     await db.logClassification(messageId: messageId, contactKey: m.fromContactKey, decision: bucket, reasons: const ['just this once'], source: 'correction');
     await db.refreshDirtyRows();
   }

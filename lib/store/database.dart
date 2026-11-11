@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math';
 
 import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
@@ -383,6 +384,9 @@ class FeedsCategoryRows extends Table {
 /// Rules the user accepted from the correction flow (spec 4.11).
 class ClassificationRules extends Table {
   IntColumn get id => integer().autoIncrement()();
+
+  /// The rule's name across devices (the helper keeps rules by it).
+  TextColumn get uid => text().nullable().clientDefault(newSyncId)();
   TextColumn get field => text()();
   TextColumn get pattern => text()();
   TextColumn get bucket => text().nullable()();
@@ -491,6 +495,9 @@ class CardTags extends Table {
 /// Reminders (spec 4.9): alert at a time without hiding anything.
 class Reminders extends Table {
   IntColumn get id => integer().autoIncrement()();
+
+  /// The reminder's name across devices (the helper keeps reminders by it).
+  TextColumn get uid => text().nullable().clientDefault(newSyncId)();
   TextColumn get title => text()();
   DateTimeColumn get dueAt => dateTime()();
   IntColumn get messageId => integer().nullable()();
@@ -538,6 +545,67 @@ class PlannerEvents extends Table {
 
 // ---------------------------------------------------------------------------
 
+/// A random name for something kept in step across devices.
+String newSyncId() {
+  final r = Random.secure();
+  return [for (var i = 0; i < 12; i++) r.nextInt(256).toRadixString(16).padLeft(2, '0')].join();
+}
+
+/// Changes made on this device that have not reached the helper yet.
+///
+/// Mostly a list of what changed, not the change itself: when [data] is
+/// empty, the row is read as it stands at the moment it is sent, so several
+/// edits to one thing go up as one. Filled by triggers (see
+/// `_createHelperTriggers`), so no screen has to remember to do it.
+class HelperOutbox extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get kind => text()();
+  TextColumn get k => text()();
+
+  /// JSON to send as it is, for the few changes that are not a row's state.
+  TextColumn get data => text().withDefault(const Constant(''))();
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {kind, k, data},
+      ];
+}
+
+/// What the helper decided about a sender. While this device follows a
+/// helper, these stand in place of its own sorting.
+class HelperSenders extends Table {
+  TextColumn get key => text()();
+  TextColumn get cls => text()();
+  TextColumn get src => text().withDefault(const Constant('auto'))();
+  TextColumn get cat => text().nullable()();
+  TextColumn get reasons => text().withDefault(const Constant(''))();
+
+  @override
+  Set<Column> get primaryKey => {key};
+}
+
+/// What the helper decided about one email, by its Message-ID. It can
+/// arrive before the email itself does.
+class HelperVerdicts extends Table {
+  TextColumn get messageId => text()();
+  TextColumn get cls => text()();
+  TextColumn get cat => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {messageId};
+}
+
+/// One row: whether this device follows a helper, and whether a change
+/// being written right now came from it (so it is not sent back).
+class HelperState extends Table {
+  IntColumn get id => integer()();
+  BoolColumn get connected => boolean().withDefault(const Constant(false))();
+  BoolColumn get applying => boolean().withDefault(const Constant(false))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DriftDatabase(tables: [
   Settings,
   Accounts,
@@ -564,7 +632,7 @@ class PlannerEvents extends Table {
   Cards,
   CardTags,
   Reminders,
-  PlannerEvents, TimelyItems, AddressBookEntryRows])
+  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
 
@@ -581,7 +649,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -592,6 +660,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           await _createSearchIndex();
           await _seedFeedsCategories();
           await _seedBoardColumns();
+          await _createHelperTriggers();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -716,6 +785,17 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await m.addColumn(messages, messages.doneAt);
             await m.addColumn(contacts, contacts.feedsPile);
           }
+          if (from < 20) {
+            await m.createTable(helperOutbox);
+            await m.createTable(helperSenders);
+            await m.createTable(helperVerdicts);
+            await m.createTable(helperState);
+            await m.addColumn(classificationRules, classificationRules.uid);
+            await m.addColumn(reminders, reminders.uid);
+            await customStatement('UPDATE classification_rules SET uid = lower(hex(randomblob(12))) WHERE uid IS NULL');
+            await customStatement('UPDATE reminders SET uid = lower(hex(randomblob(12))) WHERE uid IS NULL');
+            await _createHelperTriggers();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -777,6 +857,56 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
 
   /// Triggers that mark People rows stale whenever anything that feeds a
   /// summary changes. Drift does not manage triggers, so they live here.
+  /// Notes in `helper_outbox` whatever the user changes that the helper
+  /// keeps for every device. Nothing is noted unless this device follows a
+  /// helper, and nothing while a change from the helper is being written
+  /// (that would send it straight back).
+  Future<void> _createHelperTriggers() async {
+    await customStatement('INSERT OR IGNORE INTO helper_state (id, connected, applying) VALUES (1, 0, 0)');
+    const on = '(SELECT connected = 1 AND applying = 0 FROM helper_state WHERE id = 1)';
+    String note(String kind, String key) => "INSERT OR IGNORE INTO helper_outbox (kind, k, data) VALUES ('$kind', $key, '')";
+    final triggers = <String, String>{
+      'trg_h_rowpref_i': 'AFTER INSERT ON row_prefs WHEN $on BEGIN ${note('rowpref', 'NEW.row_key')}; END',
+      'trg_h_rowpref_u': 'AFTER UPDATE OF pinned, muted, snoozed_until, resurfaced_at ON row_prefs WHEN $on BEGIN ${note('rowpref', 'NEW.row_key')}; END',
+      'trg_h_rowpref_d': 'AFTER DELETE ON row_prefs WHEN $on BEGIN ${note('rowpref', 'OLD.row_key')}; END',
+      'trg_h_reminder_i': 'AFTER INSERT ON reminders WHEN $on AND NEW.uid IS NOT NULL BEGIN ${note('reminder', 'NEW.uid')}; END',
+      'trg_h_reminder_u': 'AFTER UPDATE ON reminders WHEN $on AND NEW.uid IS NOT NULL BEGIN ${note('reminder', 'NEW.uid')}; END',
+      'trg_h_reminder_d': 'AFTER DELETE ON reminders WHEN $on AND OLD.uid IS NOT NULL BEGIN ${note('reminder', 'OLD.uid')}; END',
+      'trg_h_rule_i': 'AFTER INSERT ON classification_rules WHEN $on AND NEW.uid IS NOT NULL BEGIN ${note('rule', 'NEW.uid')}; END',
+      'trg_h_rule_u': 'AFTER UPDATE ON classification_rules WHEN $on AND NEW.uid IS NOT NULL BEGIN ${note('rule', 'NEW.uid')}; END',
+      'trg_h_rule_d': 'AFTER DELETE ON classification_rules WHEN $on AND OLD.uid IS NOT NULL BEGIN ${note('rule', 'OLD.uid')}; END',
+      'trg_h_tag_i': 'AFTER INSERT ON feeds_categories WHEN $on BEGIN ${note('tag', 'NEW.name')}; END',
+      'trg_h_tag_u': 'AFTER UPDATE OF sort_order ON feeds_categories WHEN $on BEGIN ${note('tag', 'NEW.name')}; END',
+      'trg_h_tag_d': 'AFTER DELETE ON feeds_categories WHEN $on BEGIN ${note('tag', 'OLD.name')}; END',
+      // A sender: only what the user owns. Who is a person is the helper's
+      // to decide, unless the user moved the sender by hand.
+      'trg_h_sender_u': '''AFTER UPDATE OF classification, classification_source, feeds_category, feeds_pile, counts_toward_unread, user_label, user_subtitle ON contacts
+        WHEN $on AND NEW.is_me = 0 AND (
+          (NEW.classification_source <> OLD.classification_source AND (NEW.classification_source = 'override' OR OLD.classification_source = 'override'))
+          OR (NEW.classification_source = 'override' AND NEW.classification <> OLD.classification)
+          OR COALESCE(NEW.feeds_category, '') <> COALESCE(OLD.feeds_category, '')
+          OR COALESCE(NEW.feeds_pile, '') <> COALESCE(OLD.feeds_pile, '')
+          OR NEW.counts_toward_unread <> OLD.counts_toward_unread
+          OR COALESCE(NEW.user_label, '') <> COALESCE(OLD.user_label, '')
+          OR COALESCE(NEW.user_subtitle, '') <> COALESCE(OLD.user_subtitle, ''))
+        BEGIN ${note('sender', 'NEW.key')}; END''',
+      'trg_h_book_i': 'AFTER INSERT ON contacts WHEN $on AND NEW.in_address_book = 1 BEGIN ${note('book', 'NEW.key')}; END',
+      'trg_h_book_u': 'AFTER UPDATE OF in_address_book ON contacts WHEN $on AND NEW.in_address_book <> OLD.in_address_book BEGIN ${note('book', 'NEW.key')}; END',
+      'trg_h_done_u': '''AFTER UPDATE OF done_at ON messages
+        WHEN $on AND NEW.message_id IS NOT NULL AND NEW.message_id <> '' AND COALESCE(NEW.done_at, 0) <> COALESCE(OLD.done_at, 0)
+        BEGIN ${note('done', 'NEW.message_id')}; END''',
+      'trg_h_addr_i': 'AFTER INSERT ON contact_addresses WHEN $on AND NEW.address <> NEW.contact_key BEGIN ${note('addr', 'NEW.address')}; END',
+      'trg_h_addr_u': 'AFTER UPDATE ON contact_addresses WHEN $on BEGIN ${note('addr', 'NEW.address')}; END',
+      'trg_h_addr_d': 'AFTER DELETE ON contact_addresses WHEN $on BEGIN ${note('addr', 'OLD.address')}; END',
+      'trg_h_me_i': "AFTER INSERT ON identities WHEN $on BEGIN ${note('me', "'*'")}; END",
+      'trg_h_me_u': "AFTER UPDATE OF email, name ON identities WHEN $on BEGIN ${note('me', "'*'")}; END",
+      'trg_h_me_d': "AFTER DELETE ON identities WHEN $on BEGIN ${note('me', "'*'")}; END",
+    };
+    for (final e in triggers.entries) {
+      await customStatement('CREATE TRIGGER IF NOT EXISTS ${e.key} ${e.value}');
+    }
+  }
+
   Future<void> _createTriggers() async {
     await customStatement('''
       CREATE TRIGGER IF NOT EXISTS trg_assign_ins AFTER INSERT ON message_row_assignments

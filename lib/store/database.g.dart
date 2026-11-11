@@ -10834,6 +10834,16 @@ class $ClassificationRulesTable extends ClassificationRules
       'PRIMARY KEY AUTOINCREMENT',
     ),
   );
+  static const VerificationMeta _uidMeta = const VerificationMeta('uid');
+  @override
+  late final GeneratedColumn<String> uid = GeneratedColumn<String>(
+    'uid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: newSyncId,
+  );
   static const VerificationMeta _fieldMeta = const VerificationMeta('field');
   @override
   late final GeneratedColumn<String> field = GeneratedColumn<String>(
@@ -10889,6 +10899,7 @@ class $ClassificationRulesTable extends ClassificationRules
   @override
   List<GeneratedColumn> get $columns => [
     id,
+    uid,
     field,
     pattern,
     bucket,
@@ -10909,6 +10920,12 @@ class $ClassificationRulesTable extends ClassificationRules
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('uid')) {
+      context.handle(
+        _uidMeta,
+        uid.isAcceptableOrUnknown(data['uid']!, _uidMeta),
+      );
     }
     if (data.containsKey('field')) {
       context.handle(
@@ -10957,6 +10974,10 @@ class $ClassificationRulesTable extends ClassificationRules
         DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
+      uid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}uid'],
+      ),
       field: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}field'],
@@ -10989,6 +11010,9 @@ class $ClassificationRulesTable extends ClassificationRules
 class ClassificationRule extends DataClass
     implements Insertable<ClassificationRule> {
   final int id;
+
+  /// The rule's name across devices (the helper keeps rules by it).
+  final String? uid;
   final String field;
   final String pattern;
   final String? bucket;
@@ -10996,6 +11020,7 @@ class ClassificationRule extends DataClass
   final DateTime createdAt;
   const ClassificationRule({
     required this.id,
+    this.uid,
     required this.field,
     required this.pattern,
     this.bucket,
@@ -11006,6 +11031,9 @@ class ClassificationRule extends DataClass
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || uid != null) {
+      map['uid'] = Variable<String>(uid);
+    }
     map['field'] = Variable<String>(field);
     map['pattern'] = Variable<String>(pattern);
     if (!nullToAbsent || bucket != null) {
@@ -11021,6 +11049,7 @@ class ClassificationRule extends DataClass
   ClassificationRulesCompanion toCompanion(bool nullToAbsent) {
     return ClassificationRulesCompanion(
       id: Value(id),
+      uid: uid == null && nullToAbsent ? const Value.absent() : Value(uid),
       field: Value(field),
       pattern: Value(pattern),
       bucket: bucket == null && nullToAbsent
@@ -11040,6 +11069,7 @@ class ClassificationRule extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ClassificationRule(
       id: serializer.fromJson<int>(json['id']),
+      uid: serializer.fromJson<String?>(json['uid']),
       field: serializer.fromJson<String>(json['field']),
       pattern: serializer.fromJson<String>(json['pattern']),
       bucket: serializer.fromJson<String?>(json['bucket']),
@@ -11052,6 +11082,7 @@ class ClassificationRule extends DataClass
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'uid': serializer.toJson<String?>(uid),
       'field': serializer.toJson<String>(field),
       'pattern': serializer.toJson<String>(pattern),
       'bucket': serializer.toJson<String?>(bucket),
@@ -11062,6 +11093,7 @@ class ClassificationRule extends DataClass
 
   ClassificationRule copyWith({
     int? id,
+    Value<String?> uid = const Value.absent(),
     String? field,
     String? pattern,
     Value<String?> bucket = const Value.absent(),
@@ -11069,6 +11101,7 @@ class ClassificationRule extends DataClass
     DateTime? createdAt,
   }) => ClassificationRule(
     id: id ?? this.id,
+    uid: uid.present ? uid.value : this.uid,
     field: field ?? this.field,
     pattern: pattern ?? this.pattern,
     bucket: bucket.present ? bucket.value : this.bucket,
@@ -11078,6 +11111,7 @@ class ClassificationRule extends DataClass
   ClassificationRule copyWithCompanion(ClassificationRulesCompanion data) {
     return ClassificationRule(
       id: data.id.present ? data.id.value : this.id,
+      uid: data.uid.present ? data.uid.value : this.uid,
       field: data.field.present ? data.field.value : this.field,
       pattern: data.pattern.present ? data.pattern.value : this.pattern,
       bucket: data.bucket.present ? data.bucket.value : this.bucket,
@@ -11090,6 +11124,7 @@ class ClassificationRule extends DataClass
   String toString() {
     return (StringBuffer('ClassificationRule(')
           ..write('id: $id, ')
+          ..write('uid: $uid, ')
           ..write('field: $field, ')
           ..write('pattern: $pattern, ')
           ..write('bucket: $bucket, ')
@@ -11101,12 +11136,13 @@ class ClassificationRule extends DataClass
 
   @override
   int get hashCode =>
-      Object.hash(id, field, pattern, bucket, category, createdAt);
+      Object.hash(id, uid, field, pattern, bucket, category, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ClassificationRule &&
           other.id == this.id &&
+          other.uid == this.uid &&
           other.field == this.field &&
           other.pattern == this.pattern &&
           other.bucket == this.bucket &&
@@ -11116,6 +11152,7 @@ class ClassificationRule extends DataClass
 
 class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
   final Value<int> id;
+  final Value<String?> uid;
   final Value<String> field;
   final Value<String> pattern;
   final Value<String?> bucket;
@@ -11123,6 +11160,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
   final Value<DateTime> createdAt;
   const ClassificationRulesCompanion({
     this.id = const Value.absent(),
+    this.uid = const Value.absent(),
     this.field = const Value.absent(),
     this.pattern = const Value.absent(),
     this.bucket = const Value.absent(),
@@ -11131,6 +11169,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
   });
   ClassificationRulesCompanion.insert({
     this.id = const Value.absent(),
+    this.uid = const Value.absent(),
     required String field,
     required String pattern,
     this.bucket = const Value.absent(),
@@ -11140,6 +11179,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
        pattern = Value(pattern);
   static Insertable<ClassificationRule> custom({
     Expression<int>? id,
+    Expression<String>? uid,
     Expression<String>? field,
     Expression<String>? pattern,
     Expression<String>? bucket,
@@ -11148,6 +11188,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (uid != null) 'uid': uid,
       if (field != null) 'field': field,
       if (pattern != null) 'pattern': pattern,
       if (bucket != null) 'bucket': bucket,
@@ -11158,6 +11199,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
 
   ClassificationRulesCompanion copyWith({
     Value<int>? id,
+    Value<String?>? uid,
     Value<String>? field,
     Value<String>? pattern,
     Value<String?>? bucket,
@@ -11166,6 +11208,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
   }) {
     return ClassificationRulesCompanion(
       id: id ?? this.id,
+      uid: uid ?? this.uid,
       field: field ?? this.field,
       pattern: pattern ?? this.pattern,
       bucket: bucket ?? this.bucket,
@@ -11179,6 +11222,9 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (uid.present) {
+      map['uid'] = Variable<String>(uid.value);
     }
     if (field.present) {
       map['field'] = Variable<String>(field.value);
@@ -11202,6 +11248,7 @@ class ClassificationRulesCompanion extends UpdateCompanion<ClassificationRule> {
   String toString() {
     return (StringBuffer('ClassificationRulesCompanion(')
           ..write('id: $id, ')
+          ..write('uid: $uid, ')
           ..write('field: $field, ')
           ..write('pattern: $pattern, ')
           ..write('bucket: $bucket, ')
@@ -13025,6 +13072,16 @@ class $RemindersTable extends Reminders
       'PRIMARY KEY AUTOINCREMENT',
     ),
   );
+  static const VerificationMeta _uidMeta = const VerificationMeta('uid');
+  @override
+  late final GeneratedColumn<String> uid = GeneratedColumn<String>(
+    'uid',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    clientDefault: newSyncId,
+  );
   static const VerificationMeta _titleMeta = const VerificationMeta('title');
   @override
   late final GeneratedColumn<String> title = GeneratedColumn<String>(
@@ -13113,6 +13170,7 @@ class $RemindersTable extends Reminders
   @override
   List<GeneratedColumn> get $columns => [
     id,
+    uid,
     title,
     dueAt,
     messageId,
@@ -13136,6 +13194,12 @@ class $RemindersTable extends Reminders
     final data = instance.toColumns(true);
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('uid')) {
+      context.handle(
+        _uidMeta,
+        uid.isAcceptableOrUnknown(data['uid']!, _uidMeta),
+      );
     }
     if (data.containsKey('title')) {
       context.handle(
@@ -13202,6 +13266,10 @@ class $RemindersTable extends Reminders
         DriftSqlType.int,
         data['${effectivePrefix}id'],
       )!,
+      uid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}uid'],
+      ),
       title: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}title'],
@@ -13245,6 +13313,9 @@ class $RemindersTable extends Reminders
 
 class Reminder extends DataClass implements Insertable<Reminder> {
   final int id;
+
+  /// The reminder's name across devices (the helper keeps reminders by it).
+  final String? uid;
   final String title;
   final DateTime dueAt;
   final int? messageId;
@@ -13255,6 +13326,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
   final DateTime createdAt;
   const Reminder({
     required this.id,
+    this.uid,
     required this.title,
     required this.dueAt,
     this.messageId,
@@ -13268,6 +13340,9 @@ class Reminder extends DataClass implements Insertable<Reminder> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<int>(id);
+    if (!nullToAbsent || uid != null) {
+      map['uid'] = Variable<String>(uid);
+    }
     map['title'] = Variable<String>(title);
     map['due_at'] = Variable<DateTime>(dueAt);
     if (!nullToAbsent || messageId != null) {
@@ -13290,6 +13365,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
   RemindersCompanion toCompanion(bool nullToAbsent) {
     return RemindersCompanion(
       id: Value(id),
+      uid: uid == null && nullToAbsent ? const Value.absent() : Value(uid),
       title: Value(title),
       dueAt: Value(dueAt),
       messageId: messageId == null && nullToAbsent
@@ -13316,6 +13392,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return Reminder(
       id: serializer.fromJson<int>(json['id']),
+      uid: serializer.fromJson<String?>(json['uid']),
       title: serializer.fromJson<String>(json['title']),
       dueAt: serializer.fromJson<DateTime>(json['dueAt']),
       messageId: serializer.fromJson<int?>(json['messageId']),
@@ -13331,6 +13408,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<int>(id),
+      'uid': serializer.toJson<String?>(uid),
       'title': serializer.toJson<String>(title),
       'dueAt': serializer.toJson<DateTime>(dueAt),
       'messageId': serializer.toJson<int?>(messageId),
@@ -13344,6 +13422,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
 
   Reminder copyWith({
     int? id,
+    Value<String?> uid = const Value.absent(),
     String? title,
     DateTime? dueAt,
     Value<int?> messageId = const Value.absent(),
@@ -13354,6 +13433,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
     DateTime? createdAt,
   }) => Reminder(
     id: id ?? this.id,
+    uid: uid.present ? uid.value : this.uid,
     title: title ?? this.title,
     dueAt: dueAt ?? this.dueAt,
     messageId: messageId.present ? messageId.value : this.messageId,
@@ -13366,6 +13446,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
   Reminder copyWithCompanion(RemindersCompanion data) {
     return Reminder(
       id: data.id.present ? data.id.value : this.id,
+      uid: data.uid.present ? data.uid.value : this.uid,
       title: data.title.present ? data.title.value : this.title,
       dueAt: data.dueAt.present ? data.dueAt.value : this.dueAt,
       messageId: data.messageId.present ? data.messageId.value : this.messageId,
@@ -13381,6 +13462,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
   String toString() {
     return (StringBuffer('Reminder(')
           ..write('id: $id, ')
+          ..write('uid: $uid, ')
           ..write('title: $title, ')
           ..write('dueAt: $dueAt, ')
           ..write('messageId: $messageId, ')
@@ -13396,6 +13478,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
   @override
   int get hashCode => Object.hash(
     id,
+    uid,
     title,
     dueAt,
     messageId,
@@ -13410,6 +13493,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
       identical(this, other) ||
       (other is Reminder &&
           other.id == this.id &&
+          other.uid == this.uid &&
           other.title == this.title &&
           other.dueAt == this.dueAt &&
           other.messageId == this.messageId &&
@@ -13422,6 +13506,7 @@ class Reminder extends DataClass implements Insertable<Reminder> {
 
 class RemindersCompanion extends UpdateCompanion<Reminder> {
   final Value<int> id;
+  final Value<String?> uid;
   final Value<String> title;
   final Value<DateTime> dueAt;
   final Value<int?> messageId;
@@ -13432,6 +13517,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
   final Value<DateTime> createdAt;
   const RemindersCompanion({
     this.id = const Value.absent(),
+    this.uid = const Value.absent(),
     this.title = const Value.absent(),
     this.dueAt = const Value.absent(),
     this.messageId = const Value.absent(),
@@ -13443,6 +13529,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
   });
   RemindersCompanion.insert({
     this.id = const Value.absent(),
+    this.uid = const Value.absent(),
     required String title,
     required DateTime dueAt,
     this.messageId = const Value.absent(),
@@ -13455,6 +13542,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
        dueAt = Value(dueAt);
   static Insertable<Reminder> custom({
     Expression<int>? id,
+    Expression<String>? uid,
     Expression<String>? title,
     Expression<DateTime>? dueAt,
     Expression<int>? messageId,
@@ -13466,6 +13554,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
+      if (uid != null) 'uid': uid,
       if (title != null) 'title': title,
       if (dueAt != null) 'due_at': dueAt,
       if (messageId != null) 'message_id': messageId,
@@ -13479,6 +13568,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
 
   RemindersCompanion copyWith({
     Value<int>? id,
+    Value<String?>? uid,
     Value<String>? title,
     Value<DateTime>? dueAt,
     Value<int?>? messageId,
@@ -13490,6 +13580,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
   }) {
     return RemindersCompanion(
       id: id ?? this.id,
+      uid: uid ?? this.uid,
       title: title ?? this.title,
       dueAt: dueAt ?? this.dueAt,
       messageId: messageId ?? this.messageId,
@@ -13506,6 +13597,9 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
     final map = <String, Expression>{};
     if (id.present) {
       map['id'] = Variable<int>(id.value);
+    }
+    if (uid.present) {
+      map['uid'] = Variable<String>(uid.value);
     }
     if (title.present) {
       map['title'] = Variable<String>(title.value);
@@ -13538,6 +13632,7 @@ class RemindersCompanion extends UpdateCompanion<Reminder> {
   String toString() {
     return (StringBuffer('RemindersCompanion(')
           ..write('id: $id, ')
+          ..write('uid: $uid, ')
           ..write('title: $title, ')
           ..write('dueAt: $dueAt, ')
           ..write('messageId: $messageId, ')
@@ -15902,6 +15997,1156 @@ class AddressBookEntryRowsCompanion extends UpdateCompanion<AddressBookEntry> {
   }
 }
 
+class $HelperOutboxTable extends HelperOutbox
+    with TableInfo<$HelperOutboxTable, HelperOutboxData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperOutboxTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kMeta = const VerificationMeta('k');
+  @override
+  late final GeneratedColumn<String> k = GeneratedColumn<String>(
+    'k',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<String> data = GeneratedColumn<String>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, kind, k, data];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_outbox';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperOutboxData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('k')) {
+      context.handle(_kMeta, k.isAcceptableOrUnknown(data['k']!, _kMeta));
+    } else if (isInserting) {
+      context.missing(_kMeta);
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {kind, k, data},
+  ];
+  @override
+  HelperOutboxData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperOutboxData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      k: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}k'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+    );
+  }
+
+  @override
+  $HelperOutboxTable createAlias(String alias) {
+    return $HelperOutboxTable(attachedDatabase, alias);
+  }
+}
+
+class HelperOutboxData extends DataClass
+    implements Insertable<HelperOutboxData> {
+  final int id;
+  final String kind;
+  final String k;
+
+  /// JSON to send as it is, for the few changes that are not a row's state.
+  final String data;
+  const HelperOutboxData({
+    required this.id,
+    required this.kind,
+    required this.k,
+    required this.data,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['kind'] = Variable<String>(kind);
+    map['k'] = Variable<String>(k);
+    map['data'] = Variable<String>(data);
+    return map;
+  }
+
+  HelperOutboxCompanion toCompanion(bool nullToAbsent) {
+    return HelperOutboxCompanion(
+      id: Value(id),
+      kind: Value(kind),
+      k: Value(k),
+      data: Value(data),
+    );
+  }
+
+  factory HelperOutboxData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperOutboxData(
+      id: serializer.fromJson<int>(json['id']),
+      kind: serializer.fromJson<String>(json['kind']),
+      k: serializer.fromJson<String>(json['k']),
+      data: serializer.fromJson<String>(json['data']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'kind': serializer.toJson<String>(kind),
+      'k': serializer.toJson<String>(k),
+      'data': serializer.toJson<String>(data),
+    };
+  }
+
+  HelperOutboxData copyWith({int? id, String? kind, String? k, String? data}) =>
+      HelperOutboxData(
+        id: id ?? this.id,
+        kind: kind ?? this.kind,
+        k: k ?? this.k,
+        data: data ?? this.data,
+      );
+  HelperOutboxData copyWithCompanion(HelperOutboxCompanion data) {
+    return HelperOutboxData(
+      id: data.id.present ? data.id.value : this.id,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      k: data.k.present ? data.k.value : this.k,
+      data: data.data.present ? data.data.value : this.data,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperOutboxData(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('k: $k, ')
+          ..write('data: $data')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, kind, k, data);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperOutboxData &&
+          other.id == this.id &&
+          other.kind == this.kind &&
+          other.k == this.k &&
+          other.data == this.data);
+}
+
+class HelperOutboxCompanion extends UpdateCompanion<HelperOutboxData> {
+  final Value<int> id;
+  final Value<String> kind;
+  final Value<String> k;
+  final Value<String> data;
+  const HelperOutboxCompanion({
+    this.id = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.k = const Value.absent(),
+    this.data = const Value.absent(),
+  });
+  HelperOutboxCompanion.insert({
+    this.id = const Value.absent(),
+    required String kind,
+    required String k,
+    this.data = const Value.absent(),
+  }) : kind = Value(kind),
+       k = Value(k);
+  static Insertable<HelperOutboxData> custom({
+    Expression<int>? id,
+    Expression<String>? kind,
+    Expression<String>? k,
+    Expression<String>? data,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (kind != null) 'kind': kind,
+      if (k != null) 'k': k,
+      if (data != null) 'data': data,
+    });
+  }
+
+  HelperOutboxCompanion copyWith({
+    Value<int>? id,
+    Value<String>? kind,
+    Value<String>? k,
+    Value<String>? data,
+  }) {
+    return HelperOutboxCompanion(
+      id: id ?? this.id,
+      kind: kind ?? this.kind,
+      k: k ?? this.k,
+      data: data ?? this.data,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (k.present) {
+      map['k'] = Variable<String>(k.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<String>(data.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperOutboxCompanion(')
+          ..write('id: $id, ')
+          ..write('kind: $kind, ')
+          ..write('k: $k, ')
+          ..write('data: $data')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HelperSendersTable extends HelperSenders
+    with TableInfo<$HelperSendersTable, HelperSender> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperSendersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _keyMeta = const VerificationMeta('key');
+  @override
+  late final GeneratedColumn<String> key = GeneratedColumn<String>(
+    'key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _clsMeta = const VerificationMeta('cls');
+  @override
+  late final GeneratedColumn<String> cls = GeneratedColumn<String>(
+    'cls',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _srcMeta = const VerificationMeta('src');
+  @override
+  late final GeneratedColumn<String> src = GeneratedColumn<String>(
+    'src',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('auto'),
+  );
+  static const VerificationMeta _catMeta = const VerificationMeta('cat');
+  @override
+  late final GeneratedColumn<String> cat = GeneratedColumn<String>(
+    'cat',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _reasonsMeta = const VerificationMeta(
+    'reasons',
+  );
+  @override
+  late final GeneratedColumn<String> reasons = GeneratedColumn<String>(
+    'reasons',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [key, cls, src, cat, reasons];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_senders';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperSender> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('key')) {
+      context.handle(
+        _keyMeta,
+        key.isAcceptableOrUnknown(data['key']!, _keyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_keyMeta);
+    }
+    if (data.containsKey('cls')) {
+      context.handle(
+        _clsMeta,
+        cls.isAcceptableOrUnknown(data['cls']!, _clsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_clsMeta);
+    }
+    if (data.containsKey('src')) {
+      context.handle(
+        _srcMeta,
+        src.isAcceptableOrUnknown(data['src']!, _srcMeta),
+      );
+    }
+    if (data.containsKey('cat')) {
+      context.handle(
+        _catMeta,
+        cat.isAcceptableOrUnknown(data['cat']!, _catMeta),
+      );
+    }
+    if (data.containsKey('reasons')) {
+      context.handle(
+        _reasonsMeta,
+        reasons.isAcceptableOrUnknown(data['reasons']!, _reasonsMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {key};
+  @override
+  HelperSender map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperSender(
+      key: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}key'],
+      )!,
+      cls: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cls'],
+      )!,
+      src: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}src'],
+      )!,
+      cat: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cat'],
+      ),
+      reasons: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reasons'],
+      )!,
+    );
+  }
+
+  @override
+  $HelperSendersTable createAlias(String alias) {
+    return $HelperSendersTable(attachedDatabase, alias);
+  }
+}
+
+class HelperSender extends DataClass implements Insertable<HelperSender> {
+  final String key;
+  final String cls;
+  final String src;
+  final String? cat;
+  final String reasons;
+  const HelperSender({
+    required this.key,
+    required this.cls,
+    required this.src,
+    this.cat,
+    required this.reasons,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['key'] = Variable<String>(key);
+    map['cls'] = Variable<String>(cls);
+    map['src'] = Variable<String>(src);
+    if (!nullToAbsent || cat != null) {
+      map['cat'] = Variable<String>(cat);
+    }
+    map['reasons'] = Variable<String>(reasons);
+    return map;
+  }
+
+  HelperSendersCompanion toCompanion(bool nullToAbsent) {
+    return HelperSendersCompanion(
+      key: Value(key),
+      cls: Value(cls),
+      src: Value(src),
+      cat: cat == null && nullToAbsent ? const Value.absent() : Value(cat),
+      reasons: Value(reasons),
+    );
+  }
+
+  factory HelperSender.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperSender(
+      key: serializer.fromJson<String>(json['key']),
+      cls: serializer.fromJson<String>(json['cls']),
+      src: serializer.fromJson<String>(json['src']),
+      cat: serializer.fromJson<String?>(json['cat']),
+      reasons: serializer.fromJson<String>(json['reasons']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'key': serializer.toJson<String>(key),
+      'cls': serializer.toJson<String>(cls),
+      'src': serializer.toJson<String>(src),
+      'cat': serializer.toJson<String?>(cat),
+      'reasons': serializer.toJson<String>(reasons),
+    };
+  }
+
+  HelperSender copyWith({
+    String? key,
+    String? cls,
+    String? src,
+    Value<String?> cat = const Value.absent(),
+    String? reasons,
+  }) => HelperSender(
+    key: key ?? this.key,
+    cls: cls ?? this.cls,
+    src: src ?? this.src,
+    cat: cat.present ? cat.value : this.cat,
+    reasons: reasons ?? this.reasons,
+  );
+  HelperSender copyWithCompanion(HelperSendersCompanion data) {
+    return HelperSender(
+      key: data.key.present ? data.key.value : this.key,
+      cls: data.cls.present ? data.cls.value : this.cls,
+      src: data.src.present ? data.src.value : this.src,
+      cat: data.cat.present ? data.cat.value : this.cat,
+      reasons: data.reasons.present ? data.reasons.value : this.reasons,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperSender(')
+          ..write('key: $key, ')
+          ..write('cls: $cls, ')
+          ..write('src: $src, ')
+          ..write('cat: $cat, ')
+          ..write('reasons: $reasons')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(key, cls, src, cat, reasons);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperSender &&
+          other.key == this.key &&
+          other.cls == this.cls &&
+          other.src == this.src &&
+          other.cat == this.cat &&
+          other.reasons == this.reasons);
+}
+
+class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
+  final Value<String> key;
+  final Value<String> cls;
+  final Value<String> src;
+  final Value<String?> cat;
+  final Value<String> reasons;
+  final Value<int> rowid;
+  const HelperSendersCompanion({
+    this.key = const Value.absent(),
+    this.cls = const Value.absent(),
+    this.src = const Value.absent(),
+    this.cat = const Value.absent(),
+    this.reasons = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HelperSendersCompanion.insert({
+    required String key,
+    required String cls,
+    this.src = const Value.absent(),
+    this.cat = const Value.absent(),
+    this.reasons = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : key = Value(key),
+       cls = Value(cls);
+  static Insertable<HelperSender> custom({
+    Expression<String>? key,
+    Expression<String>? cls,
+    Expression<String>? src,
+    Expression<String>? cat,
+    Expression<String>? reasons,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (key != null) 'key': key,
+      if (cls != null) 'cls': cls,
+      if (src != null) 'src': src,
+      if (cat != null) 'cat': cat,
+      if (reasons != null) 'reasons': reasons,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HelperSendersCompanion copyWith({
+    Value<String>? key,
+    Value<String>? cls,
+    Value<String>? src,
+    Value<String?>? cat,
+    Value<String>? reasons,
+    Value<int>? rowid,
+  }) {
+    return HelperSendersCompanion(
+      key: key ?? this.key,
+      cls: cls ?? this.cls,
+      src: src ?? this.src,
+      cat: cat ?? this.cat,
+      reasons: reasons ?? this.reasons,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (key.present) {
+      map['key'] = Variable<String>(key.value);
+    }
+    if (cls.present) {
+      map['cls'] = Variable<String>(cls.value);
+    }
+    if (src.present) {
+      map['src'] = Variable<String>(src.value);
+    }
+    if (cat.present) {
+      map['cat'] = Variable<String>(cat.value);
+    }
+    if (reasons.present) {
+      map['reasons'] = Variable<String>(reasons.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperSendersCompanion(')
+          ..write('key: $key, ')
+          ..write('cls: $cls, ')
+          ..write('src: $src, ')
+          ..write('cat: $cat, ')
+          ..write('reasons: $reasons, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HelperVerdictsTable extends HelperVerdicts
+    with TableInfo<$HelperVerdictsTable, HelperVerdict> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperVerdictsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _clsMeta = const VerificationMeta('cls');
+  @override
+  late final GeneratedColumn<String> cls = GeneratedColumn<String>(
+    'cls',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _catMeta = const VerificationMeta('cat');
+  @override
+  late final GeneratedColumn<String> cat = GeneratedColumn<String>(
+    'cat',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [messageId, cls, cat];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_verdicts';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperVerdict> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('cls')) {
+      context.handle(
+        _clsMeta,
+        cls.isAcceptableOrUnknown(data['cls']!, _clsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_clsMeta);
+    }
+    if (data.containsKey('cat')) {
+      context.handle(
+        _catMeta,
+        cat.isAcceptableOrUnknown(data['cat']!, _catMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId};
+  @override
+  HelperVerdict map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperVerdict(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      cls: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cls'],
+      )!,
+      cat: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}cat'],
+      ),
+    );
+  }
+
+  @override
+  $HelperVerdictsTable createAlias(String alias) {
+    return $HelperVerdictsTable(attachedDatabase, alias);
+  }
+}
+
+class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
+  final String messageId;
+  final String cls;
+  final String? cat;
+  const HelperVerdict({required this.messageId, required this.cls, this.cat});
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['cls'] = Variable<String>(cls);
+    if (!nullToAbsent || cat != null) {
+      map['cat'] = Variable<String>(cat);
+    }
+    return map;
+  }
+
+  HelperVerdictsCompanion toCompanion(bool nullToAbsent) {
+    return HelperVerdictsCompanion(
+      messageId: Value(messageId),
+      cls: Value(cls),
+      cat: cat == null && nullToAbsent ? const Value.absent() : Value(cat),
+    );
+  }
+
+  factory HelperVerdict.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperVerdict(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      cls: serializer.fromJson<String>(json['cls']),
+      cat: serializer.fromJson<String?>(json['cat']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'cls': serializer.toJson<String>(cls),
+      'cat': serializer.toJson<String?>(cat),
+    };
+  }
+
+  HelperVerdict copyWith({
+    String? messageId,
+    String? cls,
+    Value<String?> cat = const Value.absent(),
+  }) => HelperVerdict(
+    messageId: messageId ?? this.messageId,
+    cls: cls ?? this.cls,
+    cat: cat.present ? cat.value : this.cat,
+  );
+  HelperVerdict copyWithCompanion(HelperVerdictsCompanion data) {
+    return HelperVerdict(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      cls: data.cls.present ? data.cls.value : this.cls,
+      cat: data.cat.present ? data.cat.value : this.cat,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperVerdict(')
+          ..write('messageId: $messageId, ')
+          ..write('cls: $cls, ')
+          ..write('cat: $cat')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(messageId, cls, cat);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperVerdict &&
+          other.messageId == this.messageId &&
+          other.cls == this.cls &&
+          other.cat == this.cat);
+}
+
+class HelperVerdictsCompanion extends UpdateCompanion<HelperVerdict> {
+  final Value<String> messageId;
+  final Value<String> cls;
+  final Value<String?> cat;
+  final Value<int> rowid;
+  const HelperVerdictsCompanion({
+    this.messageId = const Value.absent(),
+    this.cls = const Value.absent(),
+    this.cat = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HelperVerdictsCompanion.insert({
+    required String messageId,
+    required String cls,
+    this.cat = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId),
+       cls = Value(cls);
+  static Insertable<HelperVerdict> custom({
+    Expression<String>? messageId,
+    Expression<String>? cls,
+    Expression<String>? cat,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (cls != null) 'cls': cls,
+      if (cat != null) 'cat': cat,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HelperVerdictsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? cls,
+    Value<String?>? cat,
+    Value<int>? rowid,
+  }) {
+    return HelperVerdictsCompanion(
+      messageId: messageId ?? this.messageId,
+      cls: cls ?? this.cls,
+      cat: cat ?? this.cat,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (cls.present) {
+      map['cls'] = Variable<String>(cls.value);
+    }
+    if (cat.present) {
+      map['cat'] = Variable<String>(cat.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperVerdictsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('cls: $cls, ')
+          ..write('cat: $cat, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $HelperStateTable extends HelperState
+    with TableInfo<$HelperStateTable, HelperStateData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperStateTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _connectedMeta = const VerificationMeta(
+    'connected',
+  );
+  @override
+  late final GeneratedColumn<bool> connected = GeneratedColumn<bool>(
+    'connected',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("connected" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _applyingMeta = const VerificationMeta(
+    'applying',
+  );
+  @override
+  late final GeneratedColumn<bool> applying = GeneratedColumn<bool>(
+    'applying',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("applying" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, connected, applying];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_state';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperStateData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('connected')) {
+      context.handle(
+        _connectedMeta,
+        connected.isAcceptableOrUnknown(data['connected']!, _connectedMeta),
+      );
+    }
+    if (data.containsKey('applying')) {
+      context.handle(
+        _applyingMeta,
+        applying.isAcceptableOrUnknown(data['applying']!, _applyingMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  HelperStateData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperStateData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      connected: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}connected'],
+      )!,
+      applying: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}applying'],
+      )!,
+    );
+  }
+
+  @override
+  $HelperStateTable createAlias(String alias) {
+    return $HelperStateTable(attachedDatabase, alias);
+  }
+}
+
+class HelperStateData extends DataClass implements Insertable<HelperStateData> {
+  final int id;
+  final bool connected;
+  final bool applying;
+  const HelperStateData({
+    required this.id,
+    required this.connected,
+    required this.applying,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['connected'] = Variable<bool>(connected);
+    map['applying'] = Variable<bool>(applying);
+    return map;
+  }
+
+  HelperStateCompanion toCompanion(bool nullToAbsent) {
+    return HelperStateCompanion(
+      id: Value(id),
+      connected: Value(connected),
+      applying: Value(applying),
+    );
+  }
+
+  factory HelperStateData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperStateData(
+      id: serializer.fromJson<int>(json['id']),
+      connected: serializer.fromJson<bool>(json['connected']),
+      applying: serializer.fromJson<bool>(json['applying']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'connected': serializer.toJson<bool>(connected),
+      'applying': serializer.toJson<bool>(applying),
+    };
+  }
+
+  HelperStateData copyWith({int? id, bool? connected, bool? applying}) =>
+      HelperStateData(
+        id: id ?? this.id,
+        connected: connected ?? this.connected,
+        applying: applying ?? this.applying,
+      );
+  HelperStateData copyWithCompanion(HelperStateCompanion data) {
+    return HelperStateData(
+      id: data.id.present ? data.id.value : this.id,
+      connected: data.connected.present ? data.connected.value : this.connected,
+      applying: data.applying.present ? data.applying.value : this.applying,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperStateData(')
+          ..write('id: $id, ')
+          ..write('connected: $connected, ')
+          ..write('applying: $applying')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, connected, applying);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperStateData &&
+          other.id == this.id &&
+          other.connected == this.connected &&
+          other.applying == this.applying);
+}
+
+class HelperStateCompanion extends UpdateCompanion<HelperStateData> {
+  final Value<int> id;
+  final Value<bool> connected;
+  final Value<bool> applying;
+  const HelperStateCompanion({
+    this.id = const Value.absent(),
+    this.connected = const Value.absent(),
+    this.applying = const Value.absent(),
+  });
+  HelperStateCompanion.insert({
+    this.id = const Value.absent(),
+    this.connected = const Value.absent(),
+    this.applying = const Value.absent(),
+  });
+  static Insertable<HelperStateData> custom({
+    Expression<int>? id,
+    Expression<bool>? connected,
+    Expression<bool>? applying,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (connected != null) 'connected': connected,
+      if (applying != null) 'applying': applying,
+    });
+  }
+
+  HelperStateCompanion copyWith({
+    Value<int>? id,
+    Value<bool>? connected,
+    Value<bool>? applying,
+  }) {
+    return HelperStateCompanion(
+      id: id ?? this.id,
+      connected: connected ?? this.connected,
+      applying: applying ?? this.applying,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (connected.present) {
+      map['connected'] = Variable<bool>(connected.value);
+    }
+    if (applying.present) {
+      map['applying'] = Variable<bool>(applying.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperStateCompanion(')
+          ..write('id: $id, ')
+          ..write('connected: $connected, ')
+          ..write('applying: $applying')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -15941,6 +17186,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TimelyItemsTable timelyItems = $TimelyItemsTable(this);
   late final $AddressBookEntryRowsTable addressBookEntryRows =
       $AddressBookEntryRowsTable(this);
+  late final $HelperOutboxTable helperOutbox = $HelperOutboxTable(this);
+  late final $HelperSendersTable helperSenders = $HelperSendersTable(this);
+  late final $HelperVerdictsTable helperVerdicts = $HelperVerdictsTable(this);
+  late final $HelperStateTable helperState = $HelperStateTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -15974,6 +17223,10 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     plannerEvents,
     timelyItems,
     addressBookEntryRows,
+    helperOutbox,
+    helperSenders,
+    helperVerdicts,
+    helperState,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -23810,6 +25063,7 @@ typedef $$FeedsCategoryRowsTableProcessedTableManager =
 typedef $$ClassificationRulesTableCreateCompanionBuilder =
     ClassificationRulesCompanion Function({
       Value<int> id,
+      Value<String?> uid,
       required String field,
       required String pattern,
       Value<String?> bucket,
@@ -23819,6 +25073,7 @@ typedef $$ClassificationRulesTableCreateCompanionBuilder =
 typedef $$ClassificationRulesTableUpdateCompanionBuilder =
     ClassificationRulesCompanion Function({
       Value<int> id,
+      Value<String?> uid,
       Value<String> field,
       Value<String> pattern,
       Value<String?> bucket,
@@ -23837,6 +25092,11 @@ class $$ClassificationRulesTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uid => $composableBuilder(
+    column: $table.uid,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -23880,6 +25140,11 @@ class $$ClassificationRulesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get uid => $composableBuilder(
+    column: $table.uid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get field => $composableBuilder(
     column: $table.field,
     builder: (column) => ColumnOrderings(column),
@@ -23917,6 +25182,9 @@ class $$ClassificationRulesTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get uid =>
+      $composableBuilder(column: $table.uid, builder: (column) => column);
 
   GeneratedColumn<String> get field =>
       $composableBuilder(column: $table.field, builder: (column) => column);
@@ -23978,6 +25246,7 @@ class $$ClassificationRulesTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String?> uid = const Value.absent(),
                 Value<String> field = const Value.absent(),
                 Value<String> pattern = const Value.absent(),
                 Value<String?> bucket = const Value.absent(),
@@ -23985,6 +25254,7 @@ class $$ClassificationRulesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ClassificationRulesCompanion(
                 id: id,
+                uid: uid,
                 field: field,
                 pattern: pattern,
                 bucket: bucket,
@@ -23994,6 +25264,7 @@ class $$ClassificationRulesTableTableManager
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String?> uid = const Value.absent(),
                 required String field,
                 required String pattern,
                 Value<String?> bucket = const Value.absent(),
@@ -24001,6 +25272,7 @@ class $$ClassificationRulesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
               }) => ClassificationRulesCompanion.insert(
                 id: id,
+                uid: uid,
                 field: field,
                 pattern: pattern,
                 bucket: bucket,
@@ -25654,6 +26926,7 @@ typedef $$CardTagsTableProcessedTableManager =
     >;
 typedef $$RemindersTableCreateCompanionBuilder = RemindersCompanion Function({
   Value<int> id,
+  Value<String?> uid,
   required String title,
   required DateTime dueAt,
   Value<int?> messageId,
@@ -25665,6 +26938,7 @@ typedef $$RemindersTableCreateCompanionBuilder = RemindersCompanion Function({
 });
 typedef $$RemindersTableUpdateCompanionBuilder = RemindersCompanion Function({
   Value<int> id,
+  Value<String?> uid,
   Value<String> title,
   Value<DateTime> dueAt,
   Value<int?> messageId,
@@ -25686,6 +26960,11 @@ class $$RemindersTableFilterComposer
   });
   ColumnFilters<int> get id => $composableBuilder(
     column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get uid => $composableBuilder(
+    column: $table.uid,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -25744,6 +27023,11 @@ class $$RemindersTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get uid => $composableBuilder(
+    column: $table.uid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get title => $composableBuilder(
     column: $table.title,
     builder: (column) => ColumnOrderings(column),
@@ -25796,6 +27080,9 @@ class $$RemindersTableAnnotationComposer
   });
   GeneratedColumn<int> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get uid =>
+      $composableBuilder(column: $table.uid, builder: (column) => column);
 
   GeneratedColumn<String> get title =>
       $composableBuilder(column: $table.title, builder: (column) => column);
@@ -25851,6 +27138,7 @@ class $$RemindersTableTableManager
           updateCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String?> uid = const Value.absent(),
                 Value<String> title = const Value.absent(),
                 Value<DateTime> dueAt = const Value.absent(),
                 Value<int?> messageId = const Value.absent(),
@@ -25861,6 +27149,7 @@ class $$RemindersTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
               }) => RemindersCompanion(
                 id: id,
+                uid: uid,
                 title: title,
                 dueAt: dueAt,
                 messageId: messageId,
@@ -25873,6 +27162,7 @@ class $$RemindersTableTableManager
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
+                Value<String?> uid = const Value.absent(),
                 required String title,
                 required DateTime dueAt,
                 Value<int?> messageId = const Value.absent(),
@@ -25883,6 +27173,7 @@ class $$RemindersTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
               }) => RemindersCompanion.insert(
                 id: id,
+                uid: uid,
                 title: title,
                 dueAt: dueAt,
                 messageId: messageId,
@@ -27170,6 +28461,731 @@ typedef $$AddressBookEntryRowsTableProcessedTableManager =
       AddressBookEntry,
       PrefetchHooks Function()
     >;
+typedef $$HelperOutboxTableCreateCompanionBuilder =
+    HelperOutboxCompanion Function({
+      Value<int> id,
+      required String kind,
+      required String k,
+      Value<String> data,
+    });
+typedef $$HelperOutboxTableUpdateCompanionBuilder =
+    HelperOutboxCompanion Function({
+      Value<int> id,
+      Value<String> kind,
+      Value<String> k,
+      Value<String> data,
+    });
+
+class $$HelperOutboxTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperOutboxTable> {
+  $$HelperOutboxTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get k => $composableBuilder(
+    column: $table.k,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperOutboxTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperOutboxTable> {
+  $$HelperOutboxTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get k => $composableBuilder(
+    column: $table.k,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperOutboxTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperOutboxTable> {
+  $$HelperOutboxTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get k =>
+      $composableBuilder(column: $table.k, builder: (column) => column);
+
+  GeneratedColumn<String> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+}
+
+class $$HelperOutboxTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperOutboxTable,
+          HelperOutboxData,
+          $$HelperOutboxTableFilterComposer,
+          $$HelperOutboxTableOrderingComposer,
+          $$HelperOutboxTableAnnotationComposer,
+          $$HelperOutboxTableCreateCompanionBuilder,
+          $$HelperOutboxTableUpdateCompanionBuilder,
+          (
+            HelperOutboxData,
+            BaseReferences<_$AppDatabase, $HelperOutboxTable, HelperOutboxData>,
+          ),
+          HelperOutboxData,
+          PrefetchHooks Function()
+        > {
+  $$HelperOutboxTableTableManager(_$AppDatabase db, $HelperOutboxTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperOutboxTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperOutboxTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperOutboxTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback: ({
+            Value<int> id = const Value.absent(),
+            Value<String> kind = const Value.absent(),
+            Value<String> k = const Value.absent(),
+            Value<String> data = const Value.absent(),
+          }) => HelperOutboxCompanion(id: id, kind: kind, k: k, data: data),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String kind,
+                required String k,
+                Value<String> data = const Value.absent(),
+              }) => HelperOutboxCompanion.insert(
+                id: id,
+                kind: kind,
+                k: k,
+                data: data,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperOutboxTable, HelperOutboxData>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HelperOutboxTable,
+                    HelperOutboxData
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperOutboxTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperOutboxTable,
+      HelperOutboxData,
+      $$HelperOutboxTableFilterComposer,
+      $$HelperOutboxTableOrderingComposer,
+      $$HelperOutboxTableAnnotationComposer,
+      $$HelperOutboxTableCreateCompanionBuilder,
+      $$HelperOutboxTableUpdateCompanionBuilder,
+      (
+        HelperOutboxData,
+        BaseReferences<_$AppDatabase, $HelperOutboxTable, HelperOutboxData>,
+      ),
+      HelperOutboxData,
+      PrefetchHooks Function()
+    >;
+typedef $$HelperSendersTableCreateCompanionBuilder =
+    HelperSendersCompanion Function({
+      required String key,
+      required String cls,
+      Value<String> src,
+      Value<String?> cat,
+      Value<String> reasons,
+      Value<int> rowid,
+    });
+typedef $$HelperSendersTableUpdateCompanionBuilder =
+    HelperSendersCompanion Function({
+      Value<String> key,
+      Value<String> cls,
+      Value<String> src,
+      Value<String?> cat,
+      Value<String> reasons,
+      Value<int> rowid,
+    });
+
+class $$HelperSendersTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperSendersTable> {
+  $$HelperSendersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cls => $composableBuilder(
+    column: $table.cls,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get src => $composableBuilder(
+    column: $table.src,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cat => $composableBuilder(
+    column: $table.cat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reasons => $composableBuilder(
+    column: $table.reasons,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperSendersTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperSendersTable> {
+  $$HelperSendersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get key => $composableBuilder(
+    column: $table.key,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cls => $composableBuilder(
+    column: $table.cls,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get src => $composableBuilder(
+    column: $table.src,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cat => $composableBuilder(
+    column: $table.cat,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reasons => $composableBuilder(
+    column: $table.reasons,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperSendersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperSendersTable> {
+  $$HelperSendersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get key =>
+      $composableBuilder(column: $table.key, builder: (column) => column);
+
+  GeneratedColumn<String> get cls =>
+      $composableBuilder(column: $table.cls, builder: (column) => column);
+
+  GeneratedColumn<String> get src =>
+      $composableBuilder(column: $table.src, builder: (column) => column);
+
+  GeneratedColumn<String> get cat =>
+      $composableBuilder(column: $table.cat, builder: (column) => column);
+
+  GeneratedColumn<String> get reasons =>
+      $composableBuilder(column: $table.reasons, builder: (column) => column);
+}
+
+class $$HelperSendersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperSendersTable,
+          HelperSender,
+          $$HelperSendersTableFilterComposer,
+          $$HelperSendersTableOrderingComposer,
+          $$HelperSendersTableAnnotationComposer,
+          $$HelperSendersTableCreateCompanionBuilder,
+          $$HelperSendersTableUpdateCompanionBuilder,
+          (
+            HelperSender,
+            BaseReferences<_$AppDatabase, $HelperSendersTable, HelperSender>,
+          ),
+          HelperSender,
+          PrefetchHooks Function()
+        > {
+  $$HelperSendersTableTableManager(_$AppDatabase db, $HelperSendersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperSendersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperSendersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperSendersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> key = const Value.absent(),
+                Value<String> cls = const Value.absent(),
+                Value<String> src = const Value.absent(),
+                Value<String?> cat = const Value.absent(),
+                Value<String> reasons = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperSendersCompanion(
+                key: key,
+                cls: cls,
+                src: src,
+                cat: cat,
+                reasons: reasons,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String key,
+                required String cls,
+                Value<String> src = const Value.absent(),
+                Value<String?> cat = const Value.absent(),
+                Value<String> reasons = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperSendersCompanion.insert(
+                key: key,
+                cls: cls,
+                src: src,
+                cat: cat,
+                reasons: reasons,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperSendersTable, HelperSender>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HelperSendersTable,
+                    HelperSender
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperSendersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperSendersTable,
+      HelperSender,
+      $$HelperSendersTableFilterComposer,
+      $$HelperSendersTableOrderingComposer,
+      $$HelperSendersTableAnnotationComposer,
+      $$HelperSendersTableCreateCompanionBuilder,
+      $$HelperSendersTableUpdateCompanionBuilder,
+      (
+        HelperSender,
+        BaseReferences<_$AppDatabase, $HelperSendersTable, HelperSender>,
+      ),
+      HelperSender,
+      PrefetchHooks Function()
+    >;
+typedef $$HelperVerdictsTableCreateCompanionBuilder =
+    HelperVerdictsCompanion Function({
+      required String messageId,
+      required String cls,
+      Value<String?> cat,
+      Value<int> rowid,
+    });
+typedef $$HelperVerdictsTableUpdateCompanionBuilder =
+    HelperVerdictsCompanion Function({
+      Value<String> messageId,
+      Value<String> cls,
+      Value<String?> cat,
+      Value<int> rowid,
+    });
+
+class $$HelperVerdictsTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperVerdictsTable> {
+  $$HelperVerdictsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cls => $composableBuilder(
+    column: $table.cls,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get cat => $composableBuilder(
+    column: $table.cat,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperVerdictsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperVerdictsTable> {
+  $$HelperVerdictsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cls => $composableBuilder(
+    column: $table.cls,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get cat => $composableBuilder(
+    column: $table.cat,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperVerdictsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperVerdictsTable> {
+  $$HelperVerdictsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<String> get cls =>
+      $composableBuilder(column: $table.cls, builder: (column) => column);
+
+  GeneratedColumn<String> get cat =>
+      $composableBuilder(column: $table.cat, builder: (column) => column);
+}
+
+class $$HelperVerdictsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperVerdictsTable,
+          HelperVerdict,
+          $$HelperVerdictsTableFilterComposer,
+          $$HelperVerdictsTableOrderingComposer,
+          $$HelperVerdictsTableAnnotationComposer,
+          $$HelperVerdictsTableCreateCompanionBuilder,
+          $$HelperVerdictsTableUpdateCompanionBuilder,
+          (
+            HelperVerdict,
+            BaseReferences<_$AppDatabase, $HelperVerdictsTable, HelperVerdict>,
+          ),
+          HelperVerdict,
+          PrefetchHooks Function()
+        > {
+  $$HelperVerdictsTableTableManager(
+    _$AppDatabase db,
+    $HelperVerdictsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperVerdictsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperVerdictsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperVerdictsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> cls = const Value.absent(),
+                Value<String?> cat = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperVerdictsCompanion(
+                messageId: messageId,
+                cls: cls,
+                cat: cat,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                required String cls,
+                Value<String?> cat = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperVerdictsCompanion.insert(
+                messageId: messageId,
+                cls: cls,
+                cat: cat,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperVerdictsTable, HelperVerdict>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HelperVerdictsTable,
+                    HelperVerdict
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperVerdictsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperVerdictsTable,
+      HelperVerdict,
+      $$HelperVerdictsTableFilterComposer,
+      $$HelperVerdictsTableOrderingComposer,
+      $$HelperVerdictsTableAnnotationComposer,
+      $$HelperVerdictsTableCreateCompanionBuilder,
+      $$HelperVerdictsTableUpdateCompanionBuilder,
+      (
+        HelperVerdict,
+        BaseReferences<_$AppDatabase, $HelperVerdictsTable, HelperVerdict>,
+      ),
+      HelperVerdict,
+      PrefetchHooks Function()
+    >;
+typedef $$HelperStateTableCreateCompanionBuilder =
+    HelperStateCompanion Function({
+      Value<int> id,
+      Value<bool> connected,
+      Value<bool> applying,
+    });
+typedef $$HelperStateTableUpdateCompanionBuilder =
+    HelperStateCompanion Function({
+      Value<int> id,
+      Value<bool> connected,
+      Value<bool> applying,
+    });
+
+class $$HelperStateTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperStateTable> {
+  $$HelperStateTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get connected => $composableBuilder(
+    column: $table.connected,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get applying => $composableBuilder(
+    column: $table.applying,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperStateTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperStateTable> {
+  $$HelperStateTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get connected => $composableBuilder(
+    column: $table.connected,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get applying => $composableBuilder(
+    column: $table.applying,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperStateTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperStateTable> {
+  $$HelperStateTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<bool> get connected =>
+      $composableBuilder(column: $table.connected, builder: (column) => column);
+
+  GeneratedColumn<bool> get applying =>
+      $composableBuilder(column: $table.applying, builder: (column) => column);
+}
+
+class $$HelperStateTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperStateTable,
+          HelperStateData,
+          $$HelperStateTableFilterComposer,
+          $$HelperStateTableOrderingComposer,
+          $$HelperStateTableAnnotationComposer,
+          $$HelperStateTableCreateCompanionBuilder,
+          $$HelperStateTableUpdateCompanionBuilder,
+          (
+            HelperStateData,
+            BaseReferences<_$AppDatabase, $HelperStateTable, HelperStateData>,
+          ),
+          HelperStateData,
+          PrefetchHooks Function()
+        > {
+  $$HelperStateTableTableManager(_$AppDatabase db, $HelperStateTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperStateTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperStateTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperStateTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<bool> connected = const Value.absent(),
+                Value<bool> applying = const Value.absent(),
+              }) => HelperStateCompanion(
+                id: id,
+                connected: connected,
+                applying: applying,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<bool> connected = const Value.absent(),
+                Value<bool> applying = const Value.absent(),
+              }) => HelperStateCompanion.insert(
+                id: id,
+                connected: connected,
+                applying: applying,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperStateTable, HelperStateData>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HelperStateTable,
+                    HelperStateData
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperStateTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperStateTable,
+      HelperStateData,
+      $$HelperStateTableFilterComposer,
+      $$HelperStateTableOrderingComposer,
+      $$HelperStateTableAnnotationComposer,
+      $$HelperStateTableCreateCompanionBuilder,
+      $$HelperStateTableUpdateCompanionBuilder,
+      (
+        HelperStateData,
+        BaseReferences<_$AppDatabase, $HelperStateTable, HelperStateData>,
+      ),
+      HelperStateData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -27229,4 +29245,12 @@ class $AppDatabaseManager {
       $$TimelyItemsTableTableManager(_db, _db.timelyItems);
   $$AddressBookEntryRowsTableTableManager get addressBookEntryRows =>
       $$AddressBookEntryRowsTableTableManager(_db, _db.addressBookEntryRows);
+  $$HelperOutboxTableTableManager get helperOutbox =>
+      $$HelperOutboxTableTableManager(_db, _db.helperOutbox);
+  $$HelperSendersTableTableManager get helperSenders =>
+      $$HelperSendersTableTableManager(_db, _db.helperSenders);
+  $$HelperVerdictsTableTableManager get helperVerdicts =>
+      $$HelperVerdictsTableTableManager(_db, _db.helperVerdicts);
+  $$HelperStateTableTableManager get helperState =>
+      $$HelperStateTableTableManager(_db, _db.helperState);
 }

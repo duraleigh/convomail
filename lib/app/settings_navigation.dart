@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// other screens can deep-link, e.g. "Add account" from the empty inbox.
 enum SettingsSection {
   accounts('Accounts', Icons.account_circle_outlined),
+  devices('Your devices', Icons.devices_other_rounded),
   appearance('Appearance', Icons.palette_outlined),
   notifications('Notifications', Icons.notifications_outlined),
   privacy('Privacy', Icons.shield_outlined),

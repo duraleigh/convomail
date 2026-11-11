@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 
 import '../domain/classifier.dart';
@@ -318,6 +320,7 @@ extension ClassificationQueries on AppDatabase {
     final row = await (select(feedsCategoryRows)..where((c) => c.id.equals(id))).getSingleOrNull();
     if (row == null || n.isEmpty || n == row.name) return;
     await transaction(() async {
+      await _noteTagAction('rename-tag:${row.name}', {'op': 'rename-tag', 'from': row.name, 'to': n});
       await (update(feedsCategoryRows)..where((c) => c.id.equals(id))).write(FeedsCategoryRowsCompanion(name: Value(n)));
       await (update(contacts)..where((c) => c.feedsCategory.equals(row.name))).write(ContactsCompanion(feedsCategory: Value(n)));
       await (update(messages)..where((m) => m.feedsCategory.equals(row.name))).write(MessagesCompanion(feedsCategory: Value(n)));
@@ -325,11 +328,20 @@ extension ClassificationQueries on AppDatabase {
     });
   }
 
+  /// Renaming or removing a tag is told to the helper as one action, so it
+  /// does the same everywhere at once. Noted only while this device follows
+  /// a helper.
+  Future<void> _noteTagAction(String key, Map<String, Object?> action) => customStatement(
+        "INSERT OR IGNORE INTO helper_outbox (kind, k, data) SELECT 'op', ?, ? FROM helper_state WHERE id = 1 AND connected = 1 AND applying = 0",
+        [key, jsonEncode(action)],
+      );
+
   /// Deleting clears the category from senders, messages, and rules.
   Future<void> deleteCategory(int id) async {
     final row = await (select(feedsCategoryRows)..where((c) => c.id.equals(id))).getSingleOrNull();
     if (row == null) return;
     await transaction(() async {
+      await _noteTagAction('delete-tag:${row.name}', {'op': 'delete-tag', 'name': row.name});
       await (delete(feedsCategoryRows)..where((c) => c.id.equals(id))).go();
       await (update(contacts)..where((c) => c.feedsCategory.equals(row.name))).write(const ContactsCompanion(feedsCategory: Value(null)));
       await (update(messages)..where((m) => m.feedsCategory.equals(row.name))).write(const MessagesCompanion(feedsCategory: Value(null)));

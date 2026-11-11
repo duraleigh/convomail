@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
 import 'app/version.dart';
+import 'helper/helper_sync.dart';
 import 'platform/mailto_registration.dart';
 import 'platform/single_instance.dart';
 import 'platform/windows_integration.dart';
@@ -237,6 +239,8 @@ class _PrecisAppState extends ConsumerState<PrecisApp> {
     if (widget.startSync) {
       ref.read(syncControllerProvider).start();
       ref.read(scheduleServiceProvider).start();
+      // Keeping in step with the helper, when this device follows one.
+      unawaited(ref.read(helperProvider.notifier).start());
     }
   }
 

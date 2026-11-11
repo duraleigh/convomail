@@ -61,6 +61,12 @@ final class Sync
                 if (!is_array($data) || strlen(Store::json($data)) > self::MAX_DATA) {
                     throw new InvalidArgumentException('A change is missing its contents, or they are too large.');
                 }
+                if ($kind === 'sender') {
+                    $data = self::mergeSender($old, $data);
+                } elseif ($kind === 'msgfix' && $old !== null) {
+                    // A fix to the tag and a fix to the place are kept side by side.
+                    $data += $old;
+                }
                 $changed = $this->store->put($kind, $k, $data, $device);
             }
             if (!$changed) {
@@ -146,6 +152,37 @@ final class Sync
         }
         $this->sorter->addMyIds($myIds);
         return ['senders' => $n, 'seq' => $this->store->seq()];
+    }
+
+    /**
+     * A sender as a device sends it, laid over what the helper has. The
+     * device owns the user's own choices: a move by hand, the pile, the tag,
+     * the name, whether it rings. Who is a person is otherwise the helper's
+     * to decide, so a device's own guess never replaces the helper's.
+     *
+     * @param array<string, mixed>|null $old
+     * @param array<string, mixed> $new
+     * @return array<string, mixed>
+     */
+    private static function mergeSender(?array $old, array $new): array
+    {
+        $out = $old ?? ['cls' => (string) ($new['cls'] ?? 'people'), 'src' => 'auto', 'reasons' => (string) ($new['reasons'] ?? '')];
+        if (($new['src'] ?? '') === 'override' && in_array($new['cls'] ?? null, ['people', 'feeds'], true)) {
+            $out['cls'] = $new['cls'];
+            $out['src'] = 'override';
+        } elseif (($old['src'] ?? '') === 'override') {
+            // The move was taken back: the rules decide again.
+            $out['src'] = 'auto';
+        }
+        foreach (['cat', 'pile', 'counts', 'label', 'subtitle'] as $mine) {
+            if (array_key_exists($mine, $new)) {
+                $out[$mine] = $new[$mine];
+            }
+        }
+        if (($new['name'] ?? '') !== '') {
+            $out['name'] = $new['name'];
+        }
+        return $out + ['cat' => null, 'pile' => null, 'counts' => false];
     }
 
     private function action(int $device, array $e): int
