@@ -21,6 +21,7 @@ import 'package:convomail/ui/screens/noise_screen.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:convomail/ui/widgets/reading_line.dart';
 import 'package:drift/drift.dart' show Value;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -328,6 +329,68 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('1 email needs you'), findsOneWidget);
       expect(find.text('Done today'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('a Focus row is dealt with where it sits: point at it for Done and Not Focus, or swipe; Undo brings it back', (tester) async {
+      await tester.runAsync(filled);
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      final bank = (await tester.runAsync(() => message('<bank@x>')))!;
+      final container = await pumpApp(tester, Destination.focus);
+      expect(find.byKey(ValueKey('quick-done-${renee.id}')), findsNothing, reason: 'the buttons show only on the row pointed at');
+
+      // Point at a row: Done and Not Focus appear on it. Nothing is opened.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.byKey(ValueKey('mail-row-${renee.id}'))));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('quick-done-${renee.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('quick-ignore-${renee.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('quick-done-${bank.id}')), findsNothing);
+
+      // Done, right there.
+      await tester.tap(find.byKey(ValueKey('quick-done-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(container.read(openMailProvider('focus')), isNull, reason: 'the email was never opened');
+      expect(find.textContaining('1 email needs you'), findsOneWidget);
+      expect(find.text('Done today'), findsOneWidget);
+      expect((await tester.runAsync(() => message('<renee@x>')))!.doneAt, isNotNull);
+
+      // Undo brings it back.
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2 emails need you'), findsOneWidget);
+      expect((await tester.runAsync(() => message('<renee@x>')))!.doneAt, isNull);
+
+      // Not Focus, right there: the assistant is told this one did not need you.
+      ScaffoldMessenger.of(tester.element(find.byType(AppShell))).clearSnackBars();
+      await mouse.moveTo(tester.getCenter(find.byKey(ValueKey('mail-row-${bank.id}'))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('quick-ignore-${bank.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('mail-row-${bank.id}')), findsNothing);
+      expect((await tester.runAsync(() => message('<bank@x>')))!.focusFix, 'no');
+      expect(find.textContaining('Taken out of Focus'), findsOneWidget);
+      await mouse.moveTo(const Offset(1400, 900));
+
+      // Swiping a row right is Done.
+      await tester.drag(find.byKey(ValueKey('mail-row-${renee.id}')), const Offset(500, 0));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Nothing needs you'), findsOneWidget);
+      expect((await tester.runAsync(() => message('<renee@x>')))!.doneAt, isNotNull);
+      await teardown(tester);
+    });
+
+    testWidgets('swiping a Focus row left is Not Focus', (tester) async {
+      await tester.runAsync(filled);
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      await pumpApp(tester, Destination.focus);
+      await tester.drag(find.byKey(ValueKey('mail-row-${renee.id}')), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('mail-row-${renee.id}')), findsNothing);
+      expect((await tester.runAsync(() => message('<renee@x>')))!.focusFix, 'no');
+      expect(find.textContaining('1 email needs you'), findsOneWidget);
       await teardown(tester);
     });
 

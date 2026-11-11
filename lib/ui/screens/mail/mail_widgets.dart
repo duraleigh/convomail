@@ -266,6 +266,89 @@ class MailRowTile extends StatelessWidget {
   }
 }
 
+/// Lets a row be dealt with where it sits, without opening it. Pointing at
+/// the row shows two buttons at its right end, Done and Not Focus; swiping
+/// it right is Done, swiping it left is Not Focus.
+class QuickActions extends StatefulWidget {
+  const QuickActions({super.key, required this.id, required this.child, required this.onDone, required this.onIgnore});
+  final int id;
+  final Widget child;
+  final VoidCallback onDone;
+
+  /// "Not Focus": this one did not need the user.
+  final VoidCallback onIgnore;
+
+  @override
+  State<QuickActions> createState() => _QuickActionsState();
+}
+
+class _QuickActionsState extends State<QuickActions> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    Widget behind(Alignment side, IconData icon, String label, Color color, Color on) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 1),
+          child: Container(
+            alignment: side,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(AppShapes.lg)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [Icon(icon, size: 20, color: on), const SizedBox(width: 8), Text(label, style: text.labelLarge!.copyWith(color: on))],
+            ),
+          ),
+        );
+    return Dismissible(
+      key: ValueKey('swipe-${widget.id}'),
+      background: behind(Alignment.centerLeft, Icons.check_rounded, 'Done', scheme.primaryContainer, scheme.onPrimaryContainer),
+      secondaryBackground: behind(Alignment.centerRight, Icons.do_not_disturb_on_outlined, 'Not Focus', scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+      onDismissed: (direction) => direction == DismissDirection.startToEnd ? widget.onDone() : widget.onIgnore(),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: Stack(
+          children: [
+            widget.child,
+            if (_hover)
+              Positioned(
+                right: 20,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Material(
+                    key: ValueKey('quick-${widget.id}'),
+                    color: scheme.surfaceContainerHighest,
+                    elevation: 2,
+                    borderRadius: BorderRadius.circular(AppShapes.full),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(key: ValueKey('quick-done-${widget.id}'), tooltip: 'Done', visualDensity: VisualDensity.compact, icon: const Icon(Icons.check_rounded, size: 20), onPressed: widget.onDone),
+                          IconButton(
+                            key: ValueKey('quick-ignore-${widget.id}'),
+                            tooltip: 'Not Focus: this did not need me',
+                            visualDensity: VisualDensity.compact,
+                            icon: const Icon(Icons.do_not_disturb_on_outlined, size: 20),
+                            onPressed: widget.onIgnore,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Opens an email beside its list: its words are shown, and it counts as read.
 void openMail(WidgetRef ref, MailItem item) {
   ref.read(expandedMessagesProvider.notifier).expand(item.id);

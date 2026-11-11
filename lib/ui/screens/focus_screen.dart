@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/mail_state.dart';
+import '../../store/database.dart';
+import '../../store/done_queries.dart';
 import '../../store/mail_queries.dart';
 import '../widgets/empty_state.dart';
 import 'mail/mail_widgets.dart';
@@ -18,7 +20,17 @@ class FocusScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final shown = ref.watch(readingsShownProvider).value ?? false;
-    final items = ref.watch(focusMailProvider).value ?? const <MailItem>[];
+    // Rows dealt with a moment ago leave at once; once the list itself no
+    // longer has them, they are forgotten here.
+    final dealt = ref.watch(focusDealtProvider);
+    ref.listen(focusMailProvider, (_, next) {
+      final now = next.value;
+      if (now != null) ref.read(focusDealtProvider.notifier).keepOnly({for (final i in now) i.id});
+    });
+    final items = [
+      for (final i in ref.watch(focusMailProvider).value ?? const <MailItem>[])
+        if (!dealt.contains(i.id)) i,
+    ];
     final done = ref.watch(focusDoneTodayProvider).value ?? const <MailItem>[];
     final openId = ref.watch(openMailProvider('focus'));
     final open = [...items, ...done].where((i) => i.id == openId).firstOrNull;
@@ -54,10 +66,49 @@ class FocusScreen extends ConsumerWidget {
       openMail(ref, i);
     }
 
+    // Done or Not Focus, right in the list: the row leaves at once, and
+    // Undo brings it back.
+    Future<void> deal(MailItem i, {required bool done}) async {
+      final db = ref.read(databaseProvider);
+      final gone = ref.read(focusDealtProvider.notifier);
+      final messenger = ScaffoldMessenger.of(context);
+      gone.add(i.id);
+      if (!done && ref.read(openMailProvider('focus')) == i.id) ref.read(openMailProvider('focus').notifier).open(null);
+      if (done) {
+        await db.setMessagesDone([i.id], true);
+      } else {
+        await db.setFocusFix(i.id, false);
+      }
+      messenger.hideCurrentSnackBar();
+      messenger.showSnackBar(SnackBar(
+        content: Text(done ? 'Done: ${i.ask}' : 'Taken out of Focus. The email is still in ${i.person ? 'its chat' : 'Feed'}.', maxLines: 1, overflow: TextOverflow.ellipsis),
+        behavior: SnackBarBehavior.floating,
+        width: 460,
+        action: SnackBarAction(
+          label: 'Undo',
+          onPressed: () async {
+            gone.remove(i.id);
+            if (done) {
+              await db.setMessagesDone([i.id], false);
+            } else {
+              await db.setFocusFix(i.id, i.focusFix == 'yes' ? true : null);
+            }
+          },
+        ),
+      ));
+    }
+
     final entries = <Widget>[
       for (final g in groups) ...[
         MailGroupLabel(label: g.label, count: g.items.length),
-        for (final i in g.items) MailRowTile(item: i, focus: true, selected: i.id == openId, onTap: () => tap(i), onMenu: (at) => showMailMenu(context, ref, i, at)),
+        for (final i in g.items)
+          QuickActions(
+            key: ValueKey('quick-row-${i.id}'),
+            id: i.id,
+            onDone: () => deal(i, done: true),
+            onIgnore: () => deal(i, done: false),
+            child: MailRowTile(item: i, focus: true, selected: i.id == openId, onTap: () => tap(i), onMenu: (at) => showMailMenu(context, ref, i, at)),
+          ),
       ],
       if (done.isNotEmpty) ...[
         MailGroupLabel(label: 'Done today', count: done.length),

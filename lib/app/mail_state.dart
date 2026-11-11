@@ -54,6 +54,23 @@ class OpenMailNotifier extends Notifier<int?> {
   void open(int? id) => state = id;
 }
 
+/// Focus rows the user has just dealt with in the list (Done or Not Focus),
+/// so they leave at once, before the change has been written.
+final focusDealtProvider = NotifierProvider<FocusDealtNotifier, Set<int>>(FocusDealtNotifier.new);
+
+class FocusDealtNotifier extends Notifier<Set<int>> {
+  @override
+  Set<int> build() => const {};
+  void add(int id) => state = {...state, id};
+  void remove(int id) => state = {...state}..remove(id);
+
+  /// Forgets rows that are no longer in Focus anyway.
+  void keepOnly(Set<int> ids) {
+    final kept = state.intersection(ids);
+    if (kept.length != state.length) state = kept;
+  }
+}
+
 /// The tag pill chosen at the top of Feed or Noise; null is "All".
 final mailTagProvider = NotifierProvider.family<MailTagNotifier, String?, String>(MailTagNotifier.new);
 
