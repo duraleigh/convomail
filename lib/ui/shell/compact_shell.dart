@@ -72,14 +72,18 @@ class CompactShell extends ConsumerWidget {
     }
 
     return PopScope(
-      // Back from a page under More returns to More; from More, to Today.
-      canPop: !detail && !underMore,
+      // Back always goes somewhere: from a page under More to More; from
+      // More, Focus, Chats or Feed to Today; and only from Today does it
+      // leave Précis.
+      canPop: !detail && !underMore && destination == Destination.today,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || detail) return;
-        if (page == CompactPage.more) {
-          go(Destination.today);
-        } else {
+        if (page == CompactPage.main && underMore) {
           ref.read(compactPageProvider.notifier).show(CompactPage.more);
+        } else if (page == CompactPage.done) {
+          ref.read(compactPageProvider.notifier).show(CompactPage.more);
+        } else {
+          go(Destination.today);
         }
       },
       child: Scaffold(

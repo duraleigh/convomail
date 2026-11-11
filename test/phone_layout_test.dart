@@ -176,6 +176,12 @@ void main() {
     expect(find.byKey(const ValueKey('compact-compose')), findsOneWidget);
     expect(c.read(openMailProvider('focus')), isNull, reason: 'nothing is open any more');
     expect(c.read(compactDetailProvider), isFalse);
+    // Back, with nothing open, steps out of Focus to Today (and only from Today does it leave Précis).
+    await back(tester);
+    expect(c.read(destinationProvider), Destination.today);
+    expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget);
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('Focus')));
+    await tester.pumpAndSettle();
     // The bar works: Chats opens, and coming back to Focus shows the list.
     await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('Chats')));
     await tester.pumpAndSettle();
