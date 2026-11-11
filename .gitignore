@@ -49,3 +49,6 @@ app.*.map.json
 
 # The helper: its private folder never goes into the saved copy
 helper/data/
+
+# The helper: fetched libraries are not saved here; composer.lock says which
+helper/vendor/

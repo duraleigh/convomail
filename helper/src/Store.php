@@ -13,7 +13,7 @@ final class Store
     public const DEVICE_KINDS = ['sender', 'rule', 'tag', 'rowpref', 'reminder', 'done', 'msgfix', 'addr', 'me', 'book', 'names'];
 
     /** Kinds only the helper writes. */
-    public const HELPER_KINDS = ['sort'];
+    public const HELPER_KINDS = ['sort', 'read'];
 
     public function __construct(public readonly Db $db, public readonly Crypto $crypto, private readonly ?\Closure $clock = null)
     {

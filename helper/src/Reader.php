@@ -106,6 +106,33 @@ final class Reader
     }
 
     /**
+     * Once per mailbox: learns which of the emails already held are in the
+     * inbox. (Emails filed from now on carry that fact with them.)
+     */
+    public function markInbox(int $accountId): bool
+    {
+        if ($this->store->get("account.$accountId.inbox") !== null) {
+            return false;
+        }
+        try {
+            $db = $this->store->db;
+            $page = null;
+            do {
+                $list = $this->google->listIds($accountId, 'in:inbox newer_than:' . (self::BACKFILL_DAYS + 1) . 'd', $page, 500);
+                foreach (array_chunk($list['ids'], 200) as $chunk) {
+                    $db->run('UPDATE {emails} SET inbox = 1 WHERE account_id = ? AND gmail_id IN (' . Db::marks(count($chunk)) . ')', [$accountId, ...$chunk]);
+                }
+                $page = $list['next'];
+            } while ($page !== null);
+            $this->store->set("account.$accountId.inbox", (string) $this->store->now());
+            return true;
+        } catch (\Throwable $e) {
+            $this->fail($accountId, $e);
+            return false;
+        }
+    }
+
+    /**
      * Asks Google (again) to send the "new mail" notice, when a topic is set
      * and the current asking has less than six days left. Asked daily, it
      * never lapses.

@@ -24,7 +24,7 @@ final class Pages
             *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,"Segoe UI",Roboto,sans-serif}
             main{max-width:760px;margin:0 auto;padding:28px 16px 60px}h1{font-size:26px;margin:0 0 4px}h2{font-size:18px;margin:0 0 10px}
             .sub{color:var(--soft);margin:0 0 22px}.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin:0 0 16px}
-            label{display:block;font-weight:600;margin:12px 0 4px}input[type=text],input[type=password]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
+            label{display:block;font-weight:600;margin:12px 0 4px}input[type=text],input[type=password],select{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit}
             button{font:inherit;font-weight:600;padding:9px 16px;border-radius:999px;border:0;background:var(--accent);color:var(--bg);cursor:pointer;margin:14px 8px 0 0}
             button.quiet{background:transparent;color:var(--accent);border:1px solid var(--line)}button.bad{background:transparent;color:var(--bad);border:1px solid var(--line)}
             .note{color:var(--soft);font-size:14px}.bad{color:var(--bad)}.ok{color:var(--ok)}code,.code{font-family:ui-monospace,Consolas,monospace;font-size:14px;word-break:break-all}
@@ -136,6 +136,44 @@ final class Pages
         }
         $devices = $rows === '' ? '<p>No device has joined yet.</p>' : '<table><tr><th>Name</th><th>Kind</th><th>Last seen</th><th></th></tr>' . $rows . '</table>';
 
+        // ---- the assistant
+        $a = $s['assistant'];
+        $money = static fn (int $micro): string => Prices::dollars($micro);
+        if (!$a['hasKey']) {
+            $assistantState = 'No key yet. Nothing is sent to the assistant.';
+        } elseif ($a['problem'] !== '') {
+            $assistantState = '<span class="bad">Paused.</span> ' . $e((string) $a['problem']);
+        } elseif ($a['on']) {
+            $assistantState = '<span class="ok">On.</span> Reading with ' . $e((string) $a['modelName']) . '.';
+        } else {
+            $assistantState = 'Off. Nothing is sent to it.';
+        }
+        $readerOptions = '<option value="">Choose…</option>';
+        foreach ($s['readers'] as $id => $reader) {
+            $readerOptions .= '<option value="' . $e((string) $id) . '"' . ($a['model'] === $id ? ' selected' : '') . '>' . $e((string) $reader['name']) . '</option>';
+        }
+        $ceilingValue = $e(rtrim(rtrim(number_format($a['ceiling'] / 1_000_000, 2, '.', ''), '0'), '.'));
+        $assistant = '<table><tr><th>State</th><td>' . $assistantState . '</td></tr>'
+            . '<tr><th>Spent this month</th><td>' . $money((int) $a['month']) . ' of a ' . $money((int) $a['ceiling']) . ' ceiling · today ' . $money((int) $a['today']) . '</td></tr>'
+            . '<tr><th>Emails read</th><td>' . (int) $a['read'] . ' · waiting to be read: ' . (int) $a['waiting'] . ' · need you now: ' . (int) $a['focus'] . '</td></tr></table>';
+        if ($a['hasKey']) {
+            $assistant .= '<p class="note"><span class="ok">A key is saved, locked.</span> It is never shown again. Paste a new one only to replace it.</p>';
+        } else {
+            $assistant .= '<p class="note">The assistant is Claude, reached with your own Anthropic developer key. The key is checked with Anthropic (which costs nothing) and kept locked. It is never shown again, to you or to any device.</p>';
+        }
+        $assistant .= '<form method="post" action="/assistant/key" autocomplete="off">' . $csrf
+            . '<label for="akey">Anthropic key</label><input id="akey" type="password" name="key" autocomplete="off" placeholder="sk-ant-…">'
+            . '<button type="submit">' . ($a['hasKey'] ? 'Replace the key' : 'Save the key') . '</button></form>';
+        if ($a['hasKey']) {
+            $assistant .= '<form method="post" action="/assistant/settings">' . $csrf
+                . '<label for="areader">Reader</label><select id="areader" name="model">' . $readerOptions . '</select>'
+                . '<label for="aceil">Ceiling, in dollars a month</label><input id="aceil" type="text" name="ceiling" value="' . $ceilingValue . '">'
+                . '<p class="note">When a month\'s cost reaches the ceiling, the assistant pauses and says so. Mail keeps being sorted by the fixed rules.</p>'
+                . '<button type="submit">Save</button></form>'
+                . '<form method="post" action="/assistant/switch" class="inline">' . $csrf . '<input type="hidden" name="on" value="' . ($a['on'] ? '0' : '1') . '"><button type="submit"' . ($a['on'] ? ' class="bad"' : '') . '>' . ($a['on'] ? 'Turn the assistant off' : 'Turn the assistant on') . '</button></form> '
+                . '<form method="post" action="/assistant/forget" class="inline">' . $csrf . '<button class="quiet" type="submit">Remove the key</button></form>';
+        }
+
         // ---- timer and log
         $timer = (int) $s['clockLast'] > 0 && $now - (int) $s['clockLast'] < 300 ? '<span class="ok">Running.</span> Last ran ' . $ago((int) $s['clockLast'], $now) . '.' : '<span class="bad">Not running.</span> ' . ((int) $s['clockLast'] > 0 ? 'Last ran ' . $ago((int) $s['clockLast'], $now) . '.' : 'It has never run.');
         $log = '';
@@ -166,6 +204,8 @@ final class Pages
             <form method="post" action="/google/topic">$csrf
             <label for="topic">Topic name from Google</label><input id="topic" type="text" name="topic" value="$topic" placeholder="projects/your-project/topics/precis-mail">
             <button type="submit">Save</button></form></div>
+
+            <div class="card"><h2>The assistant</h2>$assistant</div>
 
             <div class="card"><h2>Your devices</h2>$devices
             <form method="post" action="/devices/code">$csrf<button type="submit">Add a device</button></form></div>

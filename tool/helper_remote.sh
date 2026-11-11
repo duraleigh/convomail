@@ -8,6 +8,9 @@
 #   tool/helper_remote.sh servercheck     prove the helper's storage on the live kind of database
 #   tool/helper_remote.sh counts          how the live helper is doing, in counts only
 #   tool/helper_remote.sh resort          sort again every sender it holds mail from (counts only)
+#   tool/helper_remote.sh trial ARGS       the assistant's test week and its settings (counts only); see helper/tests/server_trial.php
+#   tool/helper_remote.sh trialrun N       read the test week with N workers at once, in the background
+#   tool/helper_remote.sh trialdone        whether the workers have finished, and remove the runner when they have
 #   tool/helper_remote.sh run 'COMMAND'   run one command there
 #
 # The helper lives in ~/precis-helper, outside any web folder. Its private
@@ -32,8 +35,10 @@ case "${1:-}" in
     remote 'echo "in as $(whoami)"; php -v | head -1; php -m | grep -i -E "^(pdo_mysql|curl|openssl|mbstring|iconv|json)$" | tr "\n" " "; echo; ls -d ~/precis-helper 2>/dev/null || echo "helper not installed yet"; ls -d ~/domains/clayaiken.com/public_html/precis 2>/dev/null || echo "web folder for precis not there yet"'
     ;;
   install)
-    # Only the program: src, web.php, cron.php. Never the private folder.
-    tar -czf - -C "$HERE/helper" src web.php cron.php | remote 'set -e; mkdir -p ~/precis-helper/data; chmod 700 ~/precis-helper ~/precis-helper/data; rm -rf ~/precis-helper/src.new; mkdir ~/precis-helper/src.new; tar -xzf - -C ~/precis-helper/src.new; rm -rf ~/precis-helper/src.old; [ -d ~/precis-helper/src ] && mv ~/precis-helper/src ~/precis-helper/src.old; mv ~/precis-helper/src.new/src ~/precis-helper/src; mv -f ~/precis-helper/src.new/web.php ~/precis-helper/src.new/cron.php ~/precis-helper/; rm -rf ~/precis-helper/src.new ~/precis-helper/src.old; find ~/precis-helper -type f -name "*.php" | wc -l'
+    # Only the program: src, web.php, cron.php, and the list of outside
+    # libraries (the assistant's). Never the private folder. The libraries
+    # themselves are fetched on the server, before the new program goes live.
+    tar -czf - -C "$HERE/helper" src web.php cron.php composer.json composer.lock | remote 'set -e; mkdir -p ~/precis-helper/data; chmod 700 ~/precis-helper ~/precis-helper/data; rm -rf ~/precis-helper/src.new; mkdir ~/precis-helper/src.new; tar -xzf - -C ~/precis-helper/src.new; cd ~/precis-helper; if ! cmp -s src.new/composer.lock composer.lock || [ ! -f vendor/autoload.php ]; then cp src.new/composer.json src.new/composer.lock .; composer2 install --no-dev --no-interaction --no-progress --optimize-autoloader 2>&1 | tail -3; fi; rm -rf src.old; [ -d src ] && mv src src.old; mv src.new/src src; mv -f src.new/web.php src.new/cron.php .; rm -rf src.new src.old; echo "program files: $(find src web.php cron.php -type f -name "*.php" | wc -l) | library folders: $(ls vendor 2>/dev/null | wc -l)"'
     ;;
   webroot)
     DIR="${2:?the web folder, for example domains/clayaiken.com/public_html/precis}"
@@ -53,6 +58,19 @@ case "${1:-}" in
     # Sorts again every sender the live helper holds mail from; says how much changed, in counts.
     remote 'cat > ~/precis-helper/server_resort.php' < "$HERE/helper/tests/server_resort.php"
     remote 'php ~/precis-helper/server_resort.php; code=$?; rm -f ~/precis-helper/server_resort.php; exit $code'
+    ;;
+  trial)
+    shift
+    remote 'cat > ~/precis-helper/server_trial.php' < "$HERE/helper/tests/server_trial.php"
+    remote "php ~/precis-helper/server_trial.php $*; code=\$?; pgrep -u \$(id -u) -f 'server_trial.php run' >/dev/null || rm -f ~/precis-helper/server_trial.php; exit \$code"
+    ;;
+  trialrun)
+    N="${2:-3}"
+    remote 'cat > ~/precis-helper/server_trial.php' < "$HERE/helper/tests/server_trial.php"
+    remote "cd ~/precis-helper; i=0; while [ \$i -lt $N ]; do nohup php server_trial.php run \$i $N > data/trial.\$i.log 2>&1 & i=\$((i+1)); done; sleep 1; echo \"started $N workers\""
+    ;;
+  trialdone)
+    remote 'cd ~/precis-helper; if pgrep -u $(id -u) -f "server_trial.php run" >/dev/null; then echo "still reading: $(pgrep -u $(id -u) -f "server_trial.php run" | wc -l) workers"; else echo "workers finished"; cat data/trial.*.log 2>/dev/null; rm -f data/trial.*.log server_trial.php; fi'
     ;;
   run)
     shift

@@ -289,7 +289,7 @@ return [
         $auto = $w->arrive(['From' => 'Shop Orders <noreply@shop.com>', 'To' => 'me@example.com', 'Subject' => 'Your order has shipped']);
         $reply = $w->arrive(['From' => 'Shop Orders <noreply@shop.com>', 'To' => 'me@example.com', 'Subject' => 'Re: Order problem', 'In-Reply-To' => $mine]);
         same('feeds', $w->sender('noreply@shop.com')['cls']);
-        same(['cat' => 'Delivery', 'cls' => 'feeds'], $w->sort($auto));
+        same(['cat' => 'Delivery', 'cls' => 'feeds', 'pile' => 'feed'], $w->sort($auto));
         same(['cat' => null, 'cls' => 'people'], $w->sort($reply));
         same(null, $w->sort($mine), 'my own mail needs no verdict');
     },
@@ -402,7 +402,7 @@ return [
         $w = new World();
         $m = $w->arrive($brief(1));
         $w->sync->push(1, [['kind' => 'msgfix', 'k' => $m, 'data' => ['cat' => 'Receipt']]]);
-        same(['cat' => 'Receipt', 'cls' => 'feeds'], $w->sort($m));
+        same(['cat' => 'Receipt', 'cls' => 'feeds', 'pile' => 'feed'], $w->sort($m));
         $w->sync->push(1, [['kind' => 'msgfix', 'k' => $m, 'data' => ['cls' => 'people']]]);
         same(['cat' => null, 'cls' => 'people'], $w->sort($m));
         $w->arrive($brief(2));
@@ -547,7 +547,7 @@ return [
         $id = $w->fake->add(['From' => 'Quiet <quiet@x.com>', 'To' => 'me@example.com', 'Subject' => 'Hello', 'Message-ID' => '<quiet-1@x.com>'], at: $w->clock->now - 86400);
         $w->reader->backfill($w->account);
         // No tag of its own: it shows under the sender's tag, as on the app.
-        same(['cat' => null, 'cls' => 'feeds'], $w->sort('<quiet-1@x.com>'));
+        same(['cat' => null, 'cls' => 'feeds', 'pile' => 'feed'], $w->sort('<quiet-1@x.com>'));
         same(0, (int) $w->store->db->val("SELECT COUNT(*) FROM {emails} WHERE cls = ''"));
         same('feeds', $w->sender('quiet@x.com')['cls'], 'and the sender stays where the device had it');
         check($id !== '');

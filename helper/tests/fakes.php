@@ -54,6 +54,18 @@ final class FakeGoogle implements \Precis\Http
         return $id;
     }
 
+    /** Gives an email its words, as Gmail would hand them over in full. */
+    public function setBody(string $id, string $plain, ?string $html = null): void
+    {
+        $enc = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
+        $parts = [['mimeType' => 'text/plain', 'filename' => '', 'body' => ['data' => $enc($plain)]]];
+        if ($html !== null) {
+            $parts[] = ['mimeType' => 'text/html', 'filename' => '', 'body' => ['data' => $enc($html)]];
+        }
+        $this->messages[$id]['payload']['mimeType'] = 'multipart/alternative';
+        $this->messages[$id]['payload']['parts'] = $plain === '' && $html !== null ? [$parts[1]] : $parts;
+    }
+
     /** @param list<string> $labels */
     public function relabel(string $id, array $labels): void
     {
@@ -158,6 +170,77 @@ final class FakeGoogle implements \Precis\Http
     }
 }
 
+/**
+ * A stand-in for Anthropic: answers the two addresses the assistant's
+ * library calls, in the shape Anthropic answers. No check ever reaches the
+ * internet or spends anything.
+ */
+final class FakeClaude implements \Psr\Http\Client\ClientInterface
+{
+    public const KEY = 'sk-ant-test-key';
+
+    /** @var list<array{path: string, key: string, body: array<string, mixed>}> every request made */
+    public array $requests = [];
+
+    /** @var (\Closure(string, array<string, mixed>): array<string, mixed>)|null given the email text and the request, what to answer */
+    public ?\Closure $answer = null;
+
+    /** When set, every reading is answered with this status and error type. */
+    public ?array $fail = null;
+
+    public bool $refuse = false;
+    public int $in = 900;
+    public int $out = 150;
+    public int $cacheRead = 0;
+    public int $cacheWrite = 0;
+
+    public function sendRequest(\Psr\Http\Message\RequestInterface $request): \Psr\Http\Message\ResponseInterface
+    {
+        $path = $request->getUri()->getPath();
+        // The library sends the key either way, depending on its version.
+        $key = $request->getHeaderLine('x-api-key');
+        if ($key === '' && str_starts_with($request->getHeaderLine('Authorization'), 'Bearer ')) {
+            $key = substr($request->getHeaderLine('Authorization'), 7);
+        }
+        $body = json_decode((string) $request->getBody(), true);
+        $this->requests[] = ['path' => $path, 'key' => $key, 'body' => is_array($body) ? $body : []];
+        $json = static fn (array $d, int $s = 200): \Psr\Http\Message\ResponseInterface => new \GuzzleHttp\Psr7\Response($s, ['content-type' => 'application/json', 'request-id' => 'req_test'], (string) json_encode($d));
+        if ($key !== self::KEY) {
+            return $json(['type' => 'error', 'error' => ['type' => 'authentication_error', 'message' => 'invalid x-api-key']], 401);
+        }
+        if (str_starts_with($path, '/v1/models/')) {
+            return $json(['id' => basename($path), 'type' => 'model', 'display_name' => 'A reader', 'created_at' => '2026-01-01T00:00:00Z', 'max_input_tokens' => 1000000, 'max_tokens' => 128000, 'capabilities' => null]);
+        }
+        if ($this->fail !== null) {
+            return $json(['type' => 'error', 'error' => ['type' => $this->fail[1], 'message' => $this->fail[2] ?? 'no']], $this->fail[0]);
+        }
+        $email = (string) ($body['messages'][0]['content'] ?? '');
+        $data = $this->answer !== null ? ($this->answer)($email, $body) : ['line' => 'A plain email.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'none', 'reasons' => ['Nothing is asked of you.']];
+        return $json([
+            'id' => 'msg_test',
+            'type' => 'message',
+            'role' => 'assistant',
+            'model' => (string) ($body['model'] ?? ''),
+            'content' => $this->refuse ? [] : [['type' => 'text', 'text' => (string) json_encode($data)]],
+            'stop_reason' => $this->refuse ? 'refusal' : 'end_turn',
+            'stop_sequence' => null,
+            'usage' => ['input_tokens' => $this->in, 'output_tokens' => $this->out, 'cache_creation_input_tokens' => $this->cacheWrite, 'cache_read_input_tokens' => $this->cacheRead],
+        ]);
+    }
+
+    /** The readings asked for (not the key checks). */
+    public function readings(): array
+    {
+        return array_values(array_filter($this->requests, static fn (array $r): bool => $r['path'] === '/v1/messages'));
+    }
+
+    /** How the helper reaches this stand-in. */
+    public function maker(): \Closure
+    {
+        return fn (string $key): \Precis\Assistant => new \Precis\Claude($key, $this, 5.0, 0);
+    }
+}
+
 /** A helper wired to the stand-in Google, with one mailbox already connected. */
 final class World
 {
@@ -168,6 +251,8 @@ final class World
     public \Precis\Sorter $sorter;
     public \Precis\Reader $reader;
     public \Precis\Sync $sync;
+    public FakeClaude $claude;
+    public \Precis\Readings $readings;
     public int $account = 0;
 
     public function __construct(bool $connect = true)
@@ -179,6 +264,8 @@ final class World
         $this->sorter = new \Precis\Sorter($this->store);
         $this->reader = new \Precis\Reader($this->store, $this->google, $this->sorter);
         $this->sync = new \Precis\Sync($this->store, $this->sorter);
+        $this->claude = new FakeClaude();
+        $this->readings = new \Precis\Readings($this->store, $this->google, $this->sorter, $this->claude->maker());
         $this->store->put('names', 'user', ['first' => ['clay']]);
         if ($connect) {
             $this->google->setClient('1234567890-abcdefghijklmnop.apps.googleusercontent.com', 'the-secret');
@@ -197,6 +284,36 @@ final class World
             }
         }
         return '';
+    }
+
+    /**
+     * Puts an email with words in the mailbox and lets the helper file it.
+     * Returns its Message-ID.
+     */
+    public function arriveWith(array $headers, string $plain, ?string $html = null, array $labels = ['INBOX', 'UNREAD'], ?int $at = null): string
+    {
+        $id = $this->fake->add($headers, $labels, '', $at);
+        $this->fake->setBody($id, $plain, $html);
+        $this->reader->poll($this->account);
+        foreach ($this->fake->messages[$id]['payload']['headers'] as $h) {
+            if ($h['name'] === 'Message-ID') {
+                return $h['value'];
+            }
+        }
+        return '';
+    }
+
+    /** Saves the stand-in key, picks a reader and turns the assistant on. */
+    public function assistantOn(string $model = 'claude-opus-5-5'): void
+    {
+        check($this->readings->setKey(FakeClaude::KEY), 'the key should be kept');
+        $this->readings->setModel($model);
+        $this->readings->turn(true);
+    }
+
+    public function reading(string $messageId): ?array
+    {
+        return $this->store->item('read', $messageId);
     }
 
     public function sender(string $key): ?array

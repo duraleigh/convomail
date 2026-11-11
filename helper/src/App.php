@@ -23,6 +23,7 @@ final class App
         private readonly Session $session,
         private readonly ?\Closure $clock = null,
         private ?Store $store = null,
+        private readonly ?\Closure $assistant = null,
     ) {
     }
 
@@ -73,6 +74,11 @@ final class App
     public function devices(): Devices
     {
         return new Devices($this->store());
+    }
+
+    public function readings(): Readings
+    {
+        return new Readings($this->store(), $this->google(), $this->sorter(), $this->assistant);
     }
 
     public function handle(Request $r): Response
@@ -265,6 +271,47 @@ final class App
                 }
                 $problem = $store->db->val('SELECT last_error FROM {accounts} WHERE last_error IS NOT NULL LIMIT 1');
                 return $asked > 0 ? $this->flash('Saved. Google will now tell the helper about new mail.') : $this->flash($problem === null ? 'Saved. Connect Google to turn the notice on.' : 'Saved, but Google refused: ' . $problem, $problem !== null);
+            case '/assistant/key':
+                $key = trim((string) ($r->form['key'] ?? ''));
+                if ($key === '') {
+                    return $this->flash('Paste the key first.', true);
+                }
+                try {
+                    $kept = $this->readings()->setKey($key);
+                } catch (AssistantError $e) {
+                    return $this->flash($e->getMessage() . ' The key was not saved. Try again in a minute.', true);
+                }
+                return $kept
+                    ? $this->flash('The key works and is saved, locked. Nothing has been read with it yet.')
+                    : $this->flash('Anthropic did not accept that key. Copy it again from Anthropic’s page, whole, and paste it here.', true);
+            case '/assistant/forget':
+                $this->readings()->forgetKey();
+                return $this->flash('The key is removed from the helper. The assistant is off.');
+            case '/assistant/switch':
+                $readings = $this->readings();
+                $on = (string) ($r->form['on'] ?? '') === '1';
+                if ($on && (!$readings->hasKey() || !Prices::known($readings->model()))) {
+                    return $this->flash($readings->hasKey() ? 'Choose a reader first.' : 'Save a key first.', true);
+                }
+                $readings->turn($on);
+                return $this->flash($on ? 'The assistant is on.' : 'The assistant is off. Nothing more is sent to it. Mail keeps being sorted by the fixed rules.');
+            case '/assistant/settings':
+                $readings = $this->readings();
+                $model = (string) ($r->form['model'] ?? '');
+                if ($model !== '') {
+                    if (!Prices::known($model)) {
+                        return $this->flash('The helper does not know that reader.', true);
+                    }
+                    $readings->setModel($model);
+                }
+                $ceiling = str_replace(['$', ',', ' '], '', (string) ($r->form['ceiling'] ?? ''));
+                if ($ceiling !== '') {
+                    if (!is_numeric($ceiling) || (float) $ceiling < 0 || (float) $ceiling > 10000) {
+                        return $this->flash('The ceiling is a number of dollars a month, such as 10.', true);
+                    }
+                    $readings->setCeiling((int) round((float) $ceiling * 1_000_000));
+                }
+                return $this->flash('Saved.');
             case '/devices/code':
                 $this->session->set('code', $this->devices()->newCode());
                 return Response::redirect('/');
@@ -330,6 +377,8 @@ final class App
             'hookSecret' => (string) $store->get('hook.secret', ''),
             'devices' => $this->devices()->all(),
             'clockLast' => (int) $store->get('clock.last_run', '0'),
+            'assistant' => $this->readings()->status(),
+            'readers' => Prices::MODELS,
             'log' => $db->all('SELECT at, level, msg FROM {log} ORDER BY id DESC LIMIT 12'),
             'counts' => [
                 'emails' => (int) $db->val('SELECT COUNT(*) FROM {emails}'),
@@ -411,6 +460,11 @@ final class App
         }
         $id = (int) $device['id'];
         $sync = new Sync($store, $this->sorter());
+        // A device says what time it is where the owner is, so "by 3:00 PM" means their 3:00 PM.
+        $zone = $r->headers['x-precis-zone'] ?? null;
+        if ($zone !== null && preg_match('~^-?\d{1,3}$~', $zone) === 1) {
+            $this->readings()->setZone((int) $zone);
+        }
         switch ($r->method . ' ' . $r->path) {
             case 'GET /api/changes':
                 return Response::json($store->since(max(0, (int) ($r->query['since'] ?? 0)), $id, min(1000, max(1, (int) ($r->query['limit'] ?? 500)))));
@@ -443,7 +497,23 @@ final class App
                     'accounts' => $accounts,
                     'timer' => (int) $store->get('clock.last_run', '0'),
                     'emails' => (int) $store->db->val('SELECT COUNT(*) FROM {emails}'),
+                    'assistant' => $this->readings()->status(),
                 ]);
+            case 'POST /api/assistant':
+                // A device may turn the assistant off or on and set the ceiling.
+                // The key itself is only ever entered on the owner's page.
+                $j = $r->json() ?? [];
+                $readings = $this->readings();
+                if (array_key_exists('ceiling', $j) && is_int($j['ceiling']) && $j['ceiling'] >= 0 && $j['ceiling'] <= 10_000_000_000) {
+                    $readings->setCeiling($j['ceiling']);
+                }
+                if (array_key_exists('on', $j) && is_bool($j['on'])) {
+                    if ($j['on'] && (!$readings->hasKey() || !Prices::known($readings->model()))) {
+                        return Response::error('The assistant has no key or reader yet. Set it on the helper’s page.', 409);
+                    }
+                    $readings->turn($j['on']);
+                }
+                return Response::json(['assistant' => $readings->status()]);
             case 'GET /api/devices':
                 return Response::json(['devices' => array_values(array_filter($devices->all(), static fn (array $d): bool => (int) $d['revoked'] === 0)), 'me' => $id]);
             case 'POST /api/devices/code':

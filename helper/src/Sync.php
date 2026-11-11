@@ -76,7 +76,7 @@ final class Sync
             switch ($kind) {
                 case 'sender':
                     // A move by hand, or one taken back, changes where the sender's mail goes.
-                    if (($old['src'] ?? '') === 'override' || ($data['src'] ?? '') === 'override' || ($old['cat'] ?? null) !== ($data['cat'] ?? null)) {
+                    if (($old['src'] ?? '') === 'override' || ($data['src'] ?? '') === 'override' || ($old['cat'] ?? null) !== ($data['cat'] ?? null) || ($old['pile'] ?? null) !== ($data['pile'] ?? null)) {
                         $resort[$k] = true;
                     }
                     break;
@@ -242,9 +242,9 @@ final class Sync
             }
         }
         $db = $this->store->db;
-        foreach ($db->all('SELECT message_id, cls FROM {emails} WHERE cat = ?', [$from]) as $r) {
+        foreach ($db->all('SELECT message_id, cls, pile FROM {emails} WHERE cat = ?', [$from]) as $r) {
             if ((string) $r['message_id'] !== '') {
-                $this->store->put('sort', (string) $r['message_id'], ['cls' => (string) $r['cls'], 'cat' => $to], $device);
+                $this->store->put('sort', (string) $r['message_id'], ['cls' => (string) $r['cls'], 'cat' => $to] + ((string) $r['pile'] === '' ? [] : ['pile' => (string) $r['pile']]), $device);
             }
         }
         $db->run('UPDATE {emails} SET cat = ? WHERE cat = ?', [$to, $from]);

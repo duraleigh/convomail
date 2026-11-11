@@ -10,10 +10,14 @@ namespace Precis;
  * needs, the user's own choices (moves, tags, rules, done, later,
  * reminders), the list of devices, and the sealed Google sign-in. The
  * mailbox itself is not kept: no email bodies, no attachments.
+ *
+ * From version 2 the assistant's reading of an email is kept too: its one
+ * sentence, whether it needs the owner, what is asked and by when, and why.
+ * The email's words are fetched, read and let go; they are never stored.
  */
 final class Schema
 {
-    public const VERSION = 1;
+    public const VERSION = 2;
 
     public static function migrate(Db $db): void
     {
@@ -32,6 +36,11 @@ final class Schema
                 $db->exec($sql);
             }
             $db->run('INSERT INTO {counters} (name, n) VALUES (?, 0)', ['seq']);
+        }
+        if ($have < 2) {
+            foreach (self::v2() as $sql) {
+                $db->exec(str_contains($sql, 'CREATE TABLE') ? $sql . $tail : $sql);
+            }
         }
         $db->upsert('meta', ['k' => 'schema'], ['v' => (string) self::VERSION]);
     }
@@ -132,6 +141,69 @@ final class Schema
             'CREATE TABLE {throttle} (k VARCHAR(80) NOT NULL PRIMARY KEY, n INT NOT NULL, until BIGINT NOT NULL)',
 
             'CREATE TABLE {log} (id ' . $pk . ', at BIGINT NOT NULL, level VARCHAR(8) NOT NULL, msg TEXT NOT NULL)',
+        ];
+    }
+
+    /** @return list<string> */
+    private static function v2(): array
+    {
+        return [
+            // Whether the email is in the inbox, where it sits among Feed and
+            // Noise, and where it is in the queue for the assistant:
+            // 0 not looked at yet, 1 waiting to be read, 2 read, 3 not to be
+            // read, 4 failed and will be tried again, 5 given up on.
+            'ALTER TABLE {emails} ADD COLUMN inbox INT NOT NULL DEFAULT 0',
+            "ALTER TABLE {emails} ADD COLUMN pile VARCHAR(8) NOT NULL DEFAULT ''",
+            'ALTER TABLE {emails} ADD COLUMN read_state INT NOT NULL DEFAULT 0',
+            'ALTER TABLE {emails} ADD COLUMN read_tries INT NOT NULL DEFAULT 0',
+            'ALTER TABLE {emails} ADD COLUMN read_after BIGINT NOT NULL DEFAULT 0',
+            'CREATE INDEX {emails}_read ON {emails} (read_state, at)',
+            'CREATE INDEX {emails}_thread ON {emails} (thread_id)',
+
+            // What the assistant said about an email. Never the email's words.
+            'CREATE TABLE {readings} (
+                email_id BIGINT NOT NULL PRIMARY KEY,
+                model VARCHAR(40) NOT NULL,
+                line TEXT NOT NULL,
+                focus INT NOT NULL DEFAULT 0,
+                ask TEXT NOT NULL,
+                due BIGINT NULL,
+                place VARCHAR(8) NOT NULL DEFAULT \'\',
+                why TEXT NOT NULL,
+                answered INT NOT NULL DEFAULT 0,
+                at BIGINT NOT NULL
+            )',
+
+            // What the assistant has cost, by day, reader and purpose.
+            // `micro` is millionths of a dollar.
+            'CREATE TABLE {spend} (
+                day VARCHAR(10) NOT NULL,
+                model VARCHAR(40) NOT NULL,
+                purpose VARCHAR(12) NOT NULL,
+                calls INT NOT NULL DEFAULT 0,
+                tin BIGINT NOT NULL DEFAULT 0,
+                tout BIGINT NOT NULL DEFAULT 0,
+                tcr BIGINT NOT NULL DEFAULT 0,
+                tcw BIGINT NOT NULL DEFAULT 0,
+                micro BIGINT NOT NULL DEFAULT 0,
+                PRIMARY KEY (day, model, purpose)
+            )',
+
+            // The test week: the same emails read by more than one reader,
+            // so their cost and their answers can be compared.
+            'CREATE TABLE {trial} (
+                email_id BIGINT NOT NULL,
+                model VARCHAR(40) NOT NULL,
+                result TEXT NOT NULL,
+                tin INT NOT NULL DEFAULT 0,
+                tout INT NOT NULL DEFAULT 0,
+                tcr INT NOT NULL DEFAULT 0,
+                tcw INT NOT NULL DEFAULT 0,
+                micro BIGINT NOT NULL DEFAULT 0,
+                ms INT NOT NULL DEFAULT 0,
+                error TEXT NULL,
+                PRIMARY KEY (email_id, model)
+            )',
         ];
     }
 

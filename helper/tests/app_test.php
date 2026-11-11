@@ -17,6 +17,7 @@ final class Site
     public App $app;
     public string $key = 'setup-key-123';
     public string $pass = 'correct horse battery';
+    public ?FakeClaude $claude = null;
 
     public function __construct(bool $setUp = true)
     {
@@ -36,7 +37,8 @@ final class Site
     /** A new App on the same folder, as the next request would get. */
     public function fresh(): App
     {
-        return $this->app = new App($this->home, $this->fake, $this->session, \Closure::fromCallable($this->clock));
+        $this->claude ??= new FakeClaude();
+        return $this->app = new App($this->home, $this->fake, $this->session, \Closure::fromCallable($this->clock), null, $this->claude->maker());
     }
 
     public function get(string $path, array $query = [], array $headers = [], string $host = 'localhost', bool $https = false): \Precis\Response
@@ -55,9 +57,9 @@ final class Site
         return $this->post($path, $form + ['csrf' => $this->session->formToken()]);
     }
 
-    public function api(string $method, string $path, ?array $json = null, ?string $token = null, array $query = [], string $ip = '10.0.0.2'): \Precis\Response
+    public function api(string $method, string $path, ?array $json = null, ?string $token = null, array $query = [], string $ip = '10.0.0.2', array $headers = []): \Precis\Response
     {
-        return $this->app->handle(new Request($method, $path, $query, [], $token === null ? [] : ['x-precis-token' => $token], $json === null ? '' : (string) json_encode($json), $ip, false, 'localhost'));
+        return $this->app->handle(new Request($method, $path, $query, [], ($token === null ? [] : ['x-precis-token' => $token]) + $headers, $json === null ? '' : (string) json_encode($json), $ip, false, 'localhost'));
     }
 
     /** Joins a device and returns its token. */

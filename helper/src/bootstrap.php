@@ -28,6 +28,12 @@ spl_autoload_register(static function (string $class): void {
     }
 });
 
+// The assistant's library (Anthropic's own) and what it needs, fetched by
+// composer into vendor/. The rest of the helper needs no outside code.
+if (is_file(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php')) {
+    require_once dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
+}
+
 mb_internal_encoding('UTF-8');
 
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';

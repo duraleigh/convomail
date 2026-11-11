@@ -157,6 +157,7 @@ final class Sorter
             'provider_category' => $category,
             'unread' => (int) in_array('UNREAD', $labels, true),
             'gone' => (int) $gone,
+            'inbox' => (int) in_array('INBOX', $labels, true),
         ];
         // The owner's own mail is always in Chats; nothing decides it later.
         if ($isMine) {
@@ -377,7 +378,10 @@ final class Sorter
     {
         $db = $this->store->db;
         $classifier = $this->classifier();
-        foreach ($db->all('SELECT id, message_id, in_reply_to, from_addr, from_name, subject, snippet, signals, provider_category, is_from_me, cls, cat FROM {emails} WHERE from_key = ?', [$skey]) as $e) {
+        $sender = $this->store->item('sender', $skey);
+        $chosen = isset($sender['pile']) ? (string) $sender['pile'] : null;
+        $usual = null;
+        foreach ($db->all('SELECT e.id, e.message_id, e.in_reply_to, e.from_addr, e.from_name, e.subject, e.snippet, e.signals, e.provider_category, e.is_from_me, e.cls, e.cat, e.pile, r.place AS said FROM {emails} e LEFT JOIN {readings} r ON r.email_id = e.id WHERE e.from_key = ?', [$skey]) as $e) {
             $mine = (int) $e['is_from_me'] === 1;
             $m = [
                 'from' => (string) $e['from_addr'],
@@ -416,11 +420,24 @@ final class Sorter
                     $category = null;
                 }
             }
-            if ((string) $e['cls'] !== $bucket || $existing !== $category) {
-                $db->run('UPDATE {emails} SET cls = ?, cat = ? WHERE id = ?', [$bucket, $category, (int) $e['id']]);
+            // Feed or Noise, for each email that is not from a person.
+            $pile = '';
+            if ($bucket === 'feeds') {
+                $usual ??= $this->pileOf($skey) ?? EmailPile::FEED;
+                $pile = EmailPile::decide(
+                    isset($fix['pile']) ? (string) $fix['pile'] : null,
+                    $chosen,
+                    $category ?? $senderDefault,
+                    $e['provider_category'] === null ? null : (string) $e['provider_category'],
+                    $e['said'] === null ? null : (string) $e['said'],
+                    $usual,
+                )['pile'];
+            }
+            if ((string) $e['cls'] !== $bucket || $existing !== $category || (string) $e['pile'] !== $pile) {
+                $db->run('UPDATE {emails} SET cls = ?, cat = ?, pile = ? WHERE id = ?', [$bucket, $category, $pile, (int) $e['id']]);
             }
             if (!$mine && (string) $e['message_id'] !== '') {
-                $this->store->put('sort', (string) $e['message_id'], ['cls' => $bucket, 'cat' => $category]);
+                $this->store->put('sort', (string) $e['message_id'], ['cls' => $bucket, 'cat' => $category] + ($pile === '' ? [] : ['pile' => $pile]));
             }
         }
     }

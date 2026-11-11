@@ -1,0 +1,22 @@
+{
+    "name": "precis/helper",
+    "description": "The always-on helper for Précis.",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "php": ">=8.3",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-openssl": "*",
+        "anthropic-ai/sdk": "^1.8.0",
+        "guzzlehttp/guzzle": "^7.9"
+    },
+    "config": {
+        "platform": {
+            "php": "8.3.0"
+        },
+        "sort-packages": true,
+        "optimize-autoloader": true
+    }
+}

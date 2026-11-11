@@ -4,8 +4,9 @@ declare(strict_types=1);
 /**
  * The every-minute timer:  php /home/.../precis-helper/cron.php
  *
- * Looks at each mailbox, reads a little more of the first 30 days, and moves
- * along reminders and rows put off. Says nothing unless something is wrong.
+ * Looks at each mailbox, reads a little more of the first 30 days, moves
+ * along reminders and rows put off, and lets the assistant read what is
+ * waiting. Says nothing unless something is wrong.
  */
 
 use Precis\App;
@@ -24,7 +25,7 @@ if (!$app->isSetUp()) {
     exit(0);
 }
 try {
-    $out = (new Clock($app->store(), $app->reader()))->tick(PRECIS_HOME . DIRECTORY_SEPARATOR . 'clock.lock');
+    $out = (new Clock($app->store(), $app->reader(), $app->readings()))->tick(PRECIS_HOME . DIRECTORY_SEPARATOR . 'clock.lock');
     if (in_array('-v', $argv, true)) {
         echo json_encode($out), "\n";
     }

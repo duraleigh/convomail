@@ -33,7 +33,7 @@ if (!is_file($configFile)) {
 $config = require $configFile;
 $config['prefix'] = 'pxcheck_';
 $db = Db::connect($config);
-$tables = ['meta', 'counters', 'accounts', 'emails', 'rcpts', 'items', 'sender_facts', 'my_ids', 'devices', 'pair_codes', 'throttle', 'log'];
+$tables = ['meta', 'counters', 'accounts', 'emails', 'rcpts', 'items', 'sender_facts', 'my_ids', 'devices', 'pair_codes', 'throttle', 'log', 'readings', 'spend', 'trial'];
 $drop = static function () use ($db, $tables): void {
     foreach ($tables as $t) {
         $db->exec('DROP TABLE IF EXISTS {' . $t . '}');
@@ -104,6 +104,31 @@ try {
     $ok($sorter->takeIn($account, ['a1' => $meta('a1', ['From' => 'José Núñez <jose@x.com>', 'To' => 'me@example.com', 'Subject' => 'Almuerzo 🍽', 'Message-ID' => '<a1@x>'], ['INBOX'])])['stored'] === 1
         && (int) $db->val('SELECT COUNT(*) FROM {emails}') === 3, 'an email read again is not stored twice');
 
+    // The assistant's readings, Feed or Noise for each email, and the meter.
+    $ok((int) $db->val("SELECT inbox FROM {emails} WHERE message_id = '<a2@x>'") === 1 && (int) $db->val("SELECT inbox FROM {emails} WHERE message_id = '<a3@x>'") === 0, 'whether an email is in the inbox is kept');
+    $ok(($store->item('sort', '<a2@x>')['pile'] ?? '') !== '', 'each email that is not from a person has its own place, Feed or Noise');
+    $readings = new \Precis\Readings($store, new \Precis\Google($store, new \Precis\CurlHttp()), $sorter);
+    $ok($readings->plan() === 2, 'the two inbox emails wait for the assistant; the owner\'s own does not');
+    $a2 = (int) $db->val("SELECT id FROM {emails} WHERE message_id = '<a2@x>'");
+    $readings->keep($a2, 'claude-haiku-5-5', ['line' => 'Cinq histoires 🗞 aujourd’hui.', 'focus' => false, 'ask' => '', 'due' => null, 'place' => 'noise', 'why' => ['It is a general newsletter.']]);
+    $ok(($store->item('read', '<a2@x>')['line'] ?? '') === 'Cinq histoires 🗞 aujourd’hui.' && ($store->item('read', '<a2@x>')['why'] ?? []) === ['It is a general newsletter.'], 'a reading is kept and told to devices, accents and all');
+    $ok(($store->item('sort', '<a2@x>')['pile'] ?? '') === 'noise' && (string) $db->val("SELECT pile FROM {emails} WHERE id = $a2") === 'noise', 'what the assistant said settles Feed or Noise for that one email');
+    $a1 = (int) $db->val("SELECT id FROM {emails} WHERE message_id = '<a1@x>'");
+    $readings->keep($a1, 'claude-haiku-5-5', ['line' => 'José asks about lunch.', 'focus' => true, 'ask' => 'Answer José.', 'due' => time() + 3600, 'place' => '', 'why' => ['It asks you a question.']]);
+    $ok($readings->status()['focus'] === 1 && $readings->status()['read'] === 2, 'what needs the owner is counted');
+    $use = ['in' => 1000, 'out' => 150, 'cacheRead' => 700, 'cacheWrite' => 0];
+    $readings->count('claude-haiku-5-5', 'mail', $use);
+    $readings->count('claude-haiku-5-5', 'mail', $use);
+    $ok($readings->monthSpend() === 2 * \Precis\Prices::micro('claude-haiku-5-5', 1000, 150, 700, 0) && (int) $db->val('SELECT calls FROM {spend}') === 2, 'the meter adds up');
+    $readings->setCeiling(1);
+    $readings->setModel('claude-haiku-5-5');
+    $store->setSecret('assistant.key', 'k');
+    $readings->turn(true);
+    $ok(!$readings->ready() && $readings->status()['problemKind'] === 'ceiling', 'the ceiling pauses the assistant');
+    $db->upsert('trial', ['email_id' => $a1, 'model' => 'claude-opus-5-5'], ['result' => '{}', 'micro' => 5]);
+    $db->upsert('trial', ['email_id' => $a1, 'model' => 'claude-opus-5-5'], ['result' => '{"a":1}', 'micro' => 7]);
+    $ok((int) $db->val('SELECT COUNT(*) FROM {trial}') === 1 && (int) $db->val('SELECT micro FROM {trial}') === 7, 'a test reading is kept once');
+
     // What devices send.
     $sync = new Sync($store, $sorter);
     $sync->push(1, [
@@ -126,8 +151,9 @@ try {
     }
     $page = $store->since($before, null, 150);
     $ok(count($page['items']) === 150 && $page['more'] && $store->seq() === $before + 200, 'two hundred writes, in order, paged');
+    $notes = (int) $db->val('SELECT COUNT(*) FROM {log}');
     $store->log('info', 'server check');
-    $ok((int) $db->val('SELECT COUNT(*) FROM {log}') === 1, 'the log');
+    $ok((int) $db->val('SELECT COUNT(*) FROM {log}') === $notes + 1, 'the log');
 } catch (Throwable $e) {
     try {
         $drop();

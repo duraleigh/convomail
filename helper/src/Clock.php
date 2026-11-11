@@ -11,7 +11,7 @@ namespace Precis;
  */
 final class Clock
 {
-    public function __construct(private readonly Store $store, private readonly Reader $reader)
+    public function __construct(private readonly Store $store, private readonly Reader $reader, private readonly ?Readings $readings = null)
     {
     }
 
@@ -21,7 +21,7 @@ final class Clock
      *
      * @return array<string, int>
      */
-    public function tick(string $lockFile, int $seconds = 40): array
+    public function tick(string $lockFile, int $seconds = 48): array
     {
         $lock = fopen($lockFile, 'c');
         if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
@@ -36,13 +36,14 @@ final class Clock
     }
 
     /** @return array<string, int> */
-    public function run(int $seconds = 40): array
+    public function run(int $seconds = 48): array
     {
         $started = microtime(true);
-        $out = ['new' => 0, 'older' => 0, 'reminders' => 0, 'back' => 0];
+        $out = ['new' => 0, 'older' => 0, 'reminders' => 0, 'back' => 0, 'queued' => 0, 'read' => 0];
         foreach ($this->reader->accounts() as $a) {
             $id = (int) $a['id'];
             $this->reader->renewWatch($id);
+            $this->reader->markInbox($id);
             $out['new'] += $this->reader->poll($id);
             // The first read goes a little at a time, so the website is never crowded.
             if ((int) $a['backfill_done'] === 0 && microtime(true) - $started < $seconds) {
@@ -52,6 +53,15 @@ final class Clock
         $out['reminders'] = $this->fireReminders();
         $out['back'] = $this->bringBack();
         $this->store->set('clock.last_run', (string) $this->store->now());
+        // The assistant reads what is waiting with the time that is left.
+        // The next tick is a minute away, so this one stops well before it.
+        if ($this->readings !== null) {
+            $out['queued'] = $this->readings->plan();
+            $left = $seconds - (microtime(true) - $started);
+            if ($left > 5) {
+                $out['read'] = $this->readings->work($left - 4);
+            }
+        }
         return $out;
     }
 

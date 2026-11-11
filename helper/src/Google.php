@@ -22,7 +22,7 @@ final class Google
     private const REVOKE = 'https://oauth2.googleapis.com/revoke';
     private const GMAIL = 'https://gmail.googleapis.com/gmail/v1/users/me/';
 
-    /** Headers asked for with each email: who, what, when, and the signs of bulk mail. Never the body. */
+    /** Headers asked for with each email when it is filed: who, what, when, and the signs of bulk mail. */
     public const HEADERS = ['From', 'To', 'Cc', 'Bcc', 'Subject', 'Date', 'Message-ID', 'In-Reply-To', 'List-Unsubscribe', 'List-Id', 'List-Post', 'Feedback-ID', 'Precedence', 'Auto-Submitted'];
 
     public function __construct(private readonly Store $store, private readonly Http $http)
@@ -266,6 +266,25 @@ final class Google
             $out[$id] = Store::decode($a['body']);
         }
         return $out;
+    }
+
+    /**
+     * One whole email, words included, for the assistant to read. It is
+     * handed on and let go; the helper does not keep it. Null when Gmail no
+     * longer has it.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function full(int $accountId, string $id): ?array
+    {
+        try {
+            return $this->call('GET', self::GMAIL . 'messages/' . rawurlencode($id) . '?format=full', $this->accessToken($accountId));
+        } catch (GoogleError $e) {
+            if ($e->status === 404) {
+                return null;
+            }
+            throw $e;
+        }
     }
 
     /** The addresses the owner sends from, lower-cased. */
