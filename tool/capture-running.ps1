@@ -1,7 +1,7 @@
 # Saves a PNG of the main window of an already-running process (companion
 # to capture-window.ps1, which launches the exe itself).
 #
-#   tool\capture-running.ps1 -ProcessName convomail -Out shot.png
+#   tool\capture-running.ps1 -ProcessName Precis -Out shot.png
 param(
   [Parameter(Mandatory=$true)][string]$ProcessName,
   [Parameter(Mandatory=$true)][string]$Out

@@ -46,7 +46,7 @@ void main() {
           mailSenderProvider.overrideWith((ref) => smtp),
           htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
         ],
-        child: const ConvoMailApp(startSync: false),
+        child: const PrecisApp(startSync: false),
       );
 
   setUp(() async {

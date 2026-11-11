@@ -38,7 +38,7 @@ void main() {
     expect(parsed.decodeTextPlainPart(), contains('Done — you should have it now.'));
     expect(parsed.decodeTextHtmlPart(), contains('<b>Sarah</b>'));
     expect(parsed.decodeTextHtmlPart(), contains('<!DOCTYPE html>'));
-    expect(parsed.getHeaderValue('x-mailer'), 'ConvoMail');
+    expect(parsed.getHeaderValue('x-mailer'), 'Precis');
     expect(parsed.getHeaderValue('bcc'), isNull);
   });
 

@@ -157,7 +157,7 @@ void main() {
   });
 
   group('ui', () {
-    Widget app() => ProviderScope(overrides: overrides(), child: const ConvoMailApp(startSync: false));
+    Widget app() => ProviderScope(overrides: overrides(), child: const PrecisApp(startSync: false));
 
     Future<void> openSarah(WidgetTester tester) async {
       tester.view.physicalSize = const Size(1500, 950);

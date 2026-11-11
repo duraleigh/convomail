@@ -211,7 +211,7 @@ class SendService {
   /// Gmail-style attribution line plus blockquote.
   static String quoteBlock(Message original, String bodyInner) {
     final who = original.fromName.isNotEmpty ? '${_esc(original.fromName)} &lt;${_esc(original.fromAddress)}&gt;' : _esc(original.fromAddress);
-    return '<br><div class="convomail-quote"><div style="color:#5f6368;margin:12px 0 4px">On ${_esc(_when(original.date ?? original.internalDate))}, $who wrote:</div>'
+    return '<br><div class="precis-quote"><div style="color:#5f6368;margin:12px 0 4px">On ${_esc(_when(original.date ?? original.internalDate))}, $who wrote:</div>'
         '<blockquote style="margin:0 0 0 0.8ex;border-left:2px solid #ccc;padding-left:1ex">$bodyInner</blockquote></div>';
   }
 
@@ -219,7 +219,7 @@ class SendService {
     final to = parts.where((p) => p.role == 'to').map((p) => p.name.isNotEmpty ? '${_esc(p.name)} &lt;${_esc(p.address)}&gt;' : _esc(p.address)).join(', ');
     final cc = parts.where((p) => p.role == 'cc').map((p) => p.name.isNotEmpty ? '${_esc(p.name)} &lt;${_esc(p.address)}&gt;' : _esc(p.address)).join(', ');
     final from = original.fromName.isNotEmpty ? '${_esc(original.fromName)} &lt;${_esc(original.fromAddress)}&gt;' : _esc(original.fromAddress);
-    return '<br><div class="convomail-forward"><div style="color:#5f6368;margin:12px 0 8px">---------- Forwarded message ----------<br>'
+    return '<br><div class="precis-forward"><div style="color:#5f6368;margin:12px 0 8px">---------- Forwarded message ----------<br>'
         'From: $from<br>Date: ${_esc(_when(original.date ?? original.internalDate))}<br>Subject: ${_esc(original.subject)}'
         '${to.isEmpty ? '' : '<br>To: $to'}${cc.isEmpty ? '' : '<br>Cc: $cc'}</div>$bodyInner</div>';
   }

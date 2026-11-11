@@ -91,7 +91,7 @@ class _IdentityTileState extends ConsumerState<_IdentityTile> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Remove ${i.email}?'),
-        content: const Text("You won't be able to send from it in ConvoMail. Mail you already sent from it stays where it is."),
+        content: const Text("You won't be able to send from it in Précis. Mail you already sent from it stays where it is."),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
           FilledButton(key: const ValueKey('identity-remove-confirm'), onPressed: () => Navigator.of(context).pop(true), child: const Text('Remove')),

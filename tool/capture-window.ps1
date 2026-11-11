@@ -3,7 +3,7 @@
 # reach the Flutter window, so startup flags such as --open-first,
 # --compose, --reply, --files drive the state instead).
 #
-#   tool\capture-window.ps1 -Exe build\windows\x64\runner\Release\convomail.exe -Out shot.png -Args @("--files")
+#   tool\capture-window.ps1 -Exe build\windows\x64\runner\Release\Precis.exe -Out shot.png -Args @("--files")
 param(
   [Parameter(Mandatory=$true)][string]$Exe,
   [Parameter(Mandatory=$true)][string]$Out,

@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'version.dart';
 
 /// A published release, read from the update feed: a small JSON document
-/// `{ "version": "1.2.0", "url": "https://…/convomail-1.2.0.msix", "notes": "…" }`.
+/// `{ "version": "1.2.0", "url": "https://…/precis-1.2.0.msix", "notes": "…" }`.
 class UpdateInfo {
   const UpdateInfo({required this.version, required this.url, this.notes = ''});
   final String version;
@@ -82,7 +82,7 @@ class UpdateChecker {
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 10);
     try {
       final req = await client.getUrl(uri);
-      req.headers.set(HttpHeaders.userAgentHeader, 'ConvoMail/$appVersion');
+      req.headers.set(HttpHeaders.userAgentHeader, 'Precis/$appVersion');
       final res = await req.close().timeout(const Duration(seconds: 15));
       if (res.statusCode != 200) throw HttpException('HTTP ${res.statusCode}', uri: uri);
       return await res.transform(utf8.decoder).join();

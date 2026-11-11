@@ -130,15 +130,15 @@ flutter:
 # first (see README → Install). A real code-signing certificate goes in
 # certificate_path/certificate_password and publisher must match its CN.
 msix_config:
-  display_name: ConvoMail
-  publisher_display_name: ConvoMail
+  display_name: Précis
+  publisher_display_name: Précis
   identity_name: com.convomail.app
   msix_version: 1.0.0.0
   logo_path: assets/logo.png
   capabilities: internetClient
   protocol_activation: mailto
-  execution_alias: convomail
+  execution_alias: precis
   install_certificate: false
   output_path: build/msix
-  output_name: convomail
+  output_name: precis
   build_windows: false

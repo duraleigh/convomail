@@ -5,7 +5,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 // Simple emails (personal mail: lines of text, bold, links, lists, quotes,
-// pictures) are drawn straight into the conversation in ConvoMail's own
+// pictures) are drawn straight into the conversation in Précis's own
 // colours and font. Designed emails (newsletters: layout tables, columns,
 // coloured panels, fixed widths) keep their own look in the browser box.
 // This file decides which is which and turns a simple one into blocks.

@@ -1,4 +1,4 @@
-# ConvoMail (working name)
+# Précis (was ConvoMail)
 
 A sender-centric email client for Windows, built with Flutter and Material 3 Expressive.
 People, not folders: every contact is one row, every row is one conversation.
@@ -32,7 +32,7 @@ Run with `--destination=<chats|boards|planner|settings>` or `--inbox=<people|fee
 
 ## Roadmap
 
-- **Your choices on every computer.** Names, subtitles, merges, manual moves to Chats or Feeds, groups, categories and rules live only in this computer's database today. Planned: keep them as one small settings message in a hidden folder of the user's own mailbox (for example `ConvoMail/Settings`), read at start and on change, and merged item by item by time of change. Every installation signed in to the same account would then agree, with no third-party server. A milestone of its own: storage format, merge rules, and tests for two computers changing the same person.
+- **Your choices on every computer.** Names, subtitles, merges, manual moves to Chats or Feeds, groups, categories and rules live only in this computer's database today. Planned: keep them as one small settings message in a hidden folder of the user's own mailbox (for example `Précis/Settings`), read at start and on change, and merged item by item by time of change. Every installation signed in to the same account would then agree, with no third-party server. A milestone of its own: storage format, merge rules, and tests for two computers changing the same person.
 
 ## Layout
 
@@ -63,7 +63,7 @@ The integration tests need `pip install pymap`; on Windows they start it through
 
 ## Performance
 
-Release-binary benchmarks on the development PC, October 26, 2026 (`convomail.exe --bench-people [--bench-size=N]`, `--bench-search`; results land in `%TEMP%`).
+Release-binary benchmarks on the development PC, October 26, 2026 (`Precis.exe --bench-people [--bench-size=N]`, `--bench-search`; results land in `%TEMP%`).
 
 | Scenario | Result |
 |---|---|
@@ -75,15 +75,15 @@ The 200k unified list is the trigger-maintained `row_summaries` path. The per-ac
 
 ## Install
 
-`flutter build windows` produces a portable folder at `build\windows\x64\runner\Release\` (run `convomail.exe` from there). `dart run msix:create` wraps that folder into `build\msix\convomail.msix` using the `msix_config` block in `pubspec.yaml`. Because no code-signing certificate is available, the package is signed with the msix tool's test certificate: before double-clicking the `.msix`, install that certificate into **Local Machine → Trusted People** (right-click the `.msix` → Properties → Digital Signatures → Details → View Certificate → Install Certificate), or run `dart run msix:create --install-certificate true` once from an elevated prompt. A real certificate goes in `certificate_path` / `certificate_password` with `publisher` set to its subject.
+`flutter build windows` produces a portable folder at `build\windows\x64\runner\Release\` (run `Precis.exe` from there). `dart run msix:create` wraps that folder into `build\msix\precis.msix` using the `msix_config` block in `pubspec.yaml`. Because no code-signing certificate is available, the package is signed with the msix tool's test certificate: before double-clicking the `.msix`, install that certificate into **Local Machine → Trusted People** (right-click the `.msix` → Properties → Digital Signatures → Details → View Certificate → Install Certificate), or run `dart run msix:create --install-certificate true` once from an elevated prompt. A real certificate goes in `certificate_path` / `certificate_password` with `publisher` set to its subject.
 
-Without trusting any certificate, a PC with Developer Mode on can register the unpacked package in place (this is how the package was tested on the development PC): unzip `convomail.msix` into a folder (it is a zip; `Expand-Archive` refuses the extension, Python's `zipfile` or 7-Zip work), then
+Without trusting any certificate, a PC with Developer Mode on can register the unpacked package in place (this is how the package was tested on the development PC): unzip `precis.msix` into a folder (it is a zip; `Expand-Archive` refuses the extension, Python's `zipfile` or 7-Zip work), then
 
 ```
 Add-AppxPackage -Register <folder>\AppxManifest.xml
 ```
 
-That gives the Start menu entry, the `convomail` execution alias under `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the `mailto:` protocol registration, running from that folder (so do not delete it). The packaged app uses the same `%APPDATA%\com.convomail` data folder as the portable build. `Remove-AppxPackage com.convomail.app_<hash>` uninstalls it. Updates: Settings → About & updates takes the https address of a JSON file `{"version","url","notes"}` and compares it with the running version on demand.
+That gives the Start menu entry, the `precis` execution alias under `%LOCALAPPDATA%\Microsoft\WindowsApps`, and the `mailto:` protocol registration, running from that folder (so do not delete it). The packaged app uses the same `%APPDATA%\com.convomail` data folder as the portable build. `Remove-AppxPackage com.convomail.app_<hash>` uninstalls it. Updates: Settings → About & updates takes the https address of a JSON file `{"version","url","notes"}` and compares it with the running version on demand.
 
 ## Build
 
@@ -101,8 +101,8 @@ flutter run -d windows
 Two read-only command-line diagnostics help when mail lands in the wrong tab. Both open the database read-only (safe beside a running copy of the app), connect with the saved password, and write `%TEMP%\convomail-diag.txt` holding sender domains, header names, rule names and counts only: no addresses, names, subjects or bodies.
 
 ```
-convomail.exe --diag-signals
-convomail.exe --diag-classify
+Precis.exe --diag-signals
+Precis.exe --diag-classify
 ```
 
 `--diag-signals` re-reads the list headers of INBOX messages stored without bulk signals and counts Gmail's category buckets. `--diag-classify` reads every message's Gmail category, runs the current classifier over the stored mail in memory, and lists which senders would move between People and Feeds, by domain.

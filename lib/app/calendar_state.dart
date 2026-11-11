@@ -20,7 +20,7 @@ final googleCalendarsProvider = StreamProvider<List<GoogleCalendarInfo>>((ref) {
   });
 });
 
-/// Calendars hidden in ConvoMail's Planner (still kept in step).
+/// Calendars hidden in Précis's Planner (still kept in step).
 final hiddenCalendarsProvider = StreamProvider<Set<String>>((ref) {
   final db = ref.watch(databaseProvider);
   return _watchSetting(db, CalendarSync.hiddenKey).map((raw) {

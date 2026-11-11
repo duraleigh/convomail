@@ -30,14 +30,9 @@ class OnboardingScreen extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(color: scheme.primaryContainer, borderRadius: BorderRadius.circular(AppShapes.lg)),
-                  child: Icon(Icons.forum_rounded, color: scheme.onPrimaryContainer, size: 34),
-                ),
+                Image.asset('assets/logo.png', key: const ValueKey('app-logo'), width: 64, height: 64, filterQuality: FilterQuality.medium),
                 const SizedBox(height: AppSpace.xl),
-                Text('Welcome to ConvoMail', style: text.displaySmall),
+                Text('Welcome to Précis', style: text.displaySmall),
                 const SizedBox(height: AppSpace.sm),
                 Text('Mail organized by the people you talk to, not by folders.', style: text.titleMedium!.copyWith(color: scheme.onSurfaceVariant)),
                 const SizedBox(height: AppSpace.xl),

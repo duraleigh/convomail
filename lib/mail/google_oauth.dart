@@ -183,7 +183,7 @@ class GoogleOAuth {
       }
       final error = query['error'];
       request.response.headers.contentType = ContentType.html;
-      request.response.write('<!doctype html><title>ConvoMail</title><body style="font-family:sans-serif;margin:3em"><h2>${error == null ? 'Connected' : 'Not connected'}</h2><p>You can close this tab and go back to ConvoMail.</p>');
+      request.response.write('<!doctype html><title>Pr&eacute;cis</title><body style="font-family:sans-serif;margin:3em"><h2>${error == null ? 'Connected' : 'Not connected'}</h2><p>You can close this tab and go back to Précis.</p>');
       await request.response.close();
       if (error != null) throw GoogleAuthException('Sign-in did not finish ($error).');
       final code = query['code'];

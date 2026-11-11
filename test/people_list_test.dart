@@ -36,7 +36,7 @@ void main() {
           // No WebView2 in the test harness.
           htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
         ],
-        child: const ConvoMailApp(startSync: false),
+        child: const PrecisApp(startSync: false),
       );
 
   Future<void> seed() async {

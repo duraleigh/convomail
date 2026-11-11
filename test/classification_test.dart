@@ -482,7 +482,7 @@ void main() {
             transportFactoryProvider.overrideWith((ref) => () => imap),
             htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
           ],
-          child: const ConvoMailApp(startSync: false),
+          child: const PrecisApp(startSync: false),
         );
 
     Future<ProviderContainer> pumpApp(WidgetTester tester) async {

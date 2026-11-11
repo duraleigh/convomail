@@ -121,7 +121,7 @@ abstract final class MimeFactory {
       final file = File(path);
       if (!file.existsSync()) continue;
       n++;
-      final cid = 'img$n.${DateTime.now().millisecondsSinceEpoch}@convomail';
+      final cid = 'img$n.${DateTime.now().millisecondsSinceEpoch}@precis';
       final name = path.split(RegExp(r'[\\/]')).last;
       inline.add(OutgoingAttachment(
         fileName: name.isEmpty ? 'image$n' : name,
@@ -184,7 +184,7 @@ abstract final class MimeFactory {
 
     if (m.inReplyTo != null && m.inReplyTo!.trim().isNotEmpty) builder.setHeader('In-Reply-To', _angle(m.inReplyTo!));
     if (m.references.isNotEmpty) builder.setHeader('References', m.references.map(_angle).join(' '));
-    builder.setHeader('X-Mailer', 'ConvoMail');
+    builder.setHeader('X-Mailer', 'Precis');
 
     final mime = builder.buildMimeMessage();
     return BuiltMessage(message: mime, raw: mime.renderMessage(), messageId: messageId);
@@ -199,7 +199,7 @@ abstract final class MimeFactory {
 
   static String _domainOf(String address) {
     final i = address.lastIndexOf('@');
-    return i < 0 ? 'convomail.local' : address.substring(i + 1);
+    return i < 0 ? 'precis.local' : address.substring(i + 1);
   }
 
   /// The picture type for [fileName] by its extension, so an inline picture

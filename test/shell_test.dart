@@ -22,7 +22,7 @@ Widget _app(InMemorySettingsStore store) => ProviderScope(
           return db;
         }),
       ],
-      child: const ConvoMailApp(startSync: false),
+      child: const PrecisApp(startSync: false),
     );
 
 

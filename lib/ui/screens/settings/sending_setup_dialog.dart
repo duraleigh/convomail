@@ -116,7 +116,7 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text('Enter the password for this address once. ConvoMail checks it, then mail from $email goes out properly.', style: text.bodyMedium),
+            Text('Enter the password for this address once. Précis checks it, then mail from $email goes out properly.', style: text.bodyMedium),
             if (provider != null && provider.appPasswordHelp != null && _host.text.trim().toLowerCase() == provider.smtp.host) ...[
               const SizedBox(height: AppSpace.sm),
               Text(provider.appPasswordHelp!, key: const ValueKey('sending-provider-help'), style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),

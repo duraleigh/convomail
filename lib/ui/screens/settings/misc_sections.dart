@@ -100,7 +100,7 @@ class NotificationsDetail extends ConsumerWidget {
             ListTile(
               leading: Icon(Icons.notification_add_outlined, color: scheme.primary),
               title: const Text('Send a test notification'),
-              onTap: () => ref.read(notificationSinkProvider).show(OutgoingNotification(id: 'test:${DateTime.now().millisecondsSinceEpoch}', title: 'ConvoMail', body: 'Notifications are working.')),
+              onTap: () => ref.read(notificationSinkProvider).show(OutgoingNotification(id: 'test:${DateTime.now().millisecondsSinceEpoch}', title: 'Précis', body: 'Notifications are working.')),
             ),
           ],
         ),
@@ -139,8 +139,8 @@ class _DefaultAppDetailState extends ConsumerState<DefaultAppDetail> {
               leading: Icon(registered ? Icons.check_circle_outline_rounded : Icons.radio_button_unchecked_rounded, color: registered ? scheme.primary : scheme.onSurfaceVariant),
               title: Text(registered ? 'Registered as an email handler' : 'Not registered yet'),
               subtitle: Text(registered
-                  ? 'ConvoMail appears under Windows Settings → Apps → Default apps → Email. Links such as mailto: open the composer once you pick it there.'
-                  : 'Registering adds ConvoMail to the list Windows offers for email links. Nothing changes until you choose it there.'),
+                  ? 'Précis appears under Windows Settings → Apps → Default apps → Email. Links such as mailto: open the composer once you pick it there.'
+                  : 'Registering adds Précis to the list Windows offers for email links. Nothing changes until you choose it there.'),
               trailing: FilledButton.tonal(
                 key: const ValueKey('mailto-register'),
                 onPressed: () {
@@ -158,7 +158,7 @@ class _DefaultAppDetailState extends ConsumerState<DefaultAppDetail> {
             ListTile(
               leading: Icon(Icons.open_in_new_rounded, color: scheme.primary),
               title: const Text('Open Windows default apps'),
-              subtitle: const Text('Choose ConvoMail under Email.'),
+              subtitle: const Text('Choose Précis under Email.'),
               onTap: () => launchUrl(Uri.parse('ms-settings:defaultapps')),
             ),
           ],
@@ -238,8 +238,8 @@ class _AboutDetailState extends ConsumerState<AboutDetail> {
         GroupedList(
           children: [
             ListTile(
-              leading: Icon(Icons.forum_rounded, color: scheme.primary),
-              title: const Text('ConvoMail'),
+              leading: Image.asset('assets/logo.png', width: 36, height: 36, filterQuality: FilterQuality.medium),
+              title: const Text('Précis'),
               subtitle: const Text('Version $appVersion (build $appBuild) · Windows'),
             ),
           ],
@@ -254,7 +254,7 @@ class _AboutDetailState extends ConsumerState<AboutDetail> {
               child: TextField(
                 key: const ValueKey('update-feed'),
                 controller: _feed,
-                decoration: const InputDecoration(labelText: 'Update feed (https)', hintText: 'https://example.com/convomail/latest.json', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Update feed (https)', hintText: 'https://example.com/precis/latest.json', border: OutlineInputBorder()),
                 onSubmitted: (_) => _check(),
               ),
             ),

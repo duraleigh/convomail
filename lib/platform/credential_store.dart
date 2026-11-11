@@ -69,7 +69,7 @@ class WindowsCredentialStore implements CredentialStore {
       cred.ref
         ..Type = CRED_TYPE_GENERIC
         ..TargetName = _target(key).toNativeUtf16(allocator: arena)
-        ..Comment = 'Stored by ConvoMail'.toNativeUtf16(allocator: arena)
+        ..Comment = 'Stored by Précis'.toNativeUtf16(allocator: arena)
         ..CredentialBlobSize = bytes.length
         ..CredentialBlob = blob
         ..Persist = CRED_PERSIST_LOCAL_MACHINE

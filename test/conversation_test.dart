@@ -34,7 +34,7 @@ void main() {
           transportFactoryProvider.overrideWith((ref) => () => FakeMailTransport()),
           htmlRendererProvider.overrideWith((ref) => renderer ?? (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
         ],
-        child: const ConvoMailApp(startSync: false),
+        child: const PrecisApp(startSync: false),
       );
 
   Future<int> seedMessage({

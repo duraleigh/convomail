@@ -21,8 +21,12 @@ class WindowsMailtoRegistration implements MailtoRegistration {
   WindowsMailtoRegistration({String? exePath}) : exePath = exePath ?? Platform.resolvedExecutable;
 
   final String exePath;
-  static const progId = 'ConvoMail.Mailto';
-  static const appName = 'ConvoMail';
+  static const progId = 'Precis.Mailto';
+
+  /// Names used before the app was renamed; cleared on unregister.
+  static const legacyProgId = 'ConvoMail.Mailto';
+  static const legacyAppName = 'ConvoMail';
+  static const appName = 'Précis';
 
   @override
   bool get isRegistered {
@@ -42,7 +46,7 @@ class WindowsMailtoRegistration implements MailtoRegistration {
     final cmd = '"$exePath" "%1"';
 
     final prog = hkcu.createKey(r'Software\Classes\' + progId);
-    prog.createValue(const RegistryValue.string('', 'ConvoMail email link'));
+    prog.createValue(const RegistryValue.string('', 'Précis email link'));
     prog.createValue(const RegistryValue.string('URL Protocol', ''));
     prog.createValue(const RegistryValue.string('FriendlyTypeName', appName));
     prog.close();
@@ -54,15 +58,15 @@ class WindowsMailtoRegistration implements MailtoRegistration {
     open.close();
 
     // Default Programs registration (what the Default apps page lists).
-    final caps = hkcu.createKey(r'Software\ConvoMail\Capabilities');
+    final caps = hkcu.createKey(r'Software\Precis\Capabilities');
     caps.createValue(const RegistryValue.string('ApplicationName', appName));
     caps.createValue(const RegistryValue.string('ApplicationDescription', 'Sender-centric email client'));
     caps.close();
-    final assoc = hkcu.createKey(r'Software\ConvoMail\Capabilities\URLAssociations');
+    final assoc = hkcu.createKey(r'Software\Precis\Capabilities\URLAssociations');
     assoc.createValue(const RegistryValue.string('mailto', progId));
     assoc.close();
     final registered = hkcu.createKey(r'Software\RegisteredApplications');
-    registered.createValue(const RegistryValue.string(appName, r'Software\ConvoMail\Capabilities'));
+    registered.createValue(const RegistryValue.string(appName, r'Software\Precis\Capabilities'));
     registered.close();
   }
 
@@ -73,11 +77,23 @@ class WindowsMailtoRegistration implements MailtoRegistration {
       hkcu.deleteKey(r'Software\Classes\' + progId, recursive: true);
     } catch (_) {}
     try {
-      hkcu.deleteKey(r'Software\ConvoMail', recursive: true);
+      hkcu.deleteKey(r'Software\Precis', recursive: true);
     } catch (_) {}
     try {
       final registered = hkcu.createKey(r'Software\RegisteredApplications');
       registered.deleteValue(appName);
+      registered.close();
+    } catch (_) {}
+    // Anything registered under the old name.
+    try {
+      hkcu.deleteKey(r'Software\Classes\' + legacyProgId, recursive: true);
+    } catch (_) {}
+    try {
+      hkcu.deleteKey(r'Software\' + legacyAppName, recursive: true);
+    } catch (_) {}
+    try {
+      final registered = hkcu.createKey(r'Software\RegisteredApplications');
+      registered.deleteValue(legacyAppName);
       registered.close();
     } catch (_) {}
   }

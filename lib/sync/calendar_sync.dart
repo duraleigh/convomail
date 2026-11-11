@@ -190,7 +190,7 @@ class CalendarSync {
     return 0xFF000000 | int.parse(hex.substring(1), radix: 16);
   }
 
-  /// Calendars hidden in ConvoMail (still synced, not shown).
+  /// Calendars hidden in Précis (still synced, not shown).
   Future<Set<String>> hiddenCalendars() async {
     final raw = await db.getSetting(hiddenKey);
     if (raw == null || raw.isEmpty) return {};
@@ -412,7 +412,7 @@ class CalendarSync {
       throw const CalendarException('The Google Calendar API is turned off in your Google Cloud project. Turn it on there (see the steps below), then press Sync now.', apiOff: true);
     }
     if (response.status == 403 && (reasons.contains('insufficientPermissions') || message.contains('insufficient'))) {
-      throw const CalendarException('ConvoMail does not have permission for your calendar yet. Press Allow calendar access.', needsReconnect: true);
+      throw const CalendarException('Précis does not have permission for your calendar yet. Press Allow calendar access.', needsReconnect: true);
     }
     throw CalendarException('Google Calendar answered ${message.isEmpty ? '' : '"$message" '}(${response.status}).');
   }

@@ -94,7 +94,7 @@ class FeedsDetail extends ConsumerWidget {
         ),
         label('CLASSIFICATION RULES · ${rules.length}'),
         if (rules.isEmpty)
-          Text('Rules appear here when you accept one from a correction. ConvoMail never writes a rule on its own.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))
+          Text('Rules appear here when you accept one from a correction. Précis never writes a rule on its own.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))
         else
           GroupedList(
             children: [

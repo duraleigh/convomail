@@ -1,6 +1,6 @@
 # How Gmail surfaces timely information
 
-Research for ConvoMail's timely strip (spec 4.21), November 2, 2026.
+Research for Précis's timely strip (spec 4.21), November 2, 2026.
 
 **Limit of this research.** I could not run the Gmail app. App behavior below comes from Google's documents and press coverage. Google does not publish how it reads mail without markup or how it finds one-time codes. Screenshots from a real phone are the best check on anything here.
 
@@ -36,10 +36,10 @@ Reports of the rollout in September 2026 describe a "Copy code" pill on the mess
   - Outlook [reads the same types](https://devblogs.microsoft.com/microsoft365dev/unlock-your-email-potential-with-schema-org/) for travel and logistics.
 - **Automatic processing.** Google says tracking numbers are identified by automatic processing like its spam filtering, and that only the tracking number is shared with carrier partners, for participating US carriers ([Gmail Help](https://support.google.com/mail/answer/13073650?hl=en&co=GENIE.Platform%3DDesktop)). This is where live status comes from.
 
-## What ConvoMail does with this
+## What Précis does with this
 
 - **The same markup first,** then rules for mail without it. Everything runs on the device.
 - **A strip above the list** on Chats and Feeds, empty unless something is due, with an X on every line. Several items collapse behind "Show more", as Happening soon stacks them. Codes also get Gmail's copy pill on Feeds rows.
 - **The emails stay in Feeds,** as Gmail keeps them in Updates. The strip only carries the timely detail.
-- **Not possible here:** live carrier status, which needs Gmail's carrier partners or a third-party service. ConvoMail shows dates from the email, updates from later emails, and a link to the carrier's page.
+- **Not possible here:** live carrier status, which needs Gmail's carrier partners or a third-party service. Précis shows dates from the email, updates from later emails, and a link to the carrier's page.
 - **No guessing:** a trip or bill whose date cannot be read produces nothing.

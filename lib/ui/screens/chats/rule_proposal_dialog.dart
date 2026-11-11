@@ -78,7 +78,7 @@ class _RuleProposalDialogState extends ConsumerState<_RuleProposalDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('To prevent the same mistake, ConvoMail can remember a rule:', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
+            Text('To prevent the same mistake, Précis can remember a rule:', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
             const SizedBox(height: AppSpace.md),
             Container(
               key: const ValueKey('proposal-text'),

@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:launch_at_startup/launch_at_startup.dart';
 import 'package:local_notifier/local_notifier.dart';
+import 'package:path/path.dart' as p;
 import 'package:tray_manager/legacy.dart';
+import 'package:win32_registry/win32_registry.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:windows_taskbar/windows_taskbar.dart';
 
@@ -21,7 +23,7 @@ class WindowsNotificationSink implements NotificationSink {
 
   Future<void> _ensure() async {
     if (_ready) return;
-    await localNotifier.setup(appName: 'ConvoMail', shortcutPolicy: ShortcutPolicy.requireCreate);
+    await localNotifier.setup(appName: 'Précis', shortcutPolicy: ShortcutPolicy.requireCreate);
     _ready = true;
   }
 
@@ -56,9 +58,9 @@ class WindowsIntegration with TrayListener, WindowListener {
     if (!Platform.isWindows) return;
     try {
       await trayManager.setIcon('assets/tray.ico');
-      await trayManager.setToolTip('ConvoMail');
+      await trayManager.setToolTip('Précis');
       await trayManager.setContextMenu(Menu(items: [
-        MenuItem(key: 'open', label: 'Open ConvoMail'),
+        MenuItem(key: 'open', label: 'Open Précis'),
         MenuItem(key: 'compose', label: 'New message'),
         MenuItem.separator(),
         MenuItem(key: 'quit', label: 'Quit'),
@@ -70,7 +72,41 @@ class WindowsIntegration with TrayListener, WindowListener {
     }
     windowManager.addListener(this);
     await windowManager.setPreventClose(true);
-    launchAtStartup.setup(appName: 'ConvoMail', appPath: Platform.resolvedExecutable, args: ['--minimized']);
+    launchAtStartup.setup(appName: 'Précis', appPath: Platform.resolvedExecutable, args: ['--minimized']);
+    await _carryOverOldName();
+  }
+
+  /// The app used to be called ConvoMail. Windows still holds a
+  /// "start with Windows" entry and a Start menu shortcut under that name,
+  /// both pointing at the old program file. Move the first to the new name
+  /// and remove the second (the alerts add-on makes a fresh one).
+  Future<void> _carryOverOldName() async {
+    const old = 'ConvoMail';
+    try {
+      final run = Registry.openPath(RegistryHive.currentUser, path: r'Software\Microsoft\Windows\CurrentVersion\Run', desiredAccessRights: AccessRights.allAccess);
+      final had = run.getStringValue(old) != null;
+      if (had) run.deleteValue(old);
+      run.close();
+      if (had) {
+        try {
+          final approved = Registry.openPath(RegistryHive.currentUser, path: r'Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run', desiredAccessRights: AccessRights.allAccess);
+          approved.deleteValue(old);
+          approved.close();
+        } catch (_) {}
+        await launchAtStartup.enable();
+      }
+    } catch (e) {
+      debugPrint('startup entry carry-over failed: $e');
+    }
+    try {
+      final appData = Platform.environment['APPDATA'];
+      if (appData != null) {
+        final link = File(p.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', '$old.lnk'));
+        if (link.existsSync()) link.deleteSync();
+      }
+    } catch (e) {
+      debugPrint('old shortcut removal failed: $e');
+    }
   }
 
   Future<void> stop() async {
@@ -96,7 +132,7 @@ class WindowsIntegration with TrayListener, WindowListener {
         final name = effective > 9 ? 'badge_9plus' : 'badge_$effective';
         await WindowsTaskbar.setOverlayIcon(ThumbnailToolbarAssetIcon('assets/badges/$name.ico'), tooltip: '$count unread');
       }
-      if (_trayReady) await trayManager.setToolTip(count == 0 ? 'ConvoMail' : 'ConvoMail · $count unread');
+      if (_trayReady) await trayManager.setToolTip(count == 0 ? 'Précis' : 'Précis · $count unread');
     } catch (e) {
       debugPrint('badge failed: $e');
     }

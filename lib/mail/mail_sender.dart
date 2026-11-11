@@ -85,7 +85,7 @@ class SmtpSender implements MailSender {
 
   static String _ehloHost() {
     final h = Platform.localHostname.trim();
-    return h.isEmpty ? 'convomail.local' : h.replaceAll(RegExp(r'[^A-Za-z0-9.-]'), '-');
+    return h.isEmpty ? 'precis.local' : h.replaceAll(RegExp(r'[^A-Za-z0-9.-]'), '-');
   }
 }
 

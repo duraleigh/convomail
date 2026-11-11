@@ -114,7 +114,7 @@ void main() {
             transportFactoryProvider.overrideWith((ref) => () => workImap),
             htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
           ],
-          child: const ConvoMailApp(startSync: false),
+          child: const PrecisApp(startSync: false),
         );
 
     testWidgets('unified view shows account dots; the switcher scopes the list and the headline', (tester) async {

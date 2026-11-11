@@ -322,7 +322,7 @@ class _EventEditorState extends ConsumerState<_EventEditor> {
                         value: c.id,
                         child: Row(children: [CircleAvatar(backgroundColor: Color(c.color), radius: 6), const SizedBox(width: 8), Flexible(child: Text(c.name, overflow: TextOverflow.ellipsis))]),
                       ),
-                    if (!_isGoogle && widget.existing == null) const DropdownMenuItem(value: null, child: Text('ConvoMail only (not in Google)')),
+                    if (!_isGoogle && widget.existing == null) const DropdownMenuItem(value: null, child: Text('Précis only (not in Google)')),
                   ],
                   onChanged: _isGoogle || widget.existing != null
                       ? null

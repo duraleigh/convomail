@@ -27,7 +27,7 @@ void main() {
           credentialStoreProvider.overrideWith((ref) => creds),
           transportFactoryProvider.overrideWith((ref) => () => server),
         ],
-        child: const ConvoMailApp(startSync: false),
+        child: const PrecisApp(startSync: false),
       );
 
   setUp(() {

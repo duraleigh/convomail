@@ -161,7 +161,7 @@ Future<void> main(List<String> args) async {
       size: Size(1280, 800),
       minimumSize: AppLayout.minWindowSize,
       center: true,
-      title: 'ConvoMail',
+      title: 'Précis',
       // No system title bar or frame: WindowFrame draws a see-through one.
       titleBarStyle: TitleBarStyle.hidden,
       backgroundColor: Colors.transparent,
@@ -196,7 +196,7 @@ Future<void> main(List<String> args) async {
       _showWindow();
     });
   }
-  runApp(UncontrolledProviderScope(container: container, child: const ConvoMailApp()));
+  runApp(UncontrolledProviderScope(container: container, child: const PrecisApp()));
 }
 
 ProviderContainer? _container;
@@ -215,18 +215,18 @@ void _requestCompose() {
   _showWindow();
 }
 
-class ConvoMailApp extends ConsumerStatefulWidget {
-  const ConvoMailApp({super.key, this.startSync = true});
+class PrecisApp extends ConsumerStatefulWidget {
+  const PrecisApp({super.key, this.startSync = true});
 
   /// Whether to start the background sync controller. Widget tests pass
   /// false so no mail server is contacted.
   final bool startSync;
 
   @override
-  ConsumerState<ConvoMailApp> createState() => _ConvoMailAppState();
+  ConsumerState<PrecisApp> createState() => _PrecisAppState();
 }
 
-class _ConvoMailAppState extends ConsumerState<ConvoMailApp> {
+class _PrecisAppState extends ConsumerState<PrecisApp> {
   @override
   void initState() {
     super.initState();
@@ -240,7 +240,7 @@ class _ConvoMailAppState extends ConsumerState<ConvoMailApp> {
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
     return MaterialApp(
-      title: 'ConvoMail',
+      title: 'Précis',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),

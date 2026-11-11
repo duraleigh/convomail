@@ -119,7 +119,7 @@ void main() {
             htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
             showOnboardingProvider.overrideWith((ref) => onboarding),
           ],
-          child: const ConvoMailApp(startSync: false),
+          child: const PrecisApp(startSync: false),
         );
 
     testWidgets('first run shows the welcome screen until dismissed; it never shows once an account exists', (tester) async {
@@ -128,13 +128,13 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.pumpWidget(app());
       await tester.pumpAndSettle();
-      expect(find.text('Welcome to ConvoMail'), findsOneWidget);
+      expect(find.text('Welcome to Précis'), findsOneWidget);
       expect(find.byType(AppShell), findsOneWidget, reason: 'the shell hosts the onboarding screen');
       expect(find.text('Chats'), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('onboarding-skip')));
       await tester.pumpAndSettle();
-      expect(find.text('Welcome to ConvoMail'), findsNothing);
+      expect(find.text('Welcome to Précis'), findsNothing);
       expect(find.text('No conversations yet'), findsOneWidget);
 
       // A fresh start with an account skips onboarding even when not dismissed.
@@ -142,7 +142,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(app());
       await tester.pumpAndSettle();
-      expect(find.text('Welcome to ConvoMail'), findsNothing);
+      expect(find.text('Welcome to Précis'), findsNothing);
       expect(find.text('Chats'), findsWidgets);
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 50));
@@ -159,7 +159,7 @@ void main() {
       for (var i = 0; i < 10; i++) {
         await tester.pump(const Duration(milliseconds: 100));
       }
-      expect(find.text('Welcome to ConvoMail'), findsNothing);
+      expect(find.text('Welcome to Précis'), findsNothing);
       expect(find.text('Email address'), findsOneWidget, reason: 'add-account panel is open');
       await tester.pumpWidget(const SizedBox());
       await tester.pump(const Duration(milliseconds: 50));

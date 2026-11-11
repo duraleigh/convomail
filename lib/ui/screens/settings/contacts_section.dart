@@ -85,7 +85,7 @@ class _GoogleContactsDetailState extends ConsumerState<GoogleContactsDetail> {
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(
-            "Shows the photo from each person's Google contact card. People in your contacts also stay in Chats. ConvoMail reads names, addresses and photos only, on this computer, and never changes your contacts.",
+            "Shows the photo from each person's Google contact card. People in your contacts also stay in Chats. Précis reads names, addresses and photos only, on this computer, and never changes your contacts.",
             style: theme.textTheme.bodyMedium!.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),

@@ -157,7 +157,7 @@ class _GoogleCalendarDetailState extends ConsumerState<GoogleCalendarDetail> {
         ],
         Padding(padding: const EdgeInsets.fromLTRB(0, 24, 0, 8), child: Text('TURNING ON THE GOOGLE CALENDAR API', style: text.labelSmall!.copyWith(letterSpacing: 1))),
         Text(
-          '1. Go to console.cloud.google.com and pick the project you made for ConvoMail.\n'
+          '1. Go to console.cloud.google.com and pick the project you made for Précis.\n'
           '2. Open APIs & Services → Library, search for "Google Calendar API", and press Enable.\n'
           '3. Come back here and press Allow (or Sync now if it is already allowed).',
           style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant, height: 1.6),
