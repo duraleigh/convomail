@@ -832,7 +832,13 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           if (from < 21) {
             await m.addColumn(messages, messages.pileFix);
             await m.addColumn(messages, messages.focusFix);
-            if (from >= 20) await m.addColumn(helperVerdicts, helperVerdicts.pile);
+            if (from >= 20) {
+              await m.addColumn(helperVerdicts, helperVerdicts.pile);
+              // The helper has since said where each email sits and what the
+              // assistant read; an older version of the app let those go by.
+              // Asking again from the start brings them all in, once.
+              await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
+            }
             await m.createTable(helperReadings);
             await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages (message_id)');
           }
