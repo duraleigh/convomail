@@ -125,9 +125,10 @@ final class Sync
 
     /**
      * A device's first sending-up of what it knows about senders: for each,
-     * its row as the device has it and the facts behind it. Nothing is
-     * decided again here: the device's standing answers are taken as they
-     * are, and only mail that arrives later can change them.
+     * its row as the device has it and the facts behind it. A sender the
+     * helper holds no mail from is taken as the device has it. One it does
+     * hold mail from is decided again, now on the device's facts and the
+     * helper's own reading together.
      *
      * @param list<array<string, mixed>> $senders each `{k, item, facts}`
      * @param list<string> $myIds Message-IDs of mail the owner sent
@@ -149,6 +150,12 @@ final class Sync
             }
             $this->store->put('sender', $k, $s['item'], $device);
             $n++;
+            // Mail the helper read before it knew this was decided with next
+            // to nothing to go on. Now that the device's facts are here, the
+            // sender and its emails are decided again on all of them.
+            if ($this->sorter->hasEmailsFrom($k)) {
+                $this->sorter->resort($k);
+            }
         }
         $this->sorter->addMyIds($myIds);
         return ['senders' => $n, 'seq' => $this->store->seq()];

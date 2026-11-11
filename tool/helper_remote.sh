@@ -6,6 +6,8 @@
 #   tool/helper_remote.sh install         put the helper's program in place (or update it)
 #   tool/helper_remote.sh webroot DIR     put the small index.php and .htaccess in the web folder DIR
 #   tool/helper_remote.sh servercheck     prove the helper's storage on the live kind of database
+#   tool/helper_remote.sh counts          how the live helper is doing, in counts only
+#   tool/helper_remote.sh resort          sort again every sender it holds mail from (counts only)
 #   tool/helper_remote.sh run 'COMMAND'   run one command there
 #
 # The helper lives in ~/precis-helper, outside any web folder. Its private
@@ -42,12 +44,22 @@ case "${1:-}" in
     remote 'cat > ~/precis-helper/server_check.php' < "$HERE/helper/tests/server_check.php"
     remote 'php ~/precis-helper/server_check.php; code=$?; rm -f ~/precis-helper/server_check.php; exit $code'
     ;;
+  counts)
+    # How the live helper is doing, in counts only. Reads; changes nothing.
+    remote 'cat > ~/precis-helper/server_counts.php' < "$HERE/helper/tests/server_counts.php"
+    remote 'php ~/precis-helper/server_counts.php; code=$?; rm -f ~/precis-helper/server_counts.php; exit $code'
+    ;;
+  resort)
+    # Sorts again every sender the live helper holds mail from; says how much changed, in counts.
+    remote 'cat > ~/precis-helper/server_resort.php' < "$HERE/helper/tests/server_resort.php"
+    remote 'php ~/precis-helper/server_resort.php; code=$?; rm -f ~/precis-helper/server_resort.php; exit $code'
+    ;;
   run)
     shift
     remote "$@"
     ;;
   *)
-    sed -n '2,13p' "$0"
+    sed -n '2,15p' "$0"
     exit 2
     ;;
 esac

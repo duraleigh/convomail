@@ -514,6 +514,37 @@ return [
         same([], $w->store->since(0, 3)['items'] === [] ? [] : array_filter($w->store->since(0, 3)['items'], static fn (array $i): bool => $i['kind'] === 'sender'), 'nothing comes back to the device that sent it');
     },
 
+    'mail read before a device sent up its facts is sorted again once they arrive' => function (): void {
+        $w = new World();
+        // The helper reads one plain email from a mailer it knows nothing about: it looks like a person.
+        $m = $w->arrive(['From' => 'Mark <mark@vendorco.com>', 'To' => 'me@example.com', 'Subject' => 'Checking in']);
+        same('people', $w->sender('mark@vendorco.com')['cls']);
+        same('people', $w->sort($m)['cls']);
+        // The device knows better: 40 emails, all with bulk headers, Gmail files them as promotions.
+        $w->later(60);
+        $w->sync->seed(1, [[
+            'k' => 'mark@vendorco.com',
+            'item' => ['cls' => 'feeds', 'src' => 'auto', 'cat' => 'Promotion', 'pile' => null, 'counts' => false, 'reasons' => 'Gmail files this sender under Promotions', 'name' => 'Mark'],
+            'facts' => ['address' => 'mark@vendorco.com', 'messagesReceived' => 40, 'messagesWithKnownSignals' => 40, 'messagesWithBulkHeaders' => 40, 'providerCategories' => ['promotions' => 40]],
+        ]], $w->clock->now);
+        same('feeds', $w->sender('mark@vendorco.com')['cls']);
+        same('Promotion', $w->sender('mark@vendorco.com')['cat']);
+        same('feeds', $w->sort($m)['cls'], 'the email read earlier follows');
+        // And the other way: the device's own move stands.
+        $m2 = $w->arrive(['From' => 'News <news@paper.com>', 'To' => 'me@example.com', 'Subject' => 'Top stories today', 'List-Unsubscribe' => '<mailto:u@paper.com>']);
+        same('feeds', $w->sort($m2)['cls']);
+        $w->later(60);
+        $w->sync->seed(1, [['k' => 'news@paper.com', 'item' => ['cls' => 'people', 'src' => 'override', 'cat' => null, 'reasons' => 'Moved by you'], 'facts' => ['address' => 'news@paper.com', 'messagesReceived' => 9, 'messagesWithKnownSignals' => 9, 'messagesWithBulkHeaders' => 9]]], $w->clock->now);
+        same(['people', 'override'], [$w->sender('news@paper.com')['cls'], $w->sender('news@paper.com')['src']]);
+        same('people', $w->sort($m2)['cls']);
+    },
+
+    'my own mail is in Chats from the moment it is filed' => function (): void {
+        $w = new World();
+        $w->arrive(['From' => 'me@example.com', 'To' => 'sarah@x.com', 'Subject' => 'Hello'], ['SENT']);
+        same('people', (string) $w->store->db->val('SELECT cls FROM {emails}'));
+    },
+
     // ---- the timer ------------------------------------------------------------------------------
     'the timer reads new mail, fires due reminders once, and brings back rows whose time has come' => function () use ($person): void {
         $w = new World();

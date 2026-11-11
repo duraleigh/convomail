@@ -158,6 +158,10 @@ final class Sorter
             'unread' => (int) in_array('UNREAD', $labels, true),
             'gone' => (int) $gone,
         ];
+        // The owner's own mail is always in Chats; nothing decides it later.
+        if ($isMine) {
+            $row['cls'] = 'people';
+        }
         $gmailId = (string) ($meta['id'] ?? '');
         $existing = $db->val('SELECT id FROM {emails} WHERE account_id = ? AND gmail_id = ?', [$accountId, $gmailId]);
         if ($existing !== null) {
@@ -424,6 +428,28 @@ final class Sorter
         $db = $this->store->db;
         return $db->val('SELECT 1 FROM {emails} WHERE message_id = ? AND is_from_me = 1 LIMIT 1', [$inReplyTo]) !== null
             || $db->val('SELECT 1 FROM {my_ids} WHERE message_id = ?', [Store::key($inReplyTo)]) !== null;
+    }
+
+    /** Whether the helper holds any email from this sender. */
+    public function hasEmailsFrom(string $skey): bool
+    {
+        return $this->store->db->val('SELECT 1 FROM {emails} WHERE from_key = ? LIMIT 1', [$skey]) !== null;
+    }
+
+    /**
+     * Every sender the helper holds email from. For sorting them all again
+     * after something changed underneath (the first sending-up from a
+     * device, say).
+     *
+     * @return list<string>
+     */
+    public function sendersWithEmails(): array
+    {
+        $out = [];
+        foreach ($this->store->db->all('SELECT DISTINCT from_key FROM {emails} WHERE is_from_me = 0 AND from_key <> ?', ['']) as $r) {
+            $out[] = (string) $r['from_key'];
+        }
+        return $out;
     }
 
     /** Remembers Message-IDs of mail the owner sent before the helper started reading. */
