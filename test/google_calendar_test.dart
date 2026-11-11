@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:convomail/mail/google_oauth.dart';
 import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/database.dart';
-import 'package:convomail/store/planner_queries.dart';
 import 'package:convomail/sync/calendar_sync.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -132,7 +131,6 @@ void main() {
     expect(vacation.allDay, isTrue);
     expect(vacation.startAt, DateTime(2026, 11, 20));
     expect(vacation.endAt, DateTime(2026, 11, 23));
-    expect(await sync.defaultCalendarId(), 'me@gmail.com');
   });
 
   test('a sync makes the Planner match: changes, deletions and calendars no longer shown', () async {
@@ -142,42 +140,6 @@ void main() {
     google.calendars.removeWhere((c) => c['id'] == 'holidays');
     await sync.syncNow();
     expect((await stored()).map((e) => e.title).toSet(), {'Dentist (moved)'});
-  });
-
-  test('adding, changing and deleting in the Planner does the same in Google', () async {
-    await sync.syncNow();
-    final id = await sync.create('family', CalendarEventDraft(title: 'Recital', start: DateTime(2026, 11, 14, 18), end: DateTime(2026, 11, 14, 19, 30), location: 'School'));
-    final sentBody = google.sent['POST family']!;
-    expect(sentBody['summary'], 'Recital');
-    expect(sentBody['start'], {'dateTime': DateTime(2026, 11, 14, 18).toUtc().toIso8601String()});
-    expect(sentBody['location'], 'School');
-    var e = (await db.eventById(id))!;
-    expect(e.kind, 'google');
-    expect(e.calendarId, 'family');
-    expect(e.color, 0xFF16A765);
-
-    final allDay = await sync.create('me@gmail.com', CalendarEventDraft(title: 'Trip', start: DateTime(2026, 12, 1), allDay: true));
-    expect(google.sent['POST me@gmail.com']!['start'], {'date': '2026-12-01'});
-    expect(google.sent['POST me@gmail.com']!['end'], {'date': '2026-12-02'}, reason: "Google's end is the day after");
-    expect((await db.eventById(allDay))!.allDay, isTrue);
-
-    await sync.update(e, CalendarEventDraft(title: 'Recital (new time)', start: DateTime(2026, 11, 14, 19), end: DateTime(2026, 11, 14, 20)));
-    expect(google.sent['PATCH family/${e.uid}']!['summary'], 'Recital (new time)');
-    e = (await db.eventById(id))!;
-    expect(e.title, 'Recital (new time)');
-    expect(e.startAt, DateTime(2026, 11, 14, 19));
-
-    await sync.delete(e);
-    expect(google.events['family']!.where((x) => x['id'] == e.uid), isEmpty);
-    expect(await db.eventById(id), isNull);
-  });
-
-  test('deleting an event already gone in Google removes it here too', () async {
-    await sync.syncNow();
-    final dentist = (await stored()).firstWhere((e) => e.title == 'Dentist');
-    google.events['me@gmail.com']!.removeWhere((e) => e['id'] == 'a1');
-    await sync.delete(dentist);
-    expect(await db.eventById(dentist.id), isNull);
   });
 
   test('the Calendar API turned off is said plainly, and kept for Settings', () async {
@@ -198,15 +160,15 @@ void main() {
     expect(google.calls.where((c) => c.startsWith('GET /calendar/v3/calendars/')), hasLength(3));
   });
 
-  test('hiding a calendar here and choosing where new events go are kept', () async {
+  test('hiding a calendar here is kept', () async {
     await sync.syncNow();
     await sync.setHidden('holidays', true);
     expect(await sync.hiddenCalendars(), {'holidays'});
     await sync.setHidden('holidays', false);
     expect(await sync.hiddenCalendars(), isEmpty);
-    await sync.setDefaultCalendar('family');
-    expect(await sync.defaultCalendarId(), 'family');
-    await sync.setDefaultCalendar('holidays');
-    expect(await sync.defaultCalendarId(), 'me@gmail.com', reason: 'a view-only calendar cannot take new events');
+  });
+
+  test('only reading is asked of Google', () {
+    expect(GoogleOAuth.calendarScope, endsWith('calendar.readonly'));
   });
 }

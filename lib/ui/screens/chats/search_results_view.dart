@@ -84,12 +84,12 @@ class SearchResultsView extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       children: [
-        // Searching from Feeds always covers Feeds.
-        if (ref.watch(inboxModeProvider) != InboxMode.feeds) Padding(
+        // Searching from Feed or Noise always covers them.
+        if (!ref.watch(inboxModeProvider).isFeeds) Padding(
           padding: const EdgeInsets.fromLTRB(4, 0, 0, 8),
           child: Row(
             children: [
-              Expanded(child: Text('Include Feeds', style: text.labelLarge)),
+              Expanded(child: Text('Include Feed and Noise', style: text.labelLarge)),
               Switch(
                 key: const ValueKey('include-feeds'),
                 value: includeFeeds,

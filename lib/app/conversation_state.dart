@@ -33,7 +33,10 @@ class OpenThreadNotifier extends Notifier<String?> {
   @override
   String? build() => null;
   void open(String key) => state = key;
-  void close() => state = null;
+  // Safe to call late: a screen closing its thread as the app shuts.
+  void close() {
+    if (ref.mounted) state = null;
+  }
 }
 
 /// The live message row (flags, imagesAllowed, body columns).

@@ -14,6 +14,7 @@ import '../../../app/settings_navigation.dart';
 import '../../../app/timely_state.dart';
 import '../../../domain/classifier.dart';
 import '../../../domain/filing.dart';
+import '../../../domain/piles.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
 import '../../../store/merge_queries.dart';
@@ -26,13 +27,12 @@ import '../../widgets/category_color.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/grouped_list.dart';
 import '../../widgets/tonal_avatar.dart';
-import '../planner/event_dialogs.dart';
 import 'edit_sender_dialog.dart';
+import 'later_dialogs.dart';
 import 'merge_people_dialog.dart';
 import 'person_row.dart';
 import 'search_results_view.dart';
 import 'selective_keep_dialog.dart';
-import 'timely_strip.dart';
 
 /// The middle pane of the Chats destination (spec 5.3): headline, search,
 /// filter menu behind the tune icon, People/Feeds group, and the grouped People list with
@@ -68,7 +68,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     messenger.hideCurrentSnackBar();
     _selectAllToast = messenger.showSnackBar(SnackBar(
       key: const ValueKey('select-all-toast'),
-      content: Text('Select all ${list.length} ${mode == InboxMode.feeds ? 'feeds' : 'chats'}?'),
+      content: Text(mode == InboxMode.people ? 'Select all ${list.length} chats?' : 'Select all ${list.length} in ${mode.label}?'),
       behavior: SnackBarBehavior.floating,
       width: 420,
       duration: const Duration(seconds: 8),
@@ -98,7 +98,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     PeopleFilter.sent: 'Sent',
     PeopleFilter.hasAttachments: 'Has attachments',
     PeopleFilter.fromContacts: 'From contacts',
-    PeopleFilter.snoozed: 'Snoozed',
+    PeopleFilter.snoozed: 'Later',
   };
 
   @override
@@ -149,27 +149,12 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     final actions = ref.read(rowActionsProvider);
     ref.read(multiSelectProvider.notifier).clear();
     switch (action) {
-      case BulkAction.moveToFeeds:
-      case BulkAction.moveToPeople:
-        // Spec 4.11: a manual move is permanent until changed.
-        final service = ref.read(classificationServiceProvider);
-        final target = action == BulkAction.moveToFeeds ? Bucket.feeds : Bucket.people;
-        final keys = [for (final r in rows) if (r.ref case ContactRow(:final contactKey)) if (contactKey != 'me') contactKey];
-        for (final k in keys) {
-          await service.moveSender(k, target);
-        }
-        messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(SnackBar(
-          content: Text('${keys.length} sender${keys.length == 1 ? '' : 's'} moved to ${target == Bucket.feeds ? 'Feeds' : 'People'}. Rules will not move ${keys.length == 1 ? 'it' : 'them'} back.'),
-          behavior: SnackBarBehavior.floating,
-          width: 480,
-          action: SnackBarAction(label: 'Undo', onPressed: () async {
-            for (final k in keys) {
-              await service.moveSender(k, null);
-            }
-          }),
-        ));
-        if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
+      case BulkAction.moveToChats:
+        await _moveRowsTo(rows, InboxMode.people);
+      case BulkAction.moveToFeed:
+        await _moveRowsTo(rows, InboxMode.feed);
+      case BulkAction.moveToNoise:
+        await _moveRowsTo(rows, InboxMode.noise);
       case BulkAction.merge:
         await _merge([for (final r in rows) if (r.ref case ContactRow(:final contactKey)) if (contactKey != 'me') (contactKey, r.title)]);
       case BulkAction.markRead:
@@ -197,6 +182,63 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         ));
         if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
     }
+  }
+
+  /// Moves senders to Chats, Feed or Noise. The user's move stays until they
+  /// change it: the app never moves a sender back on its own.
+  Future<void> _moveRowsTo(List<PeopleRow> rows, InboxMode target) async {
+    final service = ref.read(classificationServiceProvider);
+    final db = ref.read(databaseProvider);
+    final messenger = ScaffoldMessenger.of(context);
+    // (sender, was not a person before, the pile chosen before)
+    final moved = <(String, bool, FeedsPile?)>[];
+    String? name;
+    for (final r in rows) {
+      if (r.ref case ContactRow(:final contactKey) when contactKey != 'me') {
+        moved.add((contactKey, r.isFeeds, r.chosenPile));
+        name ??= r.title;
+        if (target == InboxMode.people) {
+          await service.moveSender(contactKey, Bucket.people);
+        } else {
+          if (!r.isFeeds) await service.moveSender(contactKey, Bucket.feeds);
+          await db.setSenderPile(contactKey, target == InboxMode.noise ? FeedsPile.noise : FeedsPile.feed);
+        }
+      }
+    }
+    if (moved.isEmpty || !mounted) return;
+    final one = moved.length == 1;
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(SnackBar(
+      content: Text('${one ? name : '${moved.length} senders'} moved to ${target.label}. ${one ? 'It stays' : 'They stay'} there until you change it.'),
+      behavior: SnackBarBehavior.floating,
+      width: 480,
+      action: SnackBarAction(label: 'Undo', onPressed: () async {
+        for (final (key, wasFeeds, pile) in moved) {
+          if (wasFeeds != target.isFeeds) await service.moveSender(key, null);
+          await db.setSenderPile(key, pile);
+        }
+      }),
+    ));
+    if (rows.any((r) => r.rowKey == ref.read(selectedRowProvider))) ref.read(selectedRowProvider.notifier).select(null);
+  }
+
+  /// Archives everything in Noise, after asking, with one Undo.
+  Future<void> _archiveAllNoise(List<PeopleRow> rows) async {
+    if (rows.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Archive everything in Noise?'),
+        content: Text('Mail from ${rows.length} sender${rows.length == 1 ? '' : 's'} leaves Noise and goes to your archive. Nothing is deleted.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('noise-archive-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Archive all')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    ref.read(multiSelectProvider.notifier).setAll([for (final r in rows) r.rowKey]);
+    await _bulk(BulkAction.archive, rows);
   }
 
   /// Asks which name to keep, merges, and offers one Undo.
@@ -246,20 +288,12 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         await actions.markRowRead(row.rowKey);
       case RowAction.pin:
         await actions.togglePin(row.rowKey);
-      case RowAction.moveToFeeds:
-      case RowAction.moveToPeople:
-        // Spec 4.11: a manual move is permanent until changed.
-        if (row.ref case ContactRow(:final contactKey)) {
-          final target = action == RowAction.moveToFeeds ? Bucket.feeds : Bucket.people;
-          await ref.read(classificationServiceProvider).moveSender(contactKey, target);
-          messenger.hideCurrentSnackBar();
-          messenger.showSnackBar(SnackBar(
-            content: Text('${row.title} moved to ${target == Bucket.feeds ? 'Feeds' : 'People'}. Rules will not move it back.'),
-            behavior: SnackBarBehavior.floating,
-            width: 460,
-            action: SnackBarAction(label: 'Undo', onPressed: () => ref.read(classificationServiceProvider).moveSender(contactKey, null)),
-          ));
-        }
+      case RowAction.moveToChats:
+        await _moveRowsTo([row], InboxMode.people);
+      case RowAction.moveToFeed:
+        await _moveRowsTo([row], InboxMode.feed);
+      case RowAction.moveToNoise:
+        await _moveRowsTo([row], InboxMode.noise);
       case RowAction.toggleCounts:
         if (row.ref case ContactRow(:final contactKey)) {
           await ref.read(classificationServiceProvider).setCountsTowardUnread(contactKey, !row.countsTowardUnread);
@@ -277,7 +311,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         await ref.read(databaseProvider).snoozeRow(row.rowKey, until == SnoozeChoice.unsnooze ? null : until);
         messenger.hideCurrentSnackBar();
         messenger.showSnackBar(SnackBar(
-          content: Text(until == SnoozeChoice.unsnooze ? '${row.title} is back in the list' : '${row.title} snoozed until ${describeSnooze(until)}'),
+          content: Text(until == SnoozeChoice.unsnooze ? '${row.title} is back in the list' : '${row.title} put off until ${describeSnooze(until)}'),
           behavior: SnackBarBehavior.floating,
           width: 420,
           action: until == SnoozeChoice.unsnooze ? null : SnackBarAction(label: 'Undo', onPressed: () => ref.read(databaseProvider).snoozeRow(row.rowKey, null)),
@@ -388,12 +422,12 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                   final scope = ref.watch(accountScopeProvider);
                   final accounts = ref.watch(accountsProvider).value ?? const [];
                   final current = accounts.where((a) => a.id == scope).firstOrNull;
-                  if (current == null) return Text(mode == InboxMode.feeds ? 'Feeds' : 'Chats', style: text.headlineMedium);
+                  if (current == null) return Text(mode.label, style: text.headlineMedium);
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(mode == InboxMode.feeds ? 'Feeds' : 'Chats', style: text.headlineMedium),
+                      Text(mode.label, style: text.headlineMedium),
                       const SizedBox(width: 10),
                       Flexible(
                         child: InputChip(
@@ -460,16 +494,18 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
           ),
         ),
         const SizedBox(height: 8),
-        if (!ref.watch(searchActiveProvider)) const TimelyStrip(),
-        if (mode == InboxMode.feeds && !ref.watch(searchActiveProvider)) const _FeedsCategoryPills(),
+        if (mode.isFeeds && !ref.watch(searchActiveProvider)) const _FeedsCategoryPills(),
+        if (mode == InboxMode.noise && !ref.watch(searchActiveProvider) && picked.isEmpty) _NoiseHeader(onArchiveAll: () => _archiveAllNoise(ref.read(listRowsProvider(InboxTab.noise)).value ?? const [])),
         if (picked.isNotEmpty) _SelectionBar(count: picked.length, mode: mode, canMerge: (rows.value ?? const <PeopleRow>[]).where((r) => picked.contains(r.rowKey) && !r.isGroup && r.identityKey != 'me').length >= 2, onAction: (a) => _bulk(a, rows.value ?? const []), onClear: () => ref.read(multiSelectProvider.notifier).clear()),
         Expanded(
           child: rows.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e', style: text.bodyMedium!.copyWith(color: scheme.error))),
             data: (list) {
-              if (mode == InboxMode.feeds && list.isEmpty && !ref.watch(searchActiveProvider)) {
-                return const EmptyState(icon: Icons.rss_feed_rounded, title: 'Nothing in Feeds', message: 'Newsletters, receipts, and notifications land here automatically.');
+              if (mode.isFeeds && list.isEmpty && !ref.watch(searchActiveProvider) && ref.watch(feedsCategoryFilterProvider) == null && filter == PeopleFilter.all) {
+                return mode == InboxMode.feed
+                    ? const EmptyState(icon: Icons.rss_feed_rounded, title: 'Nothing in Feed', message: 'Receipts, deliveries, travel and other updates land here on their own.')
+                    : const EmptyState(icon: Icons.volume_off_outlined, title: 'Nothing in Noise', message: 'Promotions, social notices and newsletters you never open are kept here, out of the way.');
               }
               if (ref.watch(searchActiveProvider)) {
                 // People found by search can be picked like the full list, the
@@ -550,7 +586,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
                         onTap: () => _onRowTap(row, list),
                         child: PersonRow(
                           row: row,
-                          liveCode: mode == InboxMode.feeds ? liveCodes['c:${row.identityKey}'] : null,
+                          liveCode: mode.isFeeds ? liveCodes['c:${row.identityKey}'] : null,
                           selected: row.rowKey == selected,
                           onAction: (a) => _act(row, a),
                           checked: picked.contains(row.rowKey),
@@ -603,7 +639,6 @@ class _SelectionBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final toFeeds = mode == InboxMode.people;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Material(
@@ -616,12 +651,12 @@ class _SelectionBar extends StatelessWidget {
             children: [
               IconButton(tooltip: 'Clear selection (Esc)', icon: const Icon(Icons.close_rounded, size: 20), onPressed: onClear),
               Expanded(child: Text('$count selected', maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge!.copyWith(color: scheme.onSecondaryContainer))),
-              IconButton(
-                key: const ValueKey('bulk-move'),
-                tooltip: toFeeds ? 'Move to Feeds' : 'Move to People',
-                icon: Icon(toFeeds ? Icons.rss_feed_rounded : Icons.person_outline_rounded, size: 20),
-                onPressed: () => onAction(toFeeds ? BulkAction.moveToFeeds : BulkAction.moveToPeople),
-              ),
+              if (mode != InboxMode.people)
+                IconButton(key: const ValueKey('bulk-move-chats'), tooltip: 'Move to Chats', icon: const Icon(Icons.person_outline_rounded, size: 20), onPressed: () => onAction(BulkAction.moveToChats)),
+              if (mode != InboxMode.feed)
+                IconButton(key: const ValueKey('bulk-move-feed'), tooltip: 'Move to Feed', icon: const Icon(Icons.rss_feed_rounded, size: 20), onPressed: () => onAction(BulkAction.moveToFeed)),
+              if (mode != InboxMode.noise)
+                IconButton(key: const ValueKey('bulk-move-noise'), tooltip: 'Move to Noise', icon: const Icon(Icons.volume_off_outlined, size: 20), onPressed: () => onAction(BulkAction.moveToNoise)),
               if (canMerge)
                 IconButton(key: const ValueKey('bulk-merge'), tooltip: 'Merge into one person', icon: const Icon(Icons.merge_rounded, size: 20), onPressed: () => onAction(BulkAction.merge)),
               IconButton(key: const ValueKey('bulk-read'), tooltip: 'Mark as read', icon: const Icon(Icons.mark_email_read_outlined, size: 20), onPressed: () => onAction(BulkAction.markRead)),
@@ -715,6 +750,44 @@ class _FeedsPill extends StatelessWidget {
   }
 }
 
+/// The line at the top of Noise: how much was kept out of the way this week
+/// (shown only once the whole count is known), and one button to clear it.
+class _NoiseHeader extends ConsumerWidget {
+  const _NoiseHeader({required this.onArchiveAll});
+  final VoidCallback onArchiveAll;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final n = ref.watch(noiseThisWeekProvider).value;
+    final senders = ref.watch(listRowsProvider(InboxTab.noise)).value?.length ?? 0;
+    if (senders == 0) return const SizedBox.shrink();
+    return Padding(
+      key: const ValueKey('noise-header'),
+      padding: const EdgeInsets.fromLTRB(20, 0, 16, 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              n == null ? 'Kept out of your way. None of it rings.' : '$n email${n == 1 ? '' : 's'} this week, kept out of your way.',
+              style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.tonalIcon(
+            key: const ValueKey('noise-archive-all'),
+            style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+            onPressed: onArchiveAll,
+            icon: const Icon(Icons.archive_outlined, size: 18),
+            label: const Text('Archive all'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// The calendar week [now] falls in, named by its Monday (local time).
 String feedsBannerWeek(DateTime now) {
   final monday = DateTime(now.year, now.month, now.day - (now.weekday - DateTime.monday));
@@ -759,14 +832,14 @@ class _FeedsBanner extends ConsumerWidget {
         borderRadius: BorderRadius.circular(AppShapes.md),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () => ref.read(destinationProvider.notifier).select(Destination.feeds),
+          onTap: () => ref.read(destinationProvider.notifier).select(Destination.feed),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
             child: Row(
               children: [
                 Icon(Icons.rss_feed_rounded, size: 18, color: scheme.onTertiaryContainer),
                 const SizedBox(width: 8),
-                Expanded(child: Text('$n message${n == 1 ? '' : 's'} filed to Feeds this week', style: text.labelLarge!.copyWith(color: scheme.onTertiaryContainer))),
+                Expanded(child: Text('$n message${n == 1 ? '' : 's'} filed to Feed and Noise this week', style: text.labelLarge!.copyWith(color: scheme.onTertiaryContainer))),
                 IconButton(
                   key: const ValueKey('feeds-banner-dismiss'),
                   tooltip: 'Dismiss until next week',
@@ -788,10 +861,10 @@ class _FeedsBanner extends ConsumerWidget {
 final feedsFiledThisWeekProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchFeedsFiledSince(DateTime.now().subtract(const Duration(days: 7))));
 
 /// Small helper so both the row and the pane agree on action names.
-enum RowAction { archive, trash, markRead, pin, moveToFeeds, moveToPeople, toggleCounts, category, snooze, mute, rename, mergeWith }
+enum RowAction { archive, trash, markRead, pin, moveToChats, moveToFeed, moveToNoise, toggleCounts, category, snooze, mute, rename, mergeWith }
 
 /// Actions on every picked row at once.
-enum BulkAction { moveToFeeds, moveToPeople, merge, markRead, archive }
+enum BulkAction { moveToChats, moveToFeed, moveToNoise, merge, markRead, archive }
 
 /// Relative timestamp per spec 4.2: time today, "Yesterday", weekday this
 /// week, date otherwise.

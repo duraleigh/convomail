@@ -3,73 +3,18 @@ import 'package:drift/drift.dart';
 import 'database.dart';
 import 'people_queries.dart';
 
-/// Planner events, to-dos, reminders, and snooze bookkeeping (spec 4.9,
-/// 4.10).
+/// Calendar events read from Google (for Today's Schedule), reminders, and
+/// the bookkeeping for Later (snooze).
 extension PlannerQueries on AppDatabase {
   // ---- events ----------------------------------------------------------------
 
-  /// Timed and all-day items overlapping [start, end), not dismissed, not
-  /// to-dos.
+  /// Timed and all-day calendar events overlapping [start, end).
   Stream<List<PlannerEvent>> watchEventsBetween(DateTime start, DateTime end) => (select(plannerEvents)
         ..where((e) => e.kind.equals('todo').not() & e.dismissed.equals(false) & e.startAt.isSmallerThanValue(end) & (e.endAt.isBiggerThanValue(start) | (e.endAt.isNull() & e.startAt.isBiggerOrEqualValue(start))))
         ..orderBy([(e) => OrderingTerm.asc(e.startAt)]))
       .watch();
 
-  Stream<List<PlannerEvent>> watchTodos() => (select(plannerEvents)
-        ..where((e) => e.kind.equals('todo') & e.dismissed.equals(false))
-        ..orderBy([(e) => OrderingTerm.asc(e.done), (e) => OrderingTerm.asc(e.startAt), (e) => OrderingTerm.asc(e.id)]))
-      .watch();
-
-  Stream<List<PlannerEvent>> watchEventsForMessage(int messageId) => (select(plannerEvents)..where((e) => e.sourceMessageId.equals(messageId) & e.dismissed.equals(false))).watch();
-
-  Stream<List<PlannerEvent>> watchEventsForThread(String threadKey) => (select(plannerEvents)..where((e) => e.threadKey.equals(threadKey) & e.dismissed.equals(false))).watch();
-
   Future<PlannerEvent?> eventById(int id) => (select(plannerEvents)..where((e) => e.id.equals(id))).getSingleOrNull();
-
-  Future<int> addEvent({
-    required String title,
-    DateTime? start,
-    DateTime? end,
-    bool allDay = false,
-    String kind = 'manual',
-    String colorKey = 'other',
-    int? sourceMessageId,
-    String? threadKey,
-    String? location,
-    String notes = '',
-  }) =>
-      into(plannerEvents).insert(PlannerEventsCompanion.insert(
-        title: title.trim().isEmpty ? (kind == 'todo' ? 'To-do' : 'Event') : title.trim(),
-        startAt: Value(start),
-        endAt: Value(end),
-        allDay: Value(allDay),
-        kind: kind,
-        colorKey: Value(colorKey),
-        sourceMessageId: Value(sourceMessageId),
-        threadKey: Value(threadKey),
-        location: Value(location),
-        notes: Value(notes),
-      ));
-
-  Future<void> updateEvent(int id, {String? title, DateTime? start, DateTime? end, bool? allDay, String? colorKey, String? location, String? notes, bool clearEnd = false}) =>
-      (update(plannerEvents)..where((e) => e.id.equals(id))).write(PlannerEventsCompanion(
-        title: title == null ? const Value.absent() : Value(title.trim()),
-        startAt: start == null ? const Value.absent() : Value(start),
-        endAt: clearEnd ? const Value(null) : (end == null ? const Value.absent() : Value(end)),
-        allDay: allDay == null ? const Value.absent() : Value(allDay),
-        colorKey: colorKey == null ? const Value.absent() : Value(colorKey),
-        location: location == null ? const Value.absent() : Value(location),
-        notes: notes == null ? const Value.absent() : Value(notes),
-      ));
-
-  Future<void> setEventDone(int id, bool done) => (update(plannerEvents)..where((e) => e.id.equals(id))).write(PlannerEventsCompanion(done: Value(done)));
-
-  Future<void> deleteEvent(int id) => (delete(plannerEvents)..where((e) => e.id.equals(id))).go();
-
-  /// Removes everything the app once added to the Planner by itself:
-  /// dates read out of mail and calendar invitations. Only what the user
-  /// adds, and their Google Calendar, belong there.
-  Future<int> deleteMailGuesses() => (delete(plannerEvents)..where((e) => e.kind.isIn(const ['extracted', 'invite']))).go();
 
   // ---- reminders -------------------------------------------------------------
 

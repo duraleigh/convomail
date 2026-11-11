@@ -43,7 +43,7 @@ class _TopSearchBarState extends ConsumerState<TopSearchBar> {
   @override
   Widget build(BuildContext context) {
     final destination = ref.watch(destinationProvider);
-    final onList = destination == Destination.chats || destination == Destination.feeds;
+    final onList = destination.isList;
     final shown = onList && ref.watch(searchBarShownProvider);
     final focus = ref.watch(searchFocusProvider);
     final mode = ref.watch(inboxModeProvider);
@@ -72,7 +72,7 @@ class _TopSearchBarState extends ConsumerState<TopSearchBar> {
                   child: SearchBar(
                     controller: _controller,
                     focusNode: focus,
-                    hintText: mode == InboxMode.feeds ? 'Search feeds and mail' : 'Search people and mail',
+                    hintText: switch (mode) { InboxMode.people => 'Search people and mail', InboxMode.feed => 'Search Feed and mail', InboxMode.noise => 'Search Noise and mail' },
                     constraints: const BoxConstraints(minHeight: 54),
                     textStyle: WidgetStatePropertyAll(Theme.of(context).textTheme.titleMedium),
                     leading: const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.search_rounded)),

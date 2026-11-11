@@ -8,6 +8,7 @@ import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart';
+import '../store/done_queries.dart';
 import '../store/people_queries.dart';
 import '../store/sync_queries.dart';
 import '../store/timely_queries.dart';
@@ -575,6 +576,42 @@ class AccountSyncer {
     });
   }
 
+  /// Sent emails this run already tried to read, so one that cannot be read
+  /// is not tried again and again.
+  final Set<int> _sentTried = {};
+
+  /// Reads the words of the user's own recent emails that are not on this
+  /// device yet, on the sync connection. Today's "Waiting on" judges an
+  /// email by its words, so without this it would skip most sent mail.
+  /// Returns how many it read.
+  Future<int> readSentForWaiting({int batch = 20}) async {
+    final pending = [
+      for (final m in await db.sentWithoutWords(account.id, limit: batch + _sentTried.length))
+        if (!_sentTried.contains(m.id)) m,
+    ];
+    String? selected;
+    var read = 0;
+    for (final m in pending.take(batch)) {
+      if (_stopRequested) break;
+      _sentTried.add(m.id);
+      try {
+        final folder = await db.folderById(m.folderId);
+        if (folder == null) continue;
+        if (selected != folder.path) {
+          await transport.selectFolder(folder.path);
+          selected = folder.path;
+        }
+        await db.storeBody(m.id, await transport.fetchBody(m.uid));
+        read++;
+      } on MailTransportException catch (e) {
+        if (!transport.isConnected) rethrow;
+        // Gone from the server, for instance. Not worth retrying.
+        AppLog.current?.warn('reading a sent message failed', AppLog.scrub(e));
+      }
+    }
+    return read;
+  }
+
   /// Reads a batch of recent mail for codes, deliveries and travel (spec
   /// 4.21), on the sync connection so it never competes with the user. Bodies
   /// are stored without marking anything read, and this path leaves out the
@@ -639,6 +676,8 @@ class AccountSyncer {
             await syncFolder(inbox.id);
             continue;
           }
+          // Then the user's own recent mail, for Today's "Waiting on".
+          if (await readSentForWaiting() > 0) continue;
           _emit(_status.copyWith(phase: SyncPhase.waitingForMail, folderPath: inbox.path));
           final event = await transport.idle(timeout: idleTimeout);
           if (_stopRequested) break;

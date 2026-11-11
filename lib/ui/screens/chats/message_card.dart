@@ -157,7 +157,7 @@ class MessageCard extends ConsumerWidget {
             ],
           ),
         ),
-        LinkedPlannerChips(messageId: message.id),
+        ReminderChips(messageId: message.id),
         if (attachments.isNotEmpty) ...[
           const SizedBox(height: AppSpace.md),
           Wrap(
@@ -208,7 +208,7 @@ class MessageCard extends ConsumerWidget {
                     await actions.markMessageRead(message.id, seen: true);
                   case 'bucket':
                     final target = message.classification == 'feeds' ? Bucket.people : Bucket.feeds;
-                    if (context.mounted) await correctClassification(context, ref, message: message, bucket: target, title: target == Bucket.people ? 'Move to People' : 'Move to Feeds');
+                    if (context.mounted) await correctClassification(context, ref, message: message, bucket: target, title: target == Bucket.people ? 'Move to Chats' : 'Move to Feed or Noise');
                   case 'category':
                     final names = await ref.read(databaseProvider).categoryNames();
                     if (!context.mounted) return;
@@ -240,7 +240,7 @@ class MessageCard extends ConsumerWidget {
                 const PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
                 if (!message.isFromMe) ...[
                   const PopupMenuDivider(),
-                  PopupMenuItem(value: 'bucket', child: Text(message.classification == 'feeds' ? 'This is personal → People…' : 'This is a feed → Feeds…')),
+                  PopupMenuItem(value: 'bucket', child: Text(message.classification == 'feeds' ? 'This is a person → Chats…' : 'This is not a person → Feed or Noise…')),
                   if (message.classification == 'feeds') const PopupMenuItem(value: 'category', child: Text('Change category…')),
                 ],
               ],

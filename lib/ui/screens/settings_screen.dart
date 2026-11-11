@@ -17,7 +17,6 @@ import 'settings/contacts_section.dart';
 import 'settings/feeds_section.dart';
 import 'settings/misc_sections.dart';
 import 'settings/people_groups_section.dart';
-import 'settings/tags_section.dart';
 
 /// Settings destination: section list on the left, detail on the right
 /// (spec 5.3). Accounts, Appearance and Keyboard are live; the rest fill in
@@ -107,8 +106,6 @@ class _Detail extends ConsumerWidget {
         return const GoogleContactsDetail();
       case SettingsSection.calendar:
         return const GoogleCalendarDetail();
-      case SettingsSection.tags:
-        return const TagsDetail();
       case SettingsSection.about:
         return const AboutDetail();
     }
@@ -122,7 +119,6 @@ class _AppearanceDetail extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     final text = Theme.of(context).textTheme;
-    final scheme = Theme.of(context).colorScheme;
     return ListView(
       children: [
         Text('Theme', style: text.labelSmall!.copyWith(letterSpacing: 1)),
@@ -138,18 +134,6 @@ class _AppearanceDetail extends ConsumerWidget {
               ButtonGroupItem(value: ThemeMode.system, label: 'System', icon: Icons.brightness_auto_outlined),
             ],
           ),
-        ),
-        const SizedBox(height: AppSpace.xl),
-        GroupedList(
-          color: scheme.surfaceContainerLowest,
-          children: [
-            SwitchListTile(
-              title: const Text('Follow Windows accent color'),
-              subtitle: const Text('Dynamic color. Off uses the indigo scheme.'),
-              value: settings.dynamicColor,
-              onChanged: (v) => ref.read(settingsProvider.notifier).setDynamicColor(v),
-            ),
-          ],
         ),
       ],
     );
@@ -189,7 +173,7 @@ class _PrivacyDetail extends ConsumerWidget {
           children: [
             SwitchListTile(
               secondary: Icon(Icons.shield_outlined, color: scheme.primary),
-              title: const Text('Block remote images in Feeds'),
+              title: const Text('Block remote images in Feed and Noise'),
               subtitle: const Text('Pictures and tracking pixels in newsletters and receipts are not loaded until you choose to. Mail from people always shows its pictures.'),
               value: settings.blockRemoteImages,
               onChanged: (v) => ref.read(settingsProvider.notifier).setBlockRemoteImages(v),

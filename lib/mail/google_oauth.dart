@@ -57,7 +57,7 @@ class GoogleAuthException implements Exception {
 /// supplies their own OAuth client as a downloaded file, the browser does the
 /// signing in, and the app only ever holds tokens, in Windows Credential
 /// Manager. It asks for read-only contacts access and for the calendar
-/// (shown in the Planner, and changed from there).
+/// (shown on Today; only ever read).
 class GoogleOAuth {
   GoogleOAuth({required this.store, GoogleHttp? http, required this.openBrowser, DateTime Function()? clock})
       : http = http ?? defaultGoogleHttp,
@@ -69,7 +69,7 @@ class GoogleOAuth {
   final DateTime Function() _clock;
 
   static const contactsScope = 'https://www.googleapis.com/auth/contacts.readonly';
-  static const calendarScope = 'https://www.googleapis.com/auth/calendar';
+  static const calendarScope = 'https://www.googleapis.com/auth/calendar.readonly';
   static const scope = '$contactsScope $calendarScope';
   static const clientKey = 'google.client';
   static const refreshKey = 'google.refreshToken';

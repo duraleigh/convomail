@@ -33,7 +33,7 @@ import 'support/test_db.dart';
 /// Classification wired into sync and the UI (spec 4.11, plan M8): senders
 /// are classified as headers land, overrides persist across re-syncs, the
 /// signal backfill covers pre-M8 mail, rules apply retroactively, rows
-/// split into the People and Feeds tabs, and corrections propose a rule.
+/// split into Chats, Feed and Noise, and corrections propose a rule.
 void main() {
   const me = RemoteAddress('me@example.com');
   late AppDatabase db;
@@ -503,7 +503,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    testWidgets('the strip shows a code to copy without opening; Feeds rows offer it; X dismisses; nothing timely takes no room', (tester) async {
+    testWidgets('Today shows a code to copy without opening the email; the Feed row offers it too; X dismisses; Chats carries no strip', (tester) async {
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       String? copied;
       messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -513,11 +513,14 @@ void main() {
       addTearDown(() => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
 
       final container = await pumpApp(tester);
-      expect(find.byKey(const ValueKey('timely-strip')), findsNothing);
-
       final bank = (await db.select(db.messages).get()).firstWhere((m) => m.fromAddress == 'noreply@bank.com');
       await db.upsertTimely(bank, const [TimelyFact(type: TimelyType.code, dedupeKey: 'code:bank', title: 'First Bank', code: '482913')], DateTime.now());
       await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('timely-strip')), findsNothing, reason: 'the strip left Chats for Today');
+
+      container.read(destinationProvider.notifier).select(Destination.today);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-fyi')), findsOneWidget);
       expect(find.byKey(const ValueKey('timely-strip')), findsOneWidget);
       expect(find.text('482913'), findsOneWidget);
 
@@ -528,108 +531,132 @@ void main() {
       expect(find.textContaining('Code copied'), findsOneWidget);
       expect(container.read(selectedRowProvider), isNull, reason: 'copying does not open the email');
 
-      container.read(destinationProvider.notifier).select(Destination.feeds);
+      container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('row-code-c:noreply@bank.com')), findsOneWidget);
+      expect(find.byKey(const ValueKey('timely-strip')), findsNothing, reason: 'no strip on Feed either');
 
+      container.read(destinationProvider.notifier).select(Destination.today);
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(ValueKey('timely-dismiss-${item.id}')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('timely-strip')), findsNothing);
       await teardown(tester);
     });
 
-    testWidgets('category pills show on Feeds only, filter the list, count per-message exceptions, and clear', (tester) async {
+    testWidgets('category pills show on Feed and Noise for the mail in that pile, filter the list, count per-message exceptions, and clear', (tester) async {
       final container = await pumpApp(tester);
       expect(find.byKey(const ValueKey('feeds-pill-all')), findsNothing, reason: 'not on Chats');
 
-      container.read(destinationProvider.notifier).select(Destination.feeds);
+      container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('feeds-pill-all')), findsOneWidget);
-      expect(find.byKey(const ValueKey('feeds-pill-Newsletter')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feeds-pill-Receipt')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feeds-pill-Delivery')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feeds-pill-Newsletter')), findsNothing, reason: 'the newsletter nobody opens is in Noise');
       expect(find.byKey(const ValueKey('feeds-pill-Social')), findsNothing, reason: 'no mail in that category');
-      expect(find.text('The Daily Brief'), findsOneWidget);
       expect(find.text('First Bank'), findsOneWidget);
+      expect(find.text('Shop Orders'), findsOneWidget);
+      expect(find.text('The Daily Brief'), findsNothing);
 
-      await tester.tap(find.byKey(const ValueKey('feeds-pill-Newsletter')));
+      await tester.tap(find.byKey(const ValueKey('feeds-pill-Receipt')));
       await tester.pumpAndSettle();
-      expect(find.text('The Daily Brief'), findsOneWidget);
-      expect(find.text('First Bank'), findsNothing);
+      expect(find.text('First Bank'), findsOneWidget, reason: 'its statement is a receipt');
+      expect(find.text('Shop Orders'), findsNothing);
 
-      // One message of the bank's filed as Newsletter brings the bank in too.
-      final bank = (await db.select(db.messages).get()).firstWhere((m) => m.fromAddress == 'noreply@bank.com');
-      await ClassificationService(db).setMessageCategory(bank.id, 'Newsletter');
+      // One message of the shop's filed as a receipt brings the shop in too.
+      final shop = (await db.select(db.messages).get()).firstWhere((m) => m.fromAddress == 'noreply@shop.com' && m.subject.contains('shipped'));
+      await ClassificationService(db).setMessageCategory(shop.id, 'Receipt');
       await tester.pumpAndSettle();
-      expect(find.text('First Bank'), findsOneWidget);
-      expect(find.byKey(const ValueKey('category-pill-c:noreply@bank.com')), findsOneWidget);
+      expect(find.text('Shop Orders'), findsOneWidget);
+      expect(find.byKey(const ValueKey('category-pill-c:noreply@shop.com')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('feeds-pill-all')));
       await tester.pumpAndSettle();
       expect(container.read(feedsCategoryFilterProvider), isNull);
 
       // A category that empties falls back to All.
-      container.read(feedsCategoryFilterProvider.notifier).select('Notification');
+      container.read(feedsCategoryFilterProvider.notifier).select('OTP');
       await tester.pumpAndSettle();
+      expect(container.read(feedsCategoryFilterProvider), 'OTP');
       final cats = await db.select(db.feedsCategoryRows).get();
-      await db.deleteCategory(cats.firstWhere((c) => c.name == 'Notification').id);
+      await db.deleteCategory(cats.firstWhere((c) => c.name == 'OTP').id);
       await tester.pumpAndSettle();
       expect(container.read(feedsCategoryFilterProvider), isNull);
+
+      // Noise has its own pills, for its own mail.
+      container.read(destinationProvider.notifier).select(Destination.noise);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('feeds-pill-Newsletter')), findsOneWidget);
+      expect(find.byKey(const ValueKey('feeds-pill-Receipt')), findsNothing);
+      expect(find.text('The Daily Brief'), findsOneWidget);
+      expect(find.text('First Bank'), findsNothing);
       await teardown(tester);
     });
 
-    testWidgets('the Feeds icon shows a plain dot for mail new since Feeds was last open, and no count', (tester) async {
+    testWidgets('the Feed icon shows a plain dot for mail new since Feed was last open, and no count; Noise never lights it', (tester) async {
       final container = await pumpApp(tester);
       final badge = find.descendant(of: find.byType(NavigationRail), matching: find.byKey(const ValueKey('feeds-badge')));
       Badge widget() => tester.widget<Badge>(badge);
-      Future<void> settle() async {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
+      Future<void> arrive(String address, String name, String subject, {BulkSignals? signals}) async {
+        imap.folder('INBOX').add(RemoteMessageHeader(uid: 0, from: RemoteAddress(address, name), to: const [me], subject: subject, date: DateTime.now().add(const Duration(minutes: 1)), signals: signals ?? const BulkSignals()));
+        await sync();
         await tester.pumpAndSettle();
       }
 
-      expect(widget().isLabelVisible, isTrue, reason: 'Feeds has never been opened');
+      expect(widget().isLabelVisible, isFalse, reason: 'what was already there on the first day is not new');
       expect(widget().label, isNull, reason: 'a dot, not a number');
 
-      container.read(destinationProvider.notifier).select(Destination.feeds);
-      await settle();
-      container.read(destinationProvider.notifier).select(Destination.chats);
-      await settle();
-      expect(widget().isLabelVisible, isFalse, reason: 'seen');
+      await arrive('hello@dailybrief.com', 'The Daily Brief', 'Daily Brief #103', signals: const BulkSignals(listUnsubscribe: true, listId: true, listIdValue: 'brief.dailybrief.com'));
+      expect(widget().isLabelVisible, isFalse, reason: 'Noise has no dot');
 
-      // Something new arrives in Feeds.
-      final feed = (await db.select(db.messages).get()).firstWhere((m) => m.classification == 'feeds' && !m.isFromMe);
-      await db.into(db.messages).insert(MessagesCompanion.insert(
-            accountId: feed.accountId,
-            folderId: feed.folderId,
-            uid: 99999,
-            fromAddress: Value(feed.fromAddress),
-            fromContactKey: Value(feed.fromContactKey),
-            classification: const Value('feeds'),
-            isSeen: const Value(true),
-          ));
-      await settle();
-      expect(widget().isLabelVisible, isTrue, reason: 'new since Feeds was open, read or not');
+      await arrive('noreply@bank.com', 'First Bank', 'A new sign-in to your account');
+      expect(widget().isLabelVisible, isTrue, reason: 'new in Feed since it was last open');
+      expect(widget().label, isNull);
+
+      container.read(destinationProvider.notifier).select(Destination.feed);
+      await tester.pumpAndSettle();
+      container.read(destinationProvider.notifier).select(Destination.chats);
+      await tester.pumpAndSettle();
+      expect(widget().isLabelVisible, isFalse, reason: 'seen');
+      expect(await db.getSetting('feed.seenAt'), isNotNull, reason: 'kept, so the dot stays off after a restart');
       await teardown(tester);
     });
 
-    testWidgets('Chats and Feeds each remember their open conversation; openRow lands in the right one', (tester) async {
+    testWidgets('Chats, Feed and Noise each remember their open conversation; openRow lands in the right one', (tester) async {
       final container = await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
       expect(container.read(selectedRowProvider), 'c:sarah@x.com');
 
-      container.read(destinationProvider.notifier).select(Destination.feeds);
+      container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
       expect(container.read(selectedRowProvider), isNull);
-      await tester.tap(find.text('The Daily Brief'));
+      await tester.tap(find.text('First Bank'));
       await tester.pumpAndSettle();
+      expect(container.read(selectedRowProvider), 'c:noreply@bank.com');
       expect(find.text('Sarah Chen'), findsNothing);
+
+      container.read(destinationProvider.notifier).select(Destination.noise);
+      await tester.pumpAndSettle();
+      expect(container.read(selectedRowProvider), isNull);
 
       container.read(destinationProvider.notifier).select(Destination.chats);
       await tester.pumpAndSettle();
       expect(container.read(selectedRowProvider), 'c:sarah@x.com');
 
+      container.read(destinationProvider.notifier).select(Destination.feed);
+      await tester.pumpAndSettle();
+      expect(container.read(selectedRowProvider), 'c:noreply@bank.com');
+
+      await openRow(container.read, 'c:hello@dailybrief.com');
+      await tester.pumpAndSettle();
+      expect(container.read(destinationProvider), Destination.noise);
+      expect(container.read(selectedRowProvider), 'c:hello@dailybrief.com');
+
       await openRow(container.read, 'c:noreply@bank.com');
       await tester.pumpAndSettle();
-      expect(container.read(destinationProvider), Destination.feeds);
+      expect(container.read(destinationProvider), Destination.feed);
       expect(container.read(selectedRowProvider), 'c:noreply@bank.com');
 
       await openRow(container.read, 'c:sarah@x.com');
@@ -664,46 +691,142 @@ void main() {
       expect(feedsBannerWeek(DateTime(2027, 1, 1)), '2026-12-28', reason: 'across a year end');
     });
 
-    testWidgets('People tab hides feeds senders and shows the filed banner; Feeds tab shows pills', (tester) async {
+    testWidgets('Chats hides senders that are not people and shows the filed banner; Feed and Noise show them with their tags', (tester) async {
       final container = await pumpApp(tester);
       expect(find.text('Sarah Chen'), findsOneWidget);
       expect(find.text('The Daily Brief'), findsNothing);
+      expect(find.text('First Bank'), findsNothing);
       expect(find.byKey(const ValueKey('feeds-banner')), findsOneWidget);
-      expect(find.textContaining('filed to Feeds this week'), findsOneWidget);
+      expect(find.textContaining('filed to Feed and Noise this week'), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('feeds-banner')));
       await tester.pumpAndSettle();
-      expect(container.read(inboxModeProvider), InboxMode.feeds);
+      expect(container.read(inboxModeProvider), InboxMode.feed);
+      expect(find.text('First Bank'), findsOneWidget);
+      expect(find.byKey(const ValueKey('category-pill-c:noreply@bank.com')), findsOneWidget);
+      expect(find.byTooltip('Notification'), findsWidgets, reason: 'the tag is a colored dot, named on hover');
+      expect(find.text('Sarah Chen'), findsNothing);
+      expect(find.text('The Daily Brief'), findsNothing, reason: 'nobody opens it, so it is Noise');
+
+      container.read(destinationProvider.notifier).select(Destination.noise);
+      await tester.pumpAndSettle();
       expect(find.text('The Daily Brief'), findsOneWidget);
       expect(find.byKey(const ValueKey('category-pill-c:hello@dailybrief.com')), findsOneWidget);
-      expect(find.byTooltip('Newsletter'), findsOneWidget, reason: 'the tag is a coloured dot, named on hover');
-      expect(find.text('Sarah Chen'), findsNothing);
+      expect(find.byTooltip('Newsletter'), findsOneWidget);
+      expect(find.byKey(const ValueKey('noise-header')), findsOneWidget);
+      expect(find.text('First Bank'), findsNothing);
       await teardown(tester);
     });
 
-    testWidgets('right-click → Move to People is permanent; Counts toward unread shows the bell', (tester) async {
+    testWidgets('a newsletter that gets opened is Feed, not Noise', (tester) async {
       final container = await pumpApp(tester);
-      container.read(destinationProvider.notifier).select(Destination.feeds);
+      final brief = await db.messagesFromSender('hello@dailybrief.com');
+      await (db.update(db.messages)..where((m) => m.id.equals(brief.first.id))).write(const MessagesCompanion(isSeen: Value(true)));
+      await db.refreshDirtyRows();
+      container.read(destinationProvider.notifier).select(Destination.feed);
+      await tester.pumpAndSettle();
+      expect(find.text('The Daily Brief'), findsOneWidget, reason: 'one of three opened');
+      container.read(destinationProvider.notifier).select(Destination.noise);
+      await tester.pumpAndSettle();
+      expect(find.text('The Daily Brief'), findsNothing);
+      expect(find.text('Nothing in Noise'), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('right-click moves a sender between Chats, Feed and Noise for good; Undo puts it back; Counts toward unread shows the bell', (tester) async {
+      final container = await pumpApp(tester);
+      container.read(destinationProvider.notifier).select(Destination.noise);
       await tester.pumpAndSettle();
       await tester.tap(find.text('The Daily Brief'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
+      expect(find.text('Move to Noise'), findsNothing, reason: 'it is there already');
       await tester.tap(find.text('Counts toward unread'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Counts toward unread'), findsOneWidget);
 
+      // Noise to Feed: the user's choice, kept.
       await tester.tap(find.text('The Daily Brief'), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Move to People'));
+      await tester.tap(find.text('Move to Feed'));
+      await tester.pumpAndSettle();
+      expect((await contact('hello@dailybrief.com')).feedsPile, 'feed');
+      expect((await contact('hello@dailybrief.com')).classification, 'feeds');
+      expect(find.textContaining('moved to Feed'), findsOneWidget);
+      expect(find.text('The Daily Brief'), findsNothing, reason: 'gone from Noise');
+
+      // Undo: back to where the app had it.
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect((await contact('hello@dailybrief.com')).feedsPile, isNull);
+      expect(find.text('The Daily Brief'), findsOneWidget);
+
+      // Feed to Noise.
+      container.read(destinationProvider.notifier).select(Destination.feed);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('First Bank'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Move to Noise'));
+      await tester.pumpAndSettle();
+      expect((await contact('noreply@bank.com')).feedsPile, 'noise');
+      expect(find.text('First Bank'), findsNothing);
+      // New mail from it does not move it back.
+      imap.folder('INBOX').add(RemoteMessageHeader(uid: 0, from: const RemoteAddress('noreply@bank.com', 'First Bank'), to: const [me], subject: 'Another statement', date: DateTime.now()));
+      await sync();
+      await tester.pumpAndSettle();
+      expect((await contact('noreply@bank.com')).feedsPile, 'noise');
+      expect(find.text('First Bank'), findsNothing);
+
+      // Noise to Chats.
+      container.read(destinationProvider.notifier).select(Destination.noise);
+      await tester.pumpAndSettle();
+      // Let the earlier message about the move go first.
+      ScaffoldMessenger.of(tester.element(find.byType(AppShell))).clearSnackBars();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('The Daily Brief'), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Move to Chats'));
       await tester.pumpAndSettle();
       expect((await contact('hello@dailybrief.com')).classificationSource, 'override');
-      expect(find.textContaining('moved to People'), findsOneWidget);
+      expect((await contact('hello@dailybrief.com')).classification, 'people');
+      expect(find.textContaining('moved to Chats'), findsOneWidget);
       container.read(destinationProvider.notifier).select(Destination.chats);
       await tester.pumpAndSettle();
       expect(find.text('The Daily Brief'), findsOneWidget);
       await teardown(tester);
     });
 
-    testWidgets('message overflow → "This is a feed" proposes a rule; Accept creates it and moves the sender', (tester) async {
+    testWidgets('Noise says what it is and how much came this week; Archive all asks first, then clears the pile; Undo brings it back', (tester) async {
+      final container = await pumpApp(tester);
+      container.read(destinationProvider.notifier).select(Destination.noise);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('noise-header')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('noise-header')), matching: find.textContaining('3')), findsOneWidget, reason: 'three came this week');
+
+      await tester.tap(find.byKey(const ValueKey('noise-archive-all')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('noise-archive-confirm')), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('The Daily Brief'), findsOneWidget, reason: 'nothing happens without a yes');
+
+      await tester.tap(find.byKey(const ValueKey('noise-archive-all')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('noise-archive-confirm')));
+      await tester.pumpAndSettle();
+      expect(find.text('The Daily Brief'), findsNothing);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.text('The Daily Brief'), findsOneWidget, reason: 'one Undo brings it all back');
+
+      container.read(destinationProvider.notifier).select(Destination.feed);
+      await tester.pumpAndSettle();
+      expect(find.text('First Bank'), findsOneWidget, reason: 'Feed is not touched');
+      expect(find.byKey(const ValueKey('noise-header')), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('message overflow → "This is not a person" proposes a rule; Accept creates it and moves the sender', (tester) async {
       await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
@@ -711,13 +834,13 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('This is a feed'));
+      await tester.tap(find.textContaining('This is not a person'));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('proposal-text')), findsOneWidget);
-      expect(find.text('Mail from sarah@x.com → Feeds'), findsOneWidget);
+      expect(find.text('Mail from sarah@x.com → Feed or Noise'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('proposal-accept')));
       await tester.pumpAndSettle();
-      expect((await db.loadRules()).single.describe(), 'Mail from sarah@x.com → Feeds');
+      expect((await db.loadRules()).single.describe(), 'Mail from sarah@x.com → Feed or Noise');
       expect((await contact('sarah@x.com')).classification, 'feeds');
       expect((await contact('sarah@x.com')).classificationSource, 'rule');
       await teardown(tester);
@@ -731,7 +854,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('More'));
       await tester.pumpAndSettle();
-      await tester.tap(find.textContaining('This is a feed'));
+      await tester.tap(find.textContaining('This is not a person'));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('proposal-once')));
       await tester.pumpAndSettle();

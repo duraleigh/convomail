@@ -27,17 +27,6 @@ class GoogleCalendarInfo {
       GoogleCalendarInfo(id: '${j['id']}', name: '${j['name']}', color: (j['color'] as num?)?.toInt() ?? 0xFF4285F4, writable: j['writable'] == true, primary: j['primary'] == true);
 }
 
-/// An event as entered in the Planner, to send to Google.
-class CalendarEventDraft {
-  const CalendarEventDraft({required this.title, required this.start, this.end, this.allDay = false, this.location, this.notes = ''});
-  final String title;
-  final DateTime start;
-  final DateTime? end;
-  final bool allDay;
-  final String? location;
-  final String notes;
-}
-
 /// Something Google said no to, in words for the Settings page.
 class CalendarException implements Exception {
   const CalendarException(this.message, {this.apiOff = false, this.needsReconnect = false});
@@ -73,7 +62,6 @@ class CalendarSync {
 
   static const calendarsKey = 'google.calendar.list';
   static const hiddenKey = 'google.calendar.hidden';
-  static const defaultKey = 'google.calendar.default';
   static const lastSyncKey = 'google.calendar.lastSync';
   static const errorKey = 'google.calendar.error';
   static const interval = Duration(minutes: 10);
@@ -207,18 +195,6 @@ class CalendarSync {
     await db.putSetting(hiddenKey, jsonEncode(set.toList()));
   }
 
-  /// Where new events go: the user's choice, else the main calendar.
-  Future<String?> defaultCalendarId() async {
-    final calendars = await savedCalendars();
-    final chosen = await db.getSetting(defaultKey);
-    if (chosen != null && calendars.any((c) => c.id == chosen && c.writable)) return chosen;
-    return calendars.where((c) => c.primary && c.writable).firstOrNull?.id ?? calendars.where((c) => c.writable).firstOrNull?.id;
-  }
-
-  Future<void> setDefaultCalendar(String calendarId) => db.putSetting(defaultKey, calendarId);
-
-  // ---- events: reading -------------------------------------------------------
-
   /// Reads [calendar]'s events in [from, to) and makes the stored ones match.
   Future<void> _readEvents(GoogleCalendarInfo calendar, DateTime from, DateTime to) async {
     final found = <PlannerEventsCompanion>[];
@@ -299,7 +275,7 @@ class CalendarSync {
     );
   }
 
-  /// Google descriptions can carry HTML; the Planner shows text.
+  /// Google descriptions can carry HTML; only the text is kept.
   static String _plain(String s) => s
       .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '\n')
       .replaceAll(RegExp(r'</p>', caseSensitive: false), '\n')
@@ -311,76 +287,6 @@ class CalendarSync {
       .replaceAll('&quot;', '"')
       .replaceAll('&#39;', "'")
       .trim();
-
-  // ---- events: writing -------------------------------------------------------
-
-  /// Adds an event to [calendarId] in Google, then stores it. Returns its
-  /// id here.
-  Future<int> create(String calendarId, CalendarEventDraft draft) async {
-    final calendar = await _calendar(calendarId);
-    final body = await _call('POST', Uri.https(_api, '$_base/calendars/$calendarId/events'), json: eventBody(draft));
-    return _store(body, calendar);
-  }
-
-  /// Changes a Google event (that occurrence, for a repeating one), then
-  /// stores what Google returns.
-  Future<void> update(PlannerEvent event, CalendarEventDraft draft) async {
-    final calendar = await _calendar(event.calendarId!);
-    final body = await _call('PATCH', Uri.https(_api, '$_base/calendars/${calendar.id}/events/${event.uid!}'), json: eventBody(draft));
-    await _store(body, calendar);
-  }
-
-  /// Deletes a Google event (that occurrence, for a repeating one) in Google
-  /// and here.
-  Future<void> delete(PlannerEvent event) async {
-    try {
-      await _call('DELETE', Uri.https(_api, '$_base/calendars/${event.calendarId!}/events/${event.uid!}'));
-    } on CalendarException catch (e) {
-      // Already gone in Google: remove it here too.
-      if (!e.message.contains('(410)') && !e.message.contains('(404)')) rethrow;
-    }
-    await (db.delete(db.plannerEvents)..where((e) => e.id.equals(event.id))).go();
-  }
-
-  Future<GoogleCalendarInfo> _calendar(String id) async {
-    final found = (await savedCalendars()).where((c) => c.id == id).firstOrNull;
-    return found ?? GoogleCalendarInfo(id: id, name: id, color: 0xFF4285F4, writable: true);
-  }
-
-  Future<int> _store(Map<String, dynamic> body, GoogleCalendarInfo calendar) async {
-    final row = eventRow(body, calendar);
-    if (row == null) throw const CalendarException('Google did not return the event.');
-    final uid = row.uid.value!;
-    final cur = await (db.select(db.plannerEvents)..where((e) => e.kind.equals('google') & e.calendarId.equals(calendar.id) & e.uid.equals(uid))).getSingleOrNull();
-    if (cur == null) return db.into(db.plannerEvents).insert(row);
-    await (db.update(db.plannerEvents)..where((e) => e.id.equals(cur.id))).write(row);
-    return cur.id;
-  }
-
-  /// The JSON Google expects. All-day events end the day after their last
-  /// day; timed ones are sent in UTC.
-  static String eventBody(CalendarEventDraft d) {
-    String day(DateTime t) => '${t.year.toString().padLeft(4, '0')}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
-    final Map<String, Object> start;
-    final Map<String, Object> end;
-    if (d.allDay) {
-      final first = DateTime(d.start.year, d.start.month, d.start.day);
-      final last = d.end == null ? first : DateTime(d.end!.year, d.end!.month, d.end!.day);
-      final after = last.isAfter(first) ? last : first.add(const Duration(days: 1));
-      start = {'date': day(first)};
-      end = {'date': day(after)};
-    } else {
-      start = {'dateTime': d.start.toUtc().toIso8601String()};
-      end = {'dateTime': (d.end ?? d.start.add(const Duration(hours: 1))).toUtc().toIso8601String()};
-    }
-    return jsonEncode({
-      'summary': d.title.trim().isEmpty ? 'Event' : d.title.trim(),
-      'start': start,
-      'end': end,
-      'location': d.location?.trim() ?? '',
-      'description': d.notes,
-    });
-  }
 
   // ---- HTTP --------------------------------------------------------------------
 

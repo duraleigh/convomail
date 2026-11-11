@@ -168,6 +168,9 @@ class Messages extends Table {
   /// When event extraction last ran on this message (spec 4.10).
   DateTimeColumn get extractedAt => dateTime().nullable()();
 
+  /// When the user marked this email done; null while it is open.
+  DateTimeColumn get doneAt => dateTime().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
         {folderId, uid},
@@ -214,6 +217,10 @@ class Contacts extends Table {
 
   /// Spec 4.11: a Feeds sender whose unread mail still counts.
   BoolColumn get countsTowardUnread => boolean().withDefault(const Constant(false))();
+
+  /// For a Feeds sender: the pile the user put it in (`feed` | `noise`).
+  /// Null lets the app decide from its category and whether it is opened.
+  TextColumn get feedsPile => text().nullable()();
   TextColumn get classReasons => text().withDefault(const Constant(''))();
   DateTimeColumn get firstSeenAt => dateTime().withDefault(currentDateAndTime)();
   DateTimeColumn get lastSeenAt => dateTime().withDefault(currentDateAndTime)();
@@ -574,7 +581,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -704,6 +711,10 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await m.addColumn(plannerEvents, plannerEvents.color);
             // Dates read out of mail and invitations: the user adds their own.
             await customStatement("DELETE FROM planner_events WHERE kind IN ('extracted', 'invite')");
+          }
+          if (from < 19) {
+            await m.addColumn(messages, messages.doneAt);
+            await m.addColumn(contacts, contacts.feedsPile);
           }
         },
         beforeOpen: (details) async {

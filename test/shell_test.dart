@@ -48,8 +48,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Chats'), findsWidgets);
-    expect(find.text('Boards'), findsOneWidget);
-    expect(find.text('Planner'), findsOneWidget);
+    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Focus'), findsOneWidget);
+    expect(find.text('Feed'), findsOneWidget);
+    expect(find.text('Noise'), findsOneWidget);
     expect(find.text('Settings'), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsOneWidget);
     expect(find.text('Search people and mail'), findsNothing, reason: 'no search box until asked for');
@@ -80,13 +82,14 @@ void main() {
     await tester.pumpWidget(_app(InMemorySettingsStore()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Boards'));
+    await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
-    expect(find.text('No cards yet'), findsOneWidget);
+    expect(find.byKey(const ValueKey('today-greeting')), findsOneWidget);
+    expect(find.textContaining('The assistant is not connected yet'), findsOneWidget, reason: 'Needs you stays empty until the assistant is connected');
 
-    await tester.tap(find.text('Planner'));
+    await tester.tap(find.text('Focus'));
     await tester.pumpAndSettle();
-    expect(find.byKey(const ValueKey('planner-today')), findsOneWidget);
+    expect(find.byKey(const ValueKey('focus-empty')), findsOneWidget);
 
     await tester.tap(find.text('Settings'));
     await tester.pumpAndSettle();
@@ -94,7 +97,7 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('Ctrl+3 jumps to Boards and Ctrl+1 back to Chats', (tester) async {
+  testWidgets('Ctrl+1 to Ctrl+6 open Today, Focus, Chats, Feed, Noise and Settings', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -102,21 +105,29 @@ void main() {
     await tester.pumpWidget(_app(InMemorySettingsStore()));
     await tester.pumpAndSettle();
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit3);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
-    expect(find.text('No cards yet'), findsOneWidget);
+    Future<void> ctrl(LogicalKeyboardKey digit) async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(digit);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+    }
 
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
-    await tester.pumpAndSettle();
+    await ctrl(LogicalKeyboardKey.digit1);
+    expect(find.byKey(const ValueKey('today-greeting')), findsOneWidget);
+    await ctrl(LogicalKeyboardKey.digit2);
+    expect(find.byKey(const ValueKey('focus-empty')), findsOneWidget);
+    await ctrl(LogicalKeyboardKey.digit3);
     expect(find.text('Pick a person'), findsOneWidget);
+    await ctrl(LogicalKeyboardKey.digit4);
+    expect(find.text('Nothing in Feed'), findsOneWidget);
+    await ctrl(LogicalKeyboardKey.digit5);
+    expect(find.text('Nothing in Noise'), findsOneWidget);
+    await ctrl(LogicalKeyboardKey.digit6);
+    expect(find.text('Appearance'), findsOneWidget);
     await _teardown(tester);
   });
 
-  testWidgets('Feeds sits in the rail after Chats, with no People/Feeds switch on the list', (tester) async {
+  testWidgets('the rail is Today, Focus, Chats, Feed, Noise; Boards and Planner are gone', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -124,16 +135,29 @@ void main() {
     await tester.pumpWidget(_app(InMemorySettingsStore()));
     await tester.pumpAndSettle();
 
-    expect(Destination.rail, [Destination.chats, Destination.feeds, Destination.boards, Destination.planner]);
+    expect(Destination.rail, [Destination.today, Destination.focus, Destination.chats, Destination.feed, Destination.noise]);
+    expect(find.text('Boards'), findsNothing);
+    expect(find.text('Planner'), findsNothing);
     expect(find.text('People'), findsNothing);
     expect(find.text('No conversations yet'), findsOneWidget);
-    await tester.tap(find.text('Feeds').first);
+    await tester.tap(find.text('Feed').first);
     await tester.pumpAndSettle();
-    expect(find.text('Nothing in Feeds'), findsOneWidget);
-
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit1);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+    expect(find.text('Nothing in Feed'), findsOneWidget);
+    await tester.tap(find.text('Noise').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing in Noise'), findsOneWidget);
+    await tester.tap(find.text('Today').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Needs you'), findsOneWidget);
+    expect(find.text('Waiting on'), findsOneWidget);
+    expect(find.text('Schedule'), findsOneWidget);
+    expect(find.text('FYI'), findsOneWidget);
+    expect(find.text('Later'), findsOneWidget);
+    expect(find.text('Done'), findsOneWidget);
+    await tester.tap(find.text('Focus').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('focus-empty')), findsOneWidget);
+    await tester.tap(find.text('Chats').first);
     await tester.pumpAndSettle();
     expect(find.text('No conversations yet'), findsOneWidget);
     await _teardown(tester);
@@ -184,12 +208,14 @@ void main() {
     final a = StartupArgs.parse(['--destination=settings']);
     expect(a.destination, Destination.settings);
     expect(a.overrides.length, 1);
-    expect(StartupArgs.parse(['--inbox=feeds']).destination, Destination.feeds);
-    expect(StartupArgs.parse(['--destination=feeds']).destination, Destination.feeds);
+    expect(StartupArgs.parse(['--inbox=feed']).destination, Destination.feed);
+    expect(StartupArgs.parse(['--inbox=noise']).destination, Destination.noise);
+    expect(StartupArgs.parse(['--destination=today']).destination, Destination.today);
 
     final b = StartupArgs.parse(['--destination=nonsense', 'other']);
     expect(b.destination, isNull);
-    expect(b.overrides, isEmpty);
+    expect(b.opensOn, Destination.today, reason: 'nothing usable asked for: the front page');
+    expect(b.overrides, hasLength(1));
   });
 
   testWidgets('ConnectedButtonGroup reports selection', (tester) async {

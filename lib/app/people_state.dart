@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 
+import '../domain/piles.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart' hide ClassificationRule;
 import '../store/people_queries.dart';
@@ -53,12 +54,18 @@ class SelectedRowNotifier extends Notifier<String?> {
   }
 }
 
-/// Opens a row from anywhere (a toast, a card, an event), on Feeds when it
-/// belongs there and on Chats otherwise. [read] is `ref.read`. A null key
+/// Opens a row from anywhere (a toast, a line on Today), on Feed or Noise
+/// when it belongs there and on Chats otherwise. [read] is `ref.read`. A null key
 /// just goes to Chats.
 Future<void> openRow(T Function<T>(ProviderListenable<T>) read, String? key) async {
   var destination = Destination.chats;
-  if (key != null && await read(databaseProvider).rowBelongsToFeeds(key)) destination = Destination.feeds;
+  if (key != null) {
+    destination = switch (await read(databaseProvider).rowPile(key)) {
+      FeedsPile.feed => Destination.feed,
+      FeedsPile.noise => Destination.noise,
+      null => Destination.chats,
+    };
+  }
   read(destinationProvider.notifier).select(destination);
   if (key != null) read(selectedRowProvider.notifier).select(key);
 }
@@ -111,8 +118,30 @@ class FeedsCategoryFilter extends Notifier<String?> {
   void select(String? category) => state = category;
 }
 
-/// Categories with Feeds mail in the selected account, for those pills.
-final feedsCategoriesInUseProvider = StreamProvider<List<String>>((ref) => ref.watch(databaseProvider).watchCategoriesInUse(accountId: ref.watch(accountScopeProvider)));
+final _categoriesInUseProvider = StreamProvider<List<String>>((ref) => ref.watch(databaseProvider).watchCategoriesInUse(accountId: ref.watch(accountScopeProvider)));
+
+/// Every row of one list, whatever is typed in search or picked in the
+/// pills: Chats, Feed or Noise.
+final listRowsProvider = StreamProvider.family<List<PeopleRow>, InboxTab>((ref, tab) => ref.watch(databaseProvider).watchPeopleRows(tab: tab, accountId: ref.watch(accountScopeProvider)));
+
+/// Categories with mail in the list being shown (Feed or Noise), for its
+/// pills, in their configured order.
+final feedsCategoriesInUseProvider = FutureProvider<List<String>>((ref) async {
+  final mode = ref.watch(inboxModeProvider);
+  if (!mode.isFeeds) return const [];
+  final ordered = await ref.watch(_categoriesInUseProvider.future);
+  final rows = await ref.watch(listRowsProvider(mode.tab).future);
+  final here = {for (final r in rows) r.rowKey};
+  final byCategory = await ref.watch(databaseProvider).rowKeysByCategory();
+  return [for (final c in ordered) if ((byCategory[c] ?? const <String>{}).any(here.contains)) c];
+});
+
+/// How many emails Noise took in over the last seven days. Null until the
+/// whole count is known.
+final noiseThisWeekProvider = FutureProvider<int>((ref) async {
+  final rows = await ref.watch(listRowsProvider(InboxTab.noise).future);
+  return ref.watch(databaseProvider).countReceivedSince([for (final r in rows) r.rowKey], DateTime.now().subtract(const Duration(days: 7)));
+});
 
 /// Order of the Chats and Feeds lists, kept across restarts.
 final peopleSortProvider = AsyncNotifierProvider<PeopleSortNotifier, PeopleSort>(PeopleSortNotifier.new);
@@ -132,18 +161,27 @@ class PeopleSortNotifier extends AsyncNotifier<PeopleSort> {
   }
 }
 
-/// The newest Feeds message (see [AppDatabase.watchNewestFeedsId]).
-final newestFeedsIdProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchNewestFeedsId());
+/// When the newest mail in Feed arrived, in milliseconds. Noise never
+/// counts: it has no dot.
+final newestFeedsIdProvider = Provider<AsyncValue<int>>((ref) => ref.watch(listRowsProvider(InboxTab.feed)).whenData((rows) {
+      var newest = 0;
+      for (final r in rows) {
+        final t = r.lastActivity?.millisecondsSinceEpoch ?? 0;
+        if (t > newest) newest = t;
+      }
+      return newest;
+    }));
 
-/// The newest Feeds message there was when Feeds was last open. Anything
-/// newer puts a dot on the Feeds icon.
+/// When the newest mail in Feed arrived, as of the last time Feed was open.
+/// Anything newer puts a dot on the Feed icon.
 final feedsSeenUpToProvider = AsyncNotifierProvider<FeedsSeenUpTo, int>(FeedsSeenUpTo.new);
 
 class FeedsSeenUpTo extends AsyncNotifier<int> {
-  static const key = 'feeds.seenUpTo';
+  static const key = 'feed.seenAt';
 
   @override
-  Future<int> build() async => int.tryParse(await ref.read(databaseProvider).getSetting(key) ?? '') ?? 0;
+  // The first time, everything already there counts as seen: no dot.
+  Future<int> build() async => int.tryParse(await ref.read(databaseProvider).getSetting(key) ?? '') ?? DateTime.now().millisecondsSinceEpoch;
 
   Future<void> markSeen(int id) async {
     final now = state.value;
@@ -167,9 +205,9 @@ final peopleRowsProvider = StreamProvider<List<PeopleRow>>((ref) {
   final search = ref.watch(peopleSearchProvider);
   final mode = ref.watch(inboxModeProvider);
   final scope = ref.watch(accountScopeProvider);
-  final category = mode == InboxMode.feeds ? ref.watch(feedsCategoryFilterProvider) : null;
+  final category = mode.isFeeds ? ref.watch(feedsCategoryFilterProvider) : null;
   final sort = ref.watch(peopleSortProvider).value ?? PeopleSort.newest;
-  return db.watchPeopleRows(filter: filter, search: search, category: category, sort: sort, tab: mode == InboxMode.feeds ? InboxTab.feeds : InboxTab.people, accountId: scope);
+  return db.watchPeopleRows(filter: filter, search: search, category: category, sort: sort, tab: mode.tab, accountId: scope);
 });
 
 /// Dev/verification aid: when true, the list selects its first row and the

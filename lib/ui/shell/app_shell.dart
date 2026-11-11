@@ -15,10 +15,10 @@ import '../../platform/windows_integration.dart';
 import '../../store/database.dart';
 import '../../sync/notification_center.dart';
 import '../../sync/schedule_service.dart';
-import '../screens/boards_screen.dart';
 import '../screens/chats_screen.dart';
-import '../screens/planner_screen.dart';
+import '../screens/focus_screen.dart';
 import '../screens/settings_screen.dart';
+import '../screens/today_screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/tonal_avatar.dart';
 import 'top_search_bar.dart';
@@ -116,8 +116,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
     return AppShortcutScope(
       onCompose: () {
-        // Feeds has the same compose pane; anywhere else goes to Chats.
-        if (ref.read(destinationProvider) != Destination.feeds) ref.read(destinationProvider.notifier).select(Destination.chats);
+        // Feed and Noise have the same compose pane; anywhere else goes to Chats.
+        if (!ref.read(destinationProvider).isList) ref.read(destinationProvider.notifier).select(Destination.chats);
         ref.read(composeProvider.notifier).open();
       },
       child: Scaffold(
@@ -136,10 +136,10 @@ class _AppShellState extends ConsumerState<AppShell> {
                       duration: const Duration(milliseconds: 200),
                       switchInCurve: Curves.easeOut,
                       switchOutCurve: Curves.easeIn,
-                      // Chats and Feeds share one layout, so its widths and
-                      // state carry across, and switching does not fade the
-                      // whole pane.
-                      child: KeyedSubtree(key: ValueKey(destination == Destination.feeds ? Destination.chats : destination), child: _content(destination)),
+                      // Chats, Feed and Noise share one layout, so its widths
+                      // and state carry across, and switching does not fade
+                      // the whole pane.
+                      child: KeyedSubtree(key: ValueKey(destination.isList ? Destination.chats : destination), child: _content(destination)),
                     ),
                   ),
                 ],
@@ -152,16 +152,16 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 
   Widget _content(Destination d) => switch (d) {
-        Destination.chats || Destination.feeds => const ChatsScreen(),
-        Destination.boards => const BoardsScreen(),
-        Destination.planner => const PlannerScreen(),
+        Destination.today => const TodayScreen(),
+        Destination.focus => const FocusScreen(),
+        Destination.chats || Destination.feed || Destination.noise => const ChatsScreen(),
         Destination.settings => const SettingsScreen(),
       };
 }
 
-/// The Feeds icon, with a plain dot when something new has come into Feeds
-/// since it was last open (no count). Opening Feeds clears it, and mail that
-/// arrives while it is open counts as seen.
+/// The Feed icon, with a plain dot when something new has come into Feed
+/// since it was last open (no count). Opening Feed clears it, and mail that
+/// arrives while it is open counts as seen. Noise never shows a dot.
 class _FeedsRailIcon extends ConsumerWidget {
   const _FeedsRailIcon({required this.icon});
   final IconData icon;
@@ -169,7 +169,7 @@ class _FeedsRailIcon extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     void markSeen() {
-      if (ref.read(destinationProvider) != Destination.feeds) return;
+      if (ref.read(destinationProvider) != Destination.feed) return;
       final newest = ref.read(newestFeedsIdProvider).value;
       if (newest != null) unawaited(ref.read(feedsSeenUpToProvider.notifier).markSeen(newest));
     }
@@ -180,7 +180,7 @@ class _FeedsRailIcon extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     return Badge(
       key: const ValueKey('feeds-badge'),
-      isLabelVisible: ref.watch(feedsHasNewProvider) && ref.watch(destinationProvider) != Destination.feeds,
+      isLabelVisible: ref.watch(feedsHasNewProvider) && ref.watch(destinationProvider) != Destination.feed,
       backgroundColor: scheme.primary,
       smallSize: 8,
       child: Icon(icon),
@@ -212,8 +212,8 @@ class _Rail extends ConsumerWidget {
       destinations: [
         for (final d in Destination.rail)
           NavigationRailDestination(
-            icon: d == Destination.feeds ? _FeedsRailIcon(icon: d.icon) : Icon(d.icon),
-            selectedIcon: d == Destination.feeds ? _FeedsRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon),
+            icon: d == Destination.feed ? _FeedsRailIcon(icon: d.icon) : Icon(d.icon),
+            selectedIcon: d == Destination.feed ? _FeedsRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon),
             label: Text(d.label),
           ),
       ],

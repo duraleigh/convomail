@@ -40,6 +40,7 @@ class FakeFolder {
       flags: h.flags,
       size: h.size,
       hasAttachments: h.hasAttachments,
+      snippet: h.snippet,
       signals: h.signals,
     );
     messages[uid] = withUid;

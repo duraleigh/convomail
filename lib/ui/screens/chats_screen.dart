@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/compose_state.dart';
+import '../../app/settings.dart';
 import '../shell/split_pane.dart';
 import '../theme/tokens.dart';
 import 'chats/compose/compose_pane.dart';
@@ -17,7 +18,9 @@ class ChatsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final compose = ref.watch(composeProvider);
     return SplitPane(
-      initialLeftWidth: AppLayout.middlePaneDefault,
+      // The width the user last dragged to.
+      initialLeftWidth: ref.watch(settingsProvider.select((s) => s.middlePaneWidth)),
+      onLeftWidthChanged: (w) => ref.read(settingsProvider.notifier).setMiddlePaneWidth(w),
       minLeft: AppLayout.middlePaneMin,
       maxLeft: AppLayout.middlePaneMax,
       minRight: AppLayout.rightPaneMin,

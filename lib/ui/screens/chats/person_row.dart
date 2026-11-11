@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/account_scope.dart';
-
+import '../../../domain/piles.dart';
 import '../../../store/people_queries.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/category_color.dart';
@@ -80,7 +80,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
         ),
         PopupMenuItem(
           value: RowAction.snooze,
-          child: ListTile(leading: const Icon(Icons.snooze_outlined), title: Text(widget.row.isSnoozed ? 'Snoozed… (change)' : 'Snooze…'), dense: true),
+          child: ListTile(leading: const Icon(Icons.snooze_outlined), title: Text(widget.row.isSnoozed ? 'Later… (change)' : 'Later…'), dense: true),
         ),
         PopupMenuItem(
           value: RowAction.mute,
@@ -106,15 +106,14 @@ class _PersonRowState extends ConsumerState<PersonRow> {
           ),
         if (!widget.row.isGroup) ...[
           const PopupMenuDivider(),
-          PopupMenuItem(
-            value: widget.row.isFeeds ? RowAction.moveToPeople : RowAction.moveToFeeds,
-            child: ListTile(
-              leading: Icon(widget.row.isFeeds ? Icons.person_outline_rounded : Icons.rss_feed_rounded),
-              title: Text(widget.row.isFeeds ? 'Move to People' : 'Move to Feeds'),
-              subtitle: const Text('Permanent until you change it'),
-              dense: true,
-            ),
-          ),
+          // The two places this sender is not in. A move stays until the
+          // user changes it.
+          if (widget.row.isFeeds)
+            const PopupMenuItem(value: RowAction.moveToChats, child: ListTile(leading: Icon(Icons.person_outline_rounded), title: Text('Move to Chats'), subtitle: Text('Stays there until you change it'), dense: true)),
+          if (!widget.row.isFeeds || widget.row.pile == FeedsPile.noise)
+            const PopupMenuItem(value: RowAction.moveToFeed, child: ListTile(leading: Icon(Icons.rss_feed_rounded), title: Text('Move to Feed'), subtitle: Text('Stays there until you change it'), dense: true)),
+          if (!widget.row.isFeeds || widget.row.pile != FeedsPile.noise)
+            const PopupMenuItem(value: RowAction.moveToNoise, child: ListTile(leading: Icon(Icons.volume_off_outlined), title: Text('Move to Noise'), subtitle: Text('Stays there until you change it'), dense: true)),
           if (widget.row.isFeeds) ...[
             PopupMenuItem(
               value: RowAction.toggleCounts,
@@ -200,7 +199,7 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                             ],
                             if (row.isSnoozed) ...[
                               Tooltip(
-                                message: 'Snoozed',
+                                message: 'Put off until later',
                                 child: Icon(Icons.snooze_rounded, size: 14, color: scheme.tertiary),
                               ),
                               const SizedBox(width: 4),
@@ -469,7 +468,7 @@ class _HoverActions extends StatelessWidget {
         btn(Icons.archive_outlined, 'Archive all (E)', RowAction.archive),
         btn(Icons.delete_outline_rounded, 'Delete… (Del)', RowAction.trash),
         btn(Icons.mark_email_read_outlined, 'Mark all as read', RowAction.markRead),
-        btn(Icons.snooze_outlined, 'Snooze… (S)', RowAction.snooze),
+        btn(Icons.snooze_outlined, 'Later… (S)', RowAction.snooze),
         btn(row.pinned ? Icons.push_pin : Icons.push_pin_outlined, row.pinned ? 'Unpin (P)' : 'Pin (P)', RowAction.pin),
       ],
     );

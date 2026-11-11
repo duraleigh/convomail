@@ -308,7 +308,7 @@ void main() {
       final viaList = Classifier.proposeRule(m: const MessageFacts(from: 'Digest@News.com', signals: BulkSignals(listId: true, listIdValue: 'daily.news.com')), bucket: Bucket.people);
       expect(viaList.field, 'listId');
       expect(viaList.pattern, 'daily.news.com');
-      expect(viaList.describe(), 'The mailing list daily.news.com → People');
+      expect(viaList.describe(), 'The mailing list daily.news.com → Chats');
       final direct = Classifier.proposeRule(m: const MessageFacts(from: 'Digest@News.com'), category: 'OTP');
       expect(direct.field, 'sender');
       expect(direct.pattern, 'digest@news.com');

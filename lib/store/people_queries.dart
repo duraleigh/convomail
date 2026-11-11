@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:drift/drift.dart';
 
 import '../domain/filing.dart';
+import '../domain/piles.dart';
 import 'database.dart';
 
 /// Which subset of People rows to show (spec 4.7). Exactly one active.
@@ -11,8 +12,9 @@ enum PeopleFilter { all, unread, starred, thisWeek, sent, hasAttachments, fromCo
 /// Order of the list (spec 4.2). Pinned rows stay on top in every order.
 enum PeopleSort { newest, oldest, nameAZ, nameZA }
 
-/// Which tab of the middle pane a row query serves (spec 4.11).
-enum InboxTab { people, feeds }
+/// Which list a row query serves: people (Chats); every sender that is not
+/// a person ([feeds]); or one pile of those, Feed or Noise.
+enum InboxTab { people, feeds, feed, noise }
 
 /// One row of the People list (spec 4.2): a contact or a user-defined
 /// group, with the newest message's preview and the unread count.
@@ -42,6 +44,8 @@ class PeopleRow {
     this.subtitle,
     this.onFeedsTab = false,
     this.photoPath,
+    this.pile,
+    this.chosenPile,
   });
 
   final RowRef ref;
@@ -53,8 +57,15 @@ class PeopleRow {
   /// The sender's photo from their Google contact card, as a local file.
   final String? photoPath;
 
-  /// This row was listed for the Feeds tab, so it shows its category.
+  /// This row was listed for Feed or Noise, so it shows its category.
   final bool onFeedsTab;
+
+  /// For a sender that is not a person: Feed or Noise. Null for people.
+  final FeedsPile? pile;
+
+  /// The user chose this row's pile; the app will not change it.
+  bool get pileChosen => chosenPile != null;
+  final FeedsPile? chosenPile;
 
   /// Key used for the avatar color: the contact key, or `g:<id>` for groups.
   final String identityKey;
@@ -178,6 +189,45 @@ extension PeopleQueries on AppDatabase {
       variables: [Variable.withString(category)],
     ).get();
     return {for (final r in rows) r.read<String>('k')};
+  }
+
+  /// Every row key holding mail that is not from a person, by category
+  /// (the sender's own, or one set on a single email).
+  Future<Map<String, Set<String>>> rowKeysByCategory() async {
+    final rows = await customSelect(
+      '''
+      SELECT DISTINCT r.row_key AS k, COALESCE(m.feeds_category, c.feeds_category) AS cat FROM message_row_assignments r
+      JOIN messages m ON m.id = r.message_id
+      LEFT JOIN contacts c ON c.key = m.from_contact_key
+      WHERE m.classification = 'feeds' AND m.is_deleted = 0 AND COALESCE(m.feeds_category, c.feeds_category) IS NOT NULL
+      ''',
+    ).get();
+    final out = <String, Set<String>>{};
+    for (final r in rows) {
+      out.putIfAbsent(r.read<String>('cat'), () => {}).add(r.read<String>('k'));
+    }
+    return out;
+  }
+
+  /// How many emails the rows in [rowKeys] received since [since]. Counted
+  /// in full, so the number shown is never a partial one.
+  Future<int> countReceivedSince(Iterable<String> rowKeys, DateTime since) async {
+    final keys = rowKeys.toList();
+    var n = 0;
+    for (var i = 0; i < keys.length; i += 400) {
+      final part = keys.sublist(i, i + 400 > keys.length ? keys.length : i + 400);
+      final row = await customSelect(
+        '''
+        SELECT COUNT(DISTINCT m.id) AS n FROM message_row_assignments r JOIN messages m ON m.id = r.message_id
+        WHERE r.row_key IN (${List.filled(part.length, '?').join(',')}) AND m.is_from_me = 0 AND m.is_deleted = 0 AND m.classification = 'feeds'
+          AND m.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))
+          AND COALESCE(m.date, m.internal_date) >= ?
+        ''',
+        variables: [for (final k in part) Variable.withString(k), Variable.withInt(since.millisecondsSinceEpoch ~/ 1000)],
+      ).getSingle();
+      n += row.read<int>('n');
+    }
+    return n;
   }
 
   /// Categories that hold Feeds mail, in their configured order. These are
@@ -305,7 +355,7 @@ extension PeopleQueries on AppDatabase {
            mf.subject AS pf_subject, mf.snippet AS pf_snippet, mf.is_from_me AS pf_from_me,
            COALESCE(p.pinned, 0) AS pinned, p.snoozed_until AS snoozed_until, p.resurfaced_at AS resurfaced_at, COALESCE(p.muted, 0) AS muted,
            COALESCE(NULLIF(c.user_label, ''), c.display_name) AS c_name, NULLIF(c.user_subtitle, '') AS c_subtitle, c.photo_path AS c_photo, COALESCE(c.in_address_book, 0) AS c_in_book,
-           COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, COALESCE(c.counts_toward_unread, 0) AS c_counts,
+           COALESCE(c.classification, 'people') AS c_class, c.feeds_category AS c_category, c.feeds_pile AS c_pile, COALESCE(c.counts_toward_unread, 0) AS c_counts,
            g.name AS g_name,
            (SELECT GROUP_CONCAT(DISTINCT mm.account_id) FROM message_row_assignments rr JOIN messages mm ON mm.id = rr.message_id WHERE rr.row_key = s.row_key AND mm.is_deleted = 0) AS account_ids
     FROM row_summaries s
@@ -399,8 +449,11 @@ extension PeopleQueries on AppDatabase {
       // nobody's conversation: it shows in neither list.
       final inFeeds = feedsSender && (feedsTotal > 0 || (!inPeople && d['last_received'] != null));
       if (tab == InboxTab.people ? !inPeople : !inFeeds) continue;
+      final pile = inFeeds ? pileFor(chosen: d['c_pile'] as String?, category: d['c_category'] as String?, total: feedsTotal, unread: feedsUnread) : null;
+      if (tab == InboxTab.feed && pile != FeedsPile.feed) continue;
+      if (tab == InboxTab.noise && pile != FeedsPile.noise) continue;
       if (inCategory != null && !inCategory.contains(rowKey)) continue;
-      final feedsTab = tab == InboxTab.feeds;
+      final feedsTab = tab != InboxTab.people;
       final lastReceived = feedsTab ? _dt(d['last_feeds']) : (_dt(d['last_people']) ?? _dt(d['last_received']));
       final lastAny = _dt(d['last_any']);
       final unread = feedsTab ? feedsUnread : peopleUnread;
@@ -454,6 +507,8 @@ extension PeopleQueries on AppDatabase {
         subtitle: subtitle,
         photoPath: ref is ContactRow ? d['c_photo'] as String? : null,
         onFeedsTab: feedsTab,
+        pile: pile,
+        chosenPile: FeedsPile.parse(d['c_pile'] as String?),
         identityKey: identityKey,
         lastActivity: _later(ref is GroupRow ? lastAny : (lastReceived ?? lastAny), resurfacedAt),
         previewSubject: subject,

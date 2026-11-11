@@ -28,8 +28,8 @@ import 'ui/shell/window_bar.dart';
 import 'ui/theme/app_theme.dart';
 import 'ui/theme/tokens.dart';
 
-/// Startup arguments. `--destination=<chats|boards|planner|settings>` and
-/// `--inbox=<people|feeds>` pick the initial screen; the `mailto:` handler
+/// Startup arguments. `--destination=<today|focus|chats|feed|noise|settings>`
+/// and `--inbox=<people|feed|noise>` pick the initial screen; the `mailto:` handler
 /// (milestone 10) builds on the same mechanism.
 class StartupArgs {
   const StartupArgs({this.destination, this.addAccount = false});
@@ -67,7 +67,7 @@ class StartupArgs {
         destination = Destination.values.where((d) => d.name == v).firstOrNull;
       } else if (a.startsWith('--inbox=')) {
         final v = a.substring('--inbox='.length);
-        if (v == InboxMode.feeds.name) destination = Destination.feeds;
+        destination = InboxMode.values.where((m) => m.name == v).firstOrNull?.destination ?? destination;
       } else if (a == '--add-account') {
         addAccount = true;
         destination = Destination.settings;
@@ -93,8 +93,12 @@ class StartupArgs {
     return StartupArgs(destination: destination, addAccount: addAccount);
   }
 
+  /// The screen the app opens on: Today, unless the arguments ask for
+  /// another one or for something that lives in Chats.
+  Destination get opensOn => destination ?? (_openFirst || _compose || _search != null ? Destination.chats : Destination.today);
+
   List<Override> get overrides => [
-        if (destination != null) destinationProvider.overrideWith(() => DestinationNotifier(initial: destination)),
+        destinationProvider.overrideWith(() => DestinationNotifier(initial: opensOn)),
         if (addAccount) settingsAddAccountRequestProvider.overrideWith(() => AddAccountRequestNotifier(initial: true)),
         if (_openFirst) autoOpenFirstProvider.overrideWith((ref) => true),
         if (_compose) autoComposeProvider.overrideWith((ref) => true),

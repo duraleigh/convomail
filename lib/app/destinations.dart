@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-/// Top-level navigation destinations on the rail (spec 5.3).
+import '../store/people_queries.dart';
+
+/// Top-level navigation destinations on the rail.
 enum Destination {
+  today('Today', Icons.today_outlined, Icons.today_rounded),
+  focus('Focus', Icons.adjust_rounded, Icons.adjust_rounded),
   chats('Chats', Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded),
-  feeds('Feeds', Icons.rss_feed_rounded, Icons.rss_feed_rounded),
-  boards('Boards', Icons.view_kanban_outlined, Icons.view_kanban_rounded),
-  planner('Planner', Icons.calendar_month_outlined, Icons.calendar_month_rounded),
+  feed('Feed', Icons.rss_feed_rounded, Icons.rss_feed_rounded),
+  noise('Noise', Icons.volume_off_outlined, Icons.volume_off_rounded),
   settings('Settings', Icons.settings_outlined, Icons.settings_rounded);
 
   const Destination(this.label, this.icon, this.selectedIcon);
@@ -15,7 +18,10 @@ enum Destination {
   final IconData selectedIcon;
 
   /// Rail destinations, in order. Settings is pinned to the bottom of the rail.
-  static const List<Destination> rail = [chats, feeds, boards, planner];
+  static const List<Destination> rail = [today, focus, chats, feed, noise];
+
+  /// Chats, Feed and Noise share one layout: a list and the open conversation.
+  bool get isList => this == chats || this == feed || this == noise;
 }
 
 /// Currently selected destination.
@@ -30,9 +36,25 @@ class DestinationNotifier extends Notifier<Destination> {
   void select(Destination d) => state = d;
 }
 
-/// Which list the shared chat layout shows (spec 4.11): the people on Chats,
-/// the automated senders on Feeds. Follows the destination; everything
-/// outside Feeds reads as people, so Boards and Planner open into Chats.
-enum InboxMode { people, feeds }
+/// Which list the shared layout shows: the people on Chats, or the senders
+/// that are not people on Feed and on Noise. Everything else reads as
+/// people, so Today and Focus open into Chats.
+enum InboxMode {
+  people('Chats', InboxTab.people, Destination.chats),
+  feed('Feed', InboxTab.feed, Destination.feed),
+  noise('Noise', InboxTab.noise, Destination.noise);
 
-final inboxModeProvider = Provider<InboxMode>((ref) => ref.watch(destinationProvider) == Destination.feeds ? InboxMode.feeds : InboxMode.people);
+  const InboxMode(this.label, this.tab, this.destination);
+  final String label;
+  final InboxTab tab;
+  final Destination destination;
+
+  /// Feed or Noise: senders that are not people.
+  bool get isFeeds => this != people;
+}
+
+final inboxModeProvider = Provider<InboxMode>((ref) => switch (ref.watch(destinationProvider)) {
+      Destination.feed => InboxMode.feed,
+      Destination.noise => InboxMode.noise,
+      _ => InboxMode.people,
+    });

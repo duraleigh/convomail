@@ -25,7 +25,10 @@ Future<void> copyTimelyCode(BuildContext context, String code) async {
 /// delivered, a package due soon, a departure coming up. Takes no room when
 /// there is nothing timely.
 class TimelyStrip extends ConsumerStatefulWidget {
-  const TimelyStrip({super.key});
+  const TimelyStrip({super.key, this.embedded = false});
+
+  /// Inside a card on Today: no background or outer spacing of its own.
+  final bool embedded;
 
   static const shownByDefault = 3;
 
@@ -61,9 +64,9 @@ class _TimelyStripState extends ConsumerState<TimelyStrip> {
     final hidden = due.length - shown.length;
     return Padding(
       key: const ValueKey('timely-strip'),
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      padding: widget.embedded ? EdgeInsets.zero : const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: Material(
-        color: scheme.surfaceContainerHigh,
+        color: widget.embedded ? Colors.transparent : scheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(AppShapes.md),
         clipBehavior: Clip.antiAlias,
         child: Column(

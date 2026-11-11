@@ -3161,6 +3161,15 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _doneAtMeta = const VerificationMeta('doneAt');
+  @override
+  late final GeneratedColumn<DateTime> doneAt = GeneratedColumn<DateTime>(
+    'done_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3199,6 +3208,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     feedsCategory,
     icsText,
     extractedAt,
+    doneAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3476,6 +3486,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         ),
       );
     }
+    if (data.containsKey('done_at')) {
+      context.handle(
+        _doneAtMeta,
+        doneAt.isAcceptableOrUnknown(data['done_at']!, _doneAtMeta),
+      );
+    }
     return context;
   }
 
@@ -3633,6 +3649,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}extracted_at'],
       ),
+      doneAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}done_at'],
+      ),
     );
   }
 
@@ -3710,6 +3730,9 @@ class Message extends DataClass implements Insertable<Message> {
 
   /// When event extraction last ran on this message (spec 4.10).
   final DateTime? extractedAt;
+
+  /// When the user marked this email done; null while it is open.
+  final DateTime? doneAt;
   const Message({
     required this.id,
     required this.accountId,
@@ -3747,6 +3770,7 @@ class Message extends DataClass implements Insertable<Message> {
     this.feedsCategory,
     this.icsText,
     this.extractedAt,
+    this.doneAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3819,6 +3843,9 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || extractedAt != null) {
       map['extracted_at'] = Variable<DateTime>(extractedAt);
     }
+    if (!nullToAbsent || doneAt != null) {
+      map['done_at'] = Variable<DateTime>(doneAt);
+    }
     return map;
   }
 
@@ -3890,6 +3917,9 @@ class Message extends DataClass implements Insertable<Message> {
       extractedAt: extractedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(extractedAt),
+      doneAt: doneAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(doneAt),
     );
   }
 
@@ -3935,6 +3965,7 @@ class Message extends DataClass implements Insertable<Message> {
       feedsCategory: serializer.fromJson<String?>(json['feedsCategory']),
       icsText: serializer.fromJson<String?>(json['icsText']),
       extractedAt: serializer.fromJson<DateTime?>(json['extractedAt']),
+      doneAt: serializer.fromJson<DateTime?>(json['doneAt']),
     );
   }
   @override
@@ -3977,6 +4008,7 @@ class Message extends DataClass implements Insertable<Message> {
       'feedsCategory': serializer.toJson<String?>(feedsCategory),
       'icsText': serializer.toJson<String?>(icsText),
       'extractedAt': serializer.toJson<DateTime?>(extractedAt),
+      'doneAt': serializer.toJson<DateTime?>(doneAt),
     };
   }
 
@@ -4017,6 +4049,7 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> feedsCategory = const Value.absent(),
     Value<String?> icsText = const Value.absent(),
     Value<DateTime?> extractedAt = const Value.absent(),
+    Value<DateTime?> doneAt = const Value.absent(),
   }) => Message(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -4066,6 +4099,7 @@ class Message extends DataClass implements Insertable<Message> {
         : this.feedsCategory,
     icsText: icsText.present ? icsText.value : this.icsText,
     extractedAt: extractedAt.present ? extractedAt.value : this.extractedAt,
+    doneAt: doneAt.present ? doneAt.value : this.doneAt,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -4137,6 +4171,7 @@ class Message extends DataClass implements Insertable<Message> {
       extractedAt: data.extractedAt.present
           ? data.extractedAt.value
           : this.extractedAt,
+      doneAt: data.doneAt.present ? data.doneAt.value : this.doneAt,
     );
   }
 
@@ -4178,7 +4213,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('classification: $classification, ')
           ..write('feedsCategory: $feedsCategory, ')
           ..write('icsText: $icsText, ')
-          ..write('extractedAt: $extractedAt')
+          ..write('extractedAt: $extractedAt, ')
+          ..write('doneAt: $doneAt')
           ..write(')'))
         .toString();
   }
@@ -4221,6 +4257,7 @@ class Message extends DataClass implements Insertable<Message> {
     feedsCategory,
     icsText,
     extractedAt,
+    doneAt,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4261,7 +4298,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.classification == this.classification &&
           other.feedsCategory == this.feedsCategory &&
           other.icsText == this.icsText &&
-          other.extractedAt == this.extractedAt);
+          other.extractedAt == this.extractedAt &&
+          other.doneAt == this.doneAt);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -4301,6 +4339,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> feedsCategory;
   final Value<String?> icsText;
   final Value<DateTime?> extractedAt;
+  final Value<DateTime?> doneAt;
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -4338,6 +4377,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.feedsCategory = const Value.absent(),
     this.icsText = const Value.absent(),
     this.extractedAt = const Value.absent(),
+    this.doneAt = const Value.absent(),
   });
   MessagesCompanion.insert({
     this.id = const Value.absent(),
@@ -4376,6 +4416,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.feedsCategory = const Value.absent(),
     this.icsText = const Value.absent(),
     this.extractedAt = const Value.absent(),
+    this.doneAt = const Value.absent(),
   }) : accountId = Value(accountId),
        folderId = Value(folderId),
        uid = Value(uid);
@@ -4416,6 +4457,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? feedsCategory,
     Expression<String>? icsText,
     Expression<DateTime>? extractedAt,
+    Expression<DateTime>? doneAt,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4454,6 +4496,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (feedsCategory != null) 'feeds_category': feedsCategory,
       if (icsText != null) 'ics_text': icsText,
       if (extractedAt != null) 'extracted_at': extractedAt,
+      if (doneAt != null) 'done_at': doneAt,
     });
   }
 
@@ -4494,6 +4537,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? feedsCategory,
     Value<String?>? icsText,
     Value<DateTime?>? extractedAt,
+    Value<DateTime?>? doneAt,
   }) {
     return MessagesCompanion(
       id: id ?? this.id,
@@ -4532,6 +4576,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       feedsCategory: feedsCategory ?? this.feedsCategory,
       icsText: icsText ?? this.icsText,
       extractedAt: extractedAt ?? this.extractedAt,
+      doneAt: doneAt ?? this.doneAt,
     );
   }
 
@@ -4646,6 +4691,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (extractedAt.present) {
       map['extracted_at'] = Variable<DateTime>(extractedAt.value);
     }
+    if (doneAt.present) {
+      map['done_at'] = Variable<DateTime>(doneAt.value);
+    }
     return map;
   }
 
@@ -4687,7 +4735,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('classification: $classification, ')
           ..write('feedsCategory: $feedsCategory, ')
           ..write('icsText: $icsText, ')
-          ..write('extractedAt: $extractedAt')
+          ..write('extractedAt: $extractedAt, ')
+          ..write('doneAt: $doneAt')
           ..write(')'))
         .toString();
   }
@@ -5277,6 +5326,17 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _feedsPileMeta = const VerificationMeta(
+    'feedsPile',
+  );
+  @override
+  late final GeneratedColumn<String> feedsPile = GeneratedColumn<String>(
+    'feeds_pile',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _classReasonsMeta = const VerificationMeta(
     'classReasons',
   );
@@ -5326,6 +5386,7 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
     classificationSource,
     feedsCategory,
     countsTowardUnread,
+    feedsPile,
     classReasons,
     firstSeenAt,
     lastSeenAt,
@@ -5431,6 +5492,12 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
         ),
       );
     }
+    if (data.containsKey('feeds_pile')) {
+      context.handle(
+        _feedsPileMeta,
+        feedsPile.isAcceptableOrUnknown(data['feeds_pile']!, _feedsPileMeta),
+      );
+    }
     if (data.containsKey('class_reasons')) {
       context.handle(
         _classReasonsMeta,
@@ -5511,6 +5578,10 @@ class $ContactsTable extends Contacts with TableInfo<$ContactsTable, Contact> {
         DriftSqlType.bool,
         data['${effectivePrefix}counts_toward_unread'],
       )!,
+      feedsPile: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}feeds_pile'],
+      ),
       classReasons: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}class_reasons'],
@@ -5557,6 +5628,10 @@ class Contact extends DataClass implements Insertable<Contact> {
 
   /// Spec 4.11: a Feeds sender whose unread mail still counts.
   final bool countsTowardUnread;
+
+  /// For a Feeds sender: the pile the user put it in (`feed` | `noise`).
+  /// Null lets the app decide from its category and whether it is opened.
+  final String? feedsPile;
   final String classReasons;
   final DateTime firstSeenAt;
   final DateTime lastSeenAt;
@@ -5572,6 +5647,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     required this.classificationSource,
     this.feedsCategory,
     required this.countsTowardUnread,
+    this.feedsPile,
     required this.classReasons,
     required this.firstSeenAt,
     required this.lastSeenAt,
@@ -5598,6 +5674,9 @@ class Contact extends DataClass implements Insertable<Contact> {
       map['feeds_category'] = Variable<String>(feedsCategory);
     }
     map['counts_toward_unread'] = Variable<bool>(countsTowardUnread);
+    if (!nullToAbsent || feedsPile != null) {
+      map['feeds_pile'] = Variable<String>(feedsPile);
+    }
     map['class_reasons'] = Variable<String>(classReasons);
     map['first_seen_at'] = Variable<DateTime>(firstSeenAt);
     map['last_seen_at'] = Variable<DateTime>(lastSeenAt);
@@ -5625,6 +5704,9 @@ class Contact extends DataClass implements Insertable<Contact> {
           ? const Value.absent()
           : Value(feedsCategory),
       countsTowardUnread: Value(countsTowardUnread),
+      feedsPile: feedsPile == null && nullToAbsent
+          ? const Value.absent()
+          : Value(feedsPile),
       classReasons: Value(classReasons),
       firstSeenAt: Value(firstSeenAt),
       lastSeenAt: Value(lastSeenAt),
@@ -5650,6 +5732,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       ),
       feedsCategory: serializer.fromJson<String?>(json['feedsCategory']),
       countsTowardUnread: serializer.fromJson<bool>(json['countsTowardUnread']),
+      feedsPile: serializer.fromJson<String?>(json['feedsPile']),
       classReasons: serializer.fromJson<String>(json['classReasons']),
       firstSeenAt: serializer.fromJson<DateTime>(json['firstSeenAt']),
       lastSeenAt: serializer.fromJson<DateTime>(json['lastSeenAt']),
@@ -5670,6 +5753,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       'classificationSource': serializer.toJson<String>(classificationSource),
       'feedsCategory': serializer.toJson<String?>(feedsCategory),
       'countsTowardUnread': serializer.toJson<bool>(countsTowardUnread),
+      'feedsPile': serializer.toJson<String?>(feedsPile),
       'classReasons': serializer.toJson<String>(classReasons),
       'firstSeenAt': serializer.toJson<DateTime>(firstSeenAt),
       'lastSeenAt': serializer.toJson<DateTime>(lastSeenAt),
@@ -5688,6 +5772,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     String? classificationSource,
     Value<String?> feedsCategory = const Value.absent(),
     bool? countsTowardUnread,
+    Value<String?> feedsPile = const Value.absent(),
     String? classReasons,
     DateTime? firstSeenAt,
     DateTime? lastSeenAt,
@@ -5705,6 +5790,7 @@ class Contact extends DataClass implements Insertable<Contact> {
         ? feedsCategory.value
         : this.feedsCategory,
     countsTowardUnread: countsTowardUnread ?? this.countsTowardUnread,
+    feedsPile: feedsPile.present ? feedsPile.value : this.feedsPile,
     classReasons: classReasons ?? this.classReasons,
     firstSeenAt: firstSeenAt ?? this.firstSeenAt,
     lastSeenAt: lastSeenAt ?? this.lastSeenAt,
@@ -5736,6 +5822,7 @@ class Contact extends DataClass implements Insertable<Contact> {
       countsTowardUnread: data.countsTowardUnread.present
           ? data.countsTowardUnread.value
           : this.countsTowardUnread,
+      feedsPile: data.feedsPile.present ? data.feedsPile.value : this.feedsPile,
       classReasons: data.classReasons.present
           ? data.classReasons.value
           : this.classReasons,
@@ -5762,6 +5849,7 @@ class Contact extends DataClass implements Insertable<Contact> {
           ..write('classificationSource: $classificationSource, ')
           ..write('feedsCategory: $feedsCategory, ')
           ..write('countsTowardUnread: $countsTowardUnread, ')
+          ..write('feedsPile: $feedsPile, ')
           ..write('classReasons: $classReasons, ')
           ..write('firstSeenAt: $firstSeenAt, ')
           ..write('lastSeenAt: $lastSeenAt')
@@ -5782,6 +5870,7 @@ class Contact extends DataClass implements Insertable<Contact> {
     classificationSource,
     feedsCategory,
     countsTowardUnread,
+    feedsPile,
     classReasons,
     firstSeenAt,
     lastSeenAt,
@@ -5801,6 +5890,7 @@ class Contact extends DataClass implements Insertable<Contact> {
           other.classificationSource == this.classificationSource &&
           other.feedsCategory == this.feedsCategory &&
           other.countsTowardUnread == this.countsTowardUnread &&
+          other.feedsPile == this.feedsPile &&
           other.classReasons == this.classReasons &&
           other.firstSeenAt == this.firstSeenAt &&
           other.lastSeenAt == this.lastSeenAt);
@@ -5818,6 +5908,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
   final Value<String> classificationSource;
   final Value<String?> feedsCategory;
   final Value<bool> countsTowardUnread;
+  final Value<String?> feedsPile;
   final Value<String> classReasons;
   final Value<DateTime> firstSeenAt;
   final Value<DateTime> lastSeenAt;
@@ -5834,6 +5925,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     this.classificationSource = const Value.absent(),
     this.feedsCategory = const Value.absent(),
     this.countsTowardUnread = const Value.absent(),
+    this.feedsPile = const Value.absent(),
     this.classReasons = const Value.absent(),
     this.firstSeenAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
@@ -5851,6 +5943,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     this.classificationSource = const Value.absent(),
     this.feedsCategory = const Value.absent(),
     this.countsTowardUnread = const Value.absent(),
+    this.feedsPile = const Value.absent(),
     this.classReasons = const Value.absent(),
     this.firstSeenAt = const Value.absent(),
     this.lastSeenAt = const Value.absent(),
@@ -5868,6 +5961,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     Expression<String>? classificationSource,
     Expression<String>? feedsCategory,
     Expression<bool>? countsTowardUnread,
+    Expression<String>? feedsPile,
     Expression<String>? classReasons,
     Expression<DateTime>? firstSeenAt,
     Expression<DateTime>? lastSeenAt,
@@ -5887,6 +5981,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
       if (feedsCategory != null) 'feeds_category': feedsCategory,
       if (countsTowardUnread != null)
         'counts_toward_unread': countsTowardUnread,
+      if (feedsPile != null) 'feeds_pile': feedsPile,
       if (classReasons != null) 'class_reasons': classReasons,
       if (firstSeenAt != null) 'first_seen_at': firstSeenAt,
       if (lastSeenAt != null) 'last_seen_at': lastSeenAt,
@@ -5906,6 +6001,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     Value<String>? classificationSource,
     Value<String?>? feedsCategory,
     Value<bool>? countsTowardUnread,
+    Value<String?>? feedsPile,
     Value<String>? classReasons,
     Value<DateTime>? firstSeenAt,
     Value<DateTime>? lastSeenAt,
@@ -5923,6 +6019,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
       classificationSource: classificationSource ?? this.classificationSource,
       feedsCategory: feedsCategory ?? this.feedsCategory,
       countsTowardUnread: countsTowardUnread ?? this.countsTowardUnread,
+      feedsPile: feedsPile ?? this.feedsPile,
       classReasons: classReasons ?? this.classReasons,
       firstSeenAt: firstSeenAt ?? this.firstSeenAt,
       lastSeenAt: lastSeenAt ?? this.lastSeenAt,
@@ -5968,6 +6065,9 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
     if (countsTowardUnread.present) {
       map['counts_toward_unread'] = Variable<bool>(countsTowardUnread.value);
     }
+    if (feedsPile.present) {
+      map['feeds_pile'] = Variable<String>(feedsPile.value);
+    }
     if (classReasons.present) {
       map['class_reasons'] = Variable<String>(classReasons.value);
     }
@@ -5997,6 +6097,7 @@ class ContactsCompanion extends UpdateCompanion<Contact> {
           ..write('classificationSource: $classificationSource, ')
           ..write('feedsCategory: $feedsCategory, ')
           ..write('countsTowardUnread: $countsTowardUnread, ')
+          ..write('feedsPile: $feedsPile, ')
           ..write('classReasons: $classReasons, ')
           ..write('firstSeenAt: $firstSeenAt, ')
           ..write('lastSeenAt: $lastSeenAt, ')
@@ -18010,6 +18111,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> feedsCategory,
   Value<String?> icsText,
   Value<DateTime?> extractedAt,
+  Value<DateTime?> doneAt,
 });
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
@@ -18048,6 +18150,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> feedsCategory,
   Value<String?> icsText,
   Value<DateTime?> extractedAt,
+  Value<DateTime?> doneAt,
 });
 
 final class $$MessagesTableReferences
@@ -18368,6 +18471,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<DateTime> get extractedAt => $composableBuilder(
     column: $table.extractedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get doneAt => $composableBuilder(
+    column: $table.doneAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -18723,6 +18831,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get doneAt => $composableBuilder(
+    column: $table.doneAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$AccountsTableOrderingComposer get accountId {
     final $$AccountsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -18912,6 +19025,9 @@ class $$MessagesTableAnnotationComposer
     column: $table.extractedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<DateTime> get doneAt =>
+      $composableBuilder(column: $table.doneAt, builder: (column) => column);
 
   $$AccountsTableAnnotationComposer get accountId {
     final $$AccountsTableAnnotationComposer composer = $composerBuilder(
@@ -19159,6 +19275,7 @@ class $$MessagesTableTableManager
                 Value<String?> feedsCategory = const Value.absent(),
                 Value<String?> icsText = const Value.absent(),
                 Value<DateTime?> extractedAt = const Value.absent(),
+                Value<DateTime?> doneAt = const Value.absent(),
               }) => MessagesCompanion(
                 id: id,
                 accountId: accountId,
@@ -19196,6 +19313,7 @@ class $$MessagesTableTableManager
                 feedsCategory: feedsCategory,
                 icsText: icsText,
                 extractedAt: extractedAt,
+                doneAt: doneAt,
               ),
           createCompanionCallback:
               ({
@@ -19235,6 +19353,7 @@ class $$MessagesTableTableManager
                 Value<String?> feedsCategory = const Value.absent(),
                 Value<String?> icsText = const Value.absent(),
                 Value<DateTime?> extractedAt = const Value.absent(),
+                Value<DateTime?> doneAt = const Value.absent(),
               }) => MessagesCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -19272,6 +19391,7 @@ class $$MessagesTableTableManager
                 feedsCategory: feedsCategory,
                 icsText: icsText,
                 extractedAt: extractedAt,
+                doneAt: doneAt,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -19858,6 +19978,7 @@ typedef $$ContactsTableCreateCompanionBuilder = ContactsCompanion Function({
   Value<String> classificationSource,
   Value<String?> feedsCategory,
   Value<bool> countsTowardUnread,
+  Value<String?> feedsPile,
   Value<String> classReasons,
   Value<DateTime> firstSeenAt,
   Value<DateTime> lastSeenAt,
@@ -19875,6 +19996,7 @@ typedef $$ContactsTableUpdateCompanionBuilder = ContactsCompanion Function({
   Value<String> classificationSource,
   Value<String?> feedsCategory,
   Value<bool> countsTowardUnread,
+  Value<String?> feedsPile,
   Value<String> classReasons,
   Value<DateTime> firstSeenAt,
   Value<DateTime> lastSeenAt,
@@ -19967,6 +20089,11 @@ class $$ContactsTableFilterComposer
 
   ColumnFilters<bool> get countsTowardUnread => $composableBuilder(
     column: $table.countsTowardUnread,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get feedsPile => $composableBuilder(
+    column: $table.feedsPile,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20075,6 +20202,11 @@ class $$ContactsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get feedsPile => $composableBuilder(
+    column: $table.feedsPile,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get classReasons => $composableBuilder(
     column: $table.classReasons,
     builder: (column) => ColumnOrderings(column),
@@ -20146,6 +20278,9 @@ class $$ContactsTableAnnotationComposer
     column: $table.countsTowardUnread,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get feedsPile =>
+      $composableBuilder(column: $table.feedsPile, builder: (column) => column);
 
   GeneratedColumn<String> get classReasons => $composableBuilder(
     column: $table.classReasons,
@@ -20227,6 +20362,7 @@ class $$ContactsTableTableManager
                 Value<String> classificationSource = const Value.absent(),
                 Value<String?> feedsCategory = const Value.absent(),
                 Value<bool> countsTowardUnread = const Value.absent(),
+                Value<String?> feedsPile = const Value.absent(),
                 Value<String> classReasons = const Value.absent(),
                 Value<DateTime> firstSeenAt = const Value.absent(),
                 Value<DateTime> lastSeenAt = const Value.absent(),
@@ -20243,6 +20379,7 @@ class $$ContactsTableTableManager
                 classificationSource: classificationSource,
                 feedsCategory: feedsCategory,
                 countsTowardUnread: countsTowardUnread,
+                feedsPile: feedsPile,
                 classReasons: classReasons,
                 firstSeenAt: firstSeenAt,
                 lastSeenAt: lastSeenAt,
@@ -20261,6 +20398,7 @@ class $$ContactsTableTableManager
                 Value<String> classificationSource = const Value.absent(),
                 Value<String?> feedsCategory = const Value.absent(),
                 Value<bool> countsTowardUnread = const Value.absent(),
+                Value<String?> feedsPile = const Value.absent(),
                 Value<String> classReasons = const Value.absent(),
                 Value<DateTime> firstSeenAt = const Value.absent(),
                 Value<DateTime> lastSeenAt = const Value.absent(),
@@ -20277,6 +20415,7 @@ class $$ContactsTableTableManager
                 classificationSource: classificationSource,
                 feedsCategory: feedsCategory,
                 countsTowardUnread: countsTowardUnread,
+                feedsPile: feedsPile,
                 classReasons: classReasons,
                 firstSeenAt: firstSeenAt,
                 lastSeenAt: lastSeenAt,

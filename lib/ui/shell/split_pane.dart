@@ -33,6 +33,13 @@ class _SplitPaneState extends State<SplitPane> {
   bool _drag = false;
 
   @override
+  void didUpdateWidget(SplitPane old) {
+    super.didUpdateWidget(old);
+    // The saved width can arrive a moment after the first frame.
+    if (old.initialLeftWidth != widget.initialLeftWidth && !_drag) _left = widget.initialLeftWidth;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return LayoutBuilder(
@@ -52,7 +59,8 @@ class _SplitPaneState extends State<SplitPane> {
                 onHorizontalDragUpdate: (d) => setState(() => _left = (left + d.delta.dx).clamp(widget.minLeft, maxLeft)),
                 onHorizontalDragEnd: (_) {
                   setState(() => _drag = false);
-                  widget.onLeftWidthChanged?.call(left);
+                  // The width as of the last move, not as of the last frame drawn.
+                  widget.onLeftWidthChanged?.call(_left.clamp(widget.minLeft, maxLeft).toDouble());
                 },
                 child: SizedBox(
                   width: 8,

@@ -197,11 +197,6 @@ class SettingsNotifier extends Notifier<AppSettings> {
     await _db.putSetting(_kTheme, mode.name);
   }
 
-  Future<void> setDynamicColor(bool on) async {
-    state = state.copyWith(dynamicColor: on);
-    await _db.putSetting(_kDynamic, on.toString());
-  }
-
   Future<void> setMiddlePaneWidth(double w) async {
     state = state.copyWith(middlePaneWidth: w);
     await _db.putSetting(_kPane, w.toStringAsFixed(0));

@@ -128,8 +128,8 @@ class _RuleProposalDialogState extends ConsumerState<_RuleProposalDialog> {
                   const SizedBox(width: 12),
                   SegmentedButton<Bucket?>(
                     segments: const [
-                      ButtonSegment(value: Bucket.people, label: Text('People')),
-                      ButtonSegment(value: Bucket.feeds, label: Text('Feeds')),
+                      ButtonSegment(value: Bucket.people, label: Text('Chats')),
+                      ButtonSegment(value: Bucket.feeds, label: Text('Feed or Noise')),
                       ButtonSegment(value: null, label: Text('Keep bucket')),
                     ],
                     selected: {_bucket},

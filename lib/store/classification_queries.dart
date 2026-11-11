@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../domain/classifier.dart';
+import '../domain/piles.dart';
 import 'database.dart' hide ClassificationRule;
 
 /// Rows and aggregates the classifier needs, plus category / rule / event
@@ -289,6 +290,10 @@ extension ClassificationQueries on AppDatabase {
 
   Future<void> setMessageCategory(int messageId, String? category) => (update(messages)..where((m) => m.id.equals(messageId))).write(MessagesCompanion(feedsCategory: Value(category)));
 
+  /// Senders the user placed by hand: moved between Chats and the rest, or
+  /// given a pile (Feed or Noise).
+  Stream<List<Contact>> watchMovedSenders() => (select(contacts)..where((c) => c.classificationSource.equals('override') | c.feedsPile.isNotNull())..orderBy([(c) => OrderingTerm.desc(c.lastSeenAt)])).watch();
+
   Stream<List<Contact>> watchOverriddenSenders() => (select(contacts)..where((c) => c.classificationSource.equals('override'))..orderBy([(c) => OrderingTerm.desc(c.lastSeenAt)])).watch();
 
   Stream<List<Contact>> watchCountingSenders() => (select(contacts)..where((c) => c.countsTowardUnread.equals(true))..orderBy([(c) => OrderingTerm.desc(c.lastSeenAt)])).watch();
@@ -377,6 +382,24 @@ extension ClassificationQueries on AppDatabase {
         "AND folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk','trash'))",
         readsFrom: {messages, folders},
       ).watchSingle().map((r) => r.read<int>('n'));
+
+  /// The user's own choice of pile for a sender that is not a person.
+  /// Null hands the choice back to the app.
+  Future<void> setSenderPile(String contactKey, FeedsPile? pile) => (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(feedsPile: Value(pile?.name)));
+
+  /// Senders whose pile the user chose.
+  Stream<List<Contact>> watchPileChosenSenders() => (select(contacts)..where((c) => c.feedsPile.isNotNull() & c.classification.equals('feeds'))..orderBy([(c) => OrderingTerm.desc(c.lastSeenAt)])).watch();
+
+  /// Feed or Noise for a row that [rowBelongsToFeeds]; null otherwise.
+  Future<FeedsPile?> rowPile(String rowKey) async {
+    if (!await rowBelongsToFeeds(rowKey)) return null;
+    final r = await customSelect(
+      'SELECT c.feeds_pile AS pile, c.feeds_category AS cat, COALESCE(s.feeds_total, 0) AS total, COALESCE(s.feeds_unread, 0) AS unread FROM contacts c LEFT JOIN row_summaries s ON s.row_key = ? WHERE c.key = ?',
+      variables: [Variable.withString(rowKey), Variable.withString(rowKey.substring(2))],
+    ).getSingleOrNull();
+    if (r == null) return null;
+    return pileFor(chosen: r.readNullable<String>('pile'), category: r.readNullable<String>('cat'), total: r.read<int>('total'), unread: r.read<int>('unread'));
+  }
 
   /// Whether a row is listed on Feeds and not on Chats: a Feeds sender with
   /// no incoming mail filed under People (the same rule as the two lists).

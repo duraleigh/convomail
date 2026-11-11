@@ -22,11 +22,12 @@ class FocusSearchIntent extends Intent {
 /// The shortcut table. Kept in one place so Settings can list it.
 abstract final class AppShortcuts {
   static final Map<ShortcutActivator, Intent> table = {
-    const SingleActivator(LogicalKeyboardKey.digit1, control: true): const GoToDestinationIntent(Destination.chats),
-    const SingleActivator(LogicalKeyboardKey.digit2, control: true): const GoToDestinationIntent(Destination.feeds),
-    const SingleActivator(LogicalKeyboardKey.digit3, control: true): const GoToDestinationIntent(Destination.boards),
-    const SingleActivator(LogicalKeyboardKey.digit4, control: true): const GoToDestinationIntent(Destination.planner),
-    const SingleActivator(LogicalKeyboardKey.digit5, control: true): const GoToDestinationIntent(Destination.settings),
+    const SingleActivator(LogicalKeyboardKey.digit1, control: true): const GoToDestinationIntent(Destination.today),
+    const SingleActivator(LogicalKeyboardKey.digit2, control: true): const GoToDestinationIntent(Destination.focus),
+    const SingleActivator(LogicalKeyboardKey.digit3, control: true): const GoToDestinationIntent(Destination.chats),
+    const SingleActivator(LogicalKeyboardKey.digit4, control: true): const GoToDestinationIntent(Destination.feed),
+    const SingleActivator(LogicalKeyboardKey.digit5, control: true): const GoToDestinationIntent(Destination.noise),
+    const SingleActivator(LogicalKeyboardKey.digit6, control: true): const GoToDestinationIntent(Destination.settings),
     const SingleActivator(LogicalKeyboardKey.keyN, control: true): const ComposeIntent(),
     const SingleActivator(LogicalKeyboardKey.keyF, control: true): const FocusSearchIntent(),
     const SingleActivator(LogicalKeyboardKey.slash): const FocusSearchIntent(),
@@ -34,13 +35,13 @@ abstract final class AppShortcuts {
 
   /// Human-readable list for the Settings screen.
   static const List<(String, String)> descriptions = [
-    ('Ctrl+1 … Ctrl+5', 'Switch to Chats, Feeds, Boards, Planner, Settings'),
+    ('Ctrl+1 … Ctrl+6', 'Switch to Today, Focus, Chats, Feed, Noise, Settings'),
     ('Ctrl+N', 'New message'),
     ('Ctrl+F or /', 'Search'),
     ('R / Shift+R / F', 'Reply / Reply all / Forward the selected conversation'),
     ('Ctrl+Enter', 'Send the message being composed'),
     ('Esc', 'Close the composer (the draft is kept)'),
-    ('E / Del / P / S', 'Archive / Delete / Pin / Snooze the selected row'),
+    ('E / Del / P / S', 'Archive / Delete / Pin / Later for the selected row'),
   ];
 }
 
@@ -77,8 +78,8 @@ class AppShortcutScope extends ConsumerWidget {
             return null;
           }),
           FocusSearchIntent: CallbackAction<FocusSearchIntent>(onInvoke: (_) {
-            // Feeds has the same search bar; anywhere else goes to Chats.
-            if (ref.read(destinationProvider) != Destination.feeds) ref.read(destinationProvider.notifier).select(Destination.chats);
+            // Feed and Noise have the same search bar; anywhere else goes to Chats.
+            if (!ref.read(destinationProvider).isList) ref.read(destinationProvider.notifier).select(Destination.chats);
             ref.read(searchOpenProvider.notifier).open();
             ref.read(searchFocusProvider).requestFocus();
             return null;

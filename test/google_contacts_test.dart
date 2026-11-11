@@ -126,7 +126,7 @@ void main() {
       );
       await flow.connect();
       final q = opened!.queryParameters;
-      expect(q['scope'], 'https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/calendar');
+      expect(q['scope'], 'https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/calendar.readonly', reason: 'reading only, for both');
       expect(q['code_challenge_method'], 'S256');
       expect(q['code_challenge'], isNotEmpty);
       expect(q['redirect_uri'], startsWith('http://127.0.0.1:'));

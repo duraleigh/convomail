@@ -41,7 +41,7 @@ final searchHitsProvider = FutureProvider<List<SearchHit>>((ref) async {
   if (q.trim().isEmpty) return const [];
   final filter = ref.watch(peopleFilterProvider);
   // Searching from Feeds always covers Feeds; on Chats it is a setting.
-  final includeFeeds = ref.watch(inboxModeProvider) == InboxMode.feeds || ref.watch(settingsProvider.select((s) => s.searchIncludeFeeds));
+  final includeFeeds = ref.watch(inboxModeProvider).isFeeds || ref.watch(settingsProvider.select((s) => s.searchIncludeFeeds));
   return ref.watch(databaseProvider).searchMessages(q, filter: filter, includeFeeds: includeFeeds, accountId: ref.watch(accountScopeProvider));
 });
 

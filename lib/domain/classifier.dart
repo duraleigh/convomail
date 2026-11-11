@@ -249,7 +249,7 @@ class ClassificationRule {
 
   /// Plain-language statement, e.g. for the proposal dialog and Settings.
   String describe() {
-    final target = [if (bucket != null) bucket == Bucket.feeds ? 'Feeds' : 'People', if (category != null) category].join(' · ');
+    final target = [if (bucket != null) bucket == Bucket.feeds ? 'Feed or Noise' : 'Chats', if (category != null) category].join(' · ');
     return switch (field) {
       'sender' => 'Mail from $pattern → $target',
       'domain' => 'Mail from anyone at $pattern → $target',

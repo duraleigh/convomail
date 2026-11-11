@@ -193,7 +193,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('Ctrl-click picks rows; the bar moves them all to Feeds for good; Undo puts them back', (tester) async {
+  testWidgets('Ctrl-click picks rows; the bar moves them all to Noise for good; Undo puts them back', (tester) async {
     await pumpList(tester);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
     await tester.tap(find.text('Sarah Chen'));
@@ -205,21 +205,25 @@ void main() {
     final container = ProviderScope.containerOf(tester.element(find.byType(AppShell)));
     expect(container.read(selectedRowProvider), isNull, reason: 'picking does not open a conversation');
 
-    await tester.tap(find.byKey(const ValueKey('bulk-move')));
+    expect(find.byKey(const ValueKey('bulk-move-chats')), findsNothing, reason: 'they are in Chats already');
+    expect(find.byKey(const ValueKey('bulk-move-feed')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('bulk-move-noise')));
     await tester.pumpAndSettle();
     for (final k in ['sarah@x.com', 'tom@x.com']) {
       final c = await contact(k);
       expect(c.classification, 'feeds');
       expect(c.classificationSource, 'override');
+      expect(c.feedsPile, 'noise');
     }
     expect(find.byKey(const ValueKey('selection-bar')), findsNothing);
-    expect(find.text('Sarah Chen'), findsNothing, reason: 'gone from People');
-    expect(find.textContaining('2 senders moved to Feeds'), findsOneWidget);
+    expect(find.text('Sarah Chen'), findsNothing, reason: 'gone from Chats');
+    expect(find.textContaining('2 senders moved to Noise'), findsOneWidget);
 
     await tester.tap(find.text('Undo'));
     await tester.pumpAndSettle();
     expect((await contact('sarah@x.com')).classification, 'people');
     expect((await contact('tom@x.com')).classificationSource, isNot('override'));
+    expect((await contact('tom@x.com')).feedsPile, isNull);
     expect(find.text('Sarah Chen'), findsOneWidget);
     await teardown(tester);
   });

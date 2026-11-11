@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/settings.dart';
 import '../../../domain/classifier.dart';
+import '../../../domain/piles.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart' hide ClassificationRule;
 import '../../../sync/classification_service.dart';
@@ -12,7 +13,7 @@ import '../../widgets/tonal_avatar.dart';
 
 final feedsCategoriesProvider = StreamProvider<List<FeedsCategoryRow>>((ref) => ref.watch(databaseProvider).watchCategories());
 final classificationRulesProvider = StreamProvider<List<ClassificationRule>>((ref) => ref.watch(databaseProvider).watchRules());
-final overriddenSendersProvider = StreamProvider<List<Contact>>((ref) => ref.watch(databaseProvider).watchOverriddenSenders());
+final overriddenSendersProvider = StreamProvider<List<Contact>>((ref) => ref.watch(databaseProvider).watchMovedSenders());
 final countingSendersProvider = StreamProvider<List<Contact>>((ref) => ref.watch(databaseProvider).watchCountingSenders());
 
 /// Settings → Feeds (spec 4.18): badge scope, senders that count toward
@@ -41,8 +42,8 @@ class FeedsDetail extends ConsumerWidget {
             SwitchListTile(
               key: const ValueKey('feeds-badge-scope'),
               secondary: Icon(Icons.notifications_outlined, color: scheme.primary),
-              title: const Text('Feeds count toward the unread badge'),
-              subtitle: const Text('Off: only People (and senders marked below) count.'),
+              title: const Text('Feed and Noise count toward the unread badge'),
+              subtitle: const Text('Off: only Chats (and senders marked below) count.'),
               value: settings.badgeIncludeFeeds,
               onChanged: (v) => ref.read(settingsProvider.notifier).setBadgeIncludeFeeds(v),
             ),
@@ -50,7 +51,7 @@ class FeedsDetail extends ConsumerWidget {
         ),
         label('COUNTS TOWARD UNREAD · ${counting.length}'),
         if (counting.isEmpty)
-          Text('No Feeds sender is marked yet. Use "Counts toward unread" on a Feeds row.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))
+          Text('No sender is marked yet. Use "Counts toward unread" on a row in Feed or Noise.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))
         else
           GroupedList(
             children: [
@@ -109,7 +110,7 @@ class FeedsDetail extends ConsumerWidget {
           ),
         label('MOVED BY YOU · ${overrides.length}'),
         if (overrides.isEmpty)
-          Text('Senders you move between People and Feeds are listed here and never re-classified automatically.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))
+          Text('Senders you move between Chats, Feed and Noise are listed here. The app never moves them back.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))
         else
           GroupedList(
             children: [
@@ -118,15 +119,35 @@ class FeedsDetail extends ConsumerWidget {
                   key: ValueKey('override-${c.key}'),
                   leading: TonalAvatar(identityKey: c.key, name: c.shownName, size: 36),
                   title: Text(c.shownName),
-                  subtitle: Text('${c.key} · in ${c.classification == 'feeds' ? 'Feeds' : 'People'}'),
+                  subtitle: Text('${c.key} · in ${_placeOf(c)}'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      TextButton(
-                        onPressed: () => service.moveSender(c.key, c.classification == 'feeds' ? Bucket.people : Bucket.feeds),
-                        child: Text(c.classification == 'feeds' ? 'Move to People' : 'Move to Feeds'),
+                      PopupMenuButton<String>(
+                        key: ValueKey('override-move-${c.key}'),
+                        tooltip: 'Move',
+                        icon: const Icon(Icons.drive_file_move_outline),
+                        onSelected: (v) async {
+                          if (v == 'Chats') {
+                            await service.moveSender(c.key, Bucket.people);
+                          } else {
+                            if (c.classification != 'feeds') await service.moveSender(c.key, Bucket.feeds);
+                            await db.setSenderPile(c.key, v == 'Noise' ? FeedsPile.noise : FeedsPile.feed);
+                          }
+                        },
+                        itemBuilder: (_) => [
+                          for (final place in const ['Chats', 'Feed', 'Noise'])
+                            if (place != _placeOf(c)) PopupMenuItem(value: place, child: Text('Move to $place')),
+                        ],
                       ),
-                      IconButton(tooltip: 'Let the rules decide again', icon: const Icon(Icons.undo_rounded), onPressed: () => service.moveSender(c.key, null)),
+                      IconButton(
+                        tooltip: 'Let the app decide again',
+                        icon: const Icon(Icons.undo_rounded),
+                        onPressed: () async {
+                          await db.setSenderPile(c.key, null);
+                          await service.moveSender(c.key, null);
+                        },
+                      ),
                     ],
                   ),
                 ),
@@ -136,6 +157,9 @@ class FeedsDetail extends ConsumerWidget {
       ],
     );
   }
+
+  /// Where a sender the user placed by hand is now.
+  static String _placeOf(Contact c) => c.classification != 'feeds' ? 'Chats' : (c.feedsPile == 'noise' ? 'Noise' : (c.feedsPile == 'feed' ? 'Feed' : 'Feed or Noise'));
 
   static IconData _iconFor(String name) => switch (name) {
         'Newsletter' => Icons.newspaper_outlined,
@@ -162,7 +186,7 @@ class FeedsDetail extends ConsumerWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete ${c.name}?'),
-        content: const Text('Senders and messages tagged with it lose the tag; rules that set it keep their People/Feeds part.'),
+        content: const Text('Senders and messages tagged with it lose the tag; rules that set it keep the part that says where the mail goes.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
           FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete')),

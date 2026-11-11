@@ -13,9 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/fake_mail_transport.dart';
 import 'support/test_db.dart';
 
-/// Planner, snooze, and reminders (spec 4.9, 4.10, plan M9): nothing is
-/// added from mail, snooze hide/resurface with re-sort, reminders firing,
-/// to-dos.
+/// Later (snooze) and reminders: nothing is added from mail, a row put off
+/// hides and comes back on top, and reminders fire once.
 void main() {
   const me = RemoteAddress('me@example.com');
   late AppDatabase db;
@@ -50,34 +49,6 @@ void main() {
       final m = (await db.select(db.messages).get()).firstWhere((m) => m.uid == uid);
       await syncer.fetchBody(m.id);
       expect(await db.select(db.plannerEvents).get(), isEmpty);
-    });
-
-    test('guesses left by an older version are removed; what the user added stays', () async {
-      final mine = await db.addEvent(title: 'Dentist', start: DateTime(2026, 11, 3, 9));
-      await db.addEvent(title: 'Guess', start: DateTime(2026, 11, 3, 10), kind: 'extracted');
-      await db.addEvent(title: 'Invite', start: DateTime(2026, 11, 3, 11), kind: 'invite');
-      expect(await db.deleteMailGuesses(), 2);
-      expect((await db.select(db.plannerEvents).get()).map((e) => e.id), [mine]);
-    });
-  });
-
-  group('events and to-dos', () {
-    test('week query includes overlapping timed events and all-day items; to-dos are separate', () async {
-      final mon = DateTime(2026, 11, 2);
-      final a = await db.addEvent(title: 'Inside', start: mon.add(const Duration(hours: 10)), end: mon.add(const Duration(hours: 11)));
-      await db.addEvent(title: 'Before', start: mon.subtract(const Duration(hours: 2)), end: mon.subtract(const Duration(hours: 1)));
-      final spanning = await db.addEvent(title: 'Spanning', start: mon.subtract(const Duration(hours: 1)), end: mon.add(const Duration(hours: 1)));
-      final allDay = await db.addEvent(title: 'Offsite', start: mon.add(const Duration(days: 3)), allDay: true);
-      final todo = await db.addEvent(title: 'Send slides', kind: 'todo', start: mon.add(const Duration(days: 1)));
-      final week = await db.watchEventsBetween(mon, mon.add(const Duration(days: 7))).first;
-      expect(week.map((e) => e.id).toSet(), {a, spanning, allDay});
-      expect((await db.watchTodos().first).single.id, todo);
-      await db.setEventDone(todo, true);
-      expect((await db.watchTodos().first).single.done, isTrue);
-      await db.updateEvent(a, title: 'Renamed', colorKey: 'work');
-      expect((await db.eventById(a))!.title, 'Renamed');
-      await db.deleteEvent(a);
-      expect(await db.eventById(a), isNull);
     });
   });
 

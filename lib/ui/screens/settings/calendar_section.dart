@@ -7,8 +7,8 @@ import '../../../sync/calendar_sync.dart';
 import '../../../sync/contacts_sync.dart';
 import '../../widgets/grouped_list.dart';
 
-/// Settings → Google Calendar: the Planner shows the calendars the user
-/// shows in Google, and events made or changed in the Planner go there.
+/// Settings → Google Calendar: Today shows the day's events from the
+/// calendars the user shows in Google. Read only.
 class GoogleCalendarDetail extends ConsumerStatefulWidget {
   const GoogleCalendarDetail({super.key});
 
@@ -74,18 +74,16 @@ class _GoogleCalendarDetailState extends ConsumerState<GoogleCalendarDetail> {
     if (_loading) return const SizedBox.shrink();
     final calendars = ref.watch(googleCalendarsProvider).value ?? const <GoogleCalendarInfo>[];
     final hidden = ref.watch(hiddenCalendarsProvider).value ?? const <String>{};
-    final defaultId = ref.watch(defaultCalendarIdProvider).value;
     final lastSync = ref.watch(calendarLastSyncProvider).value;
     final syncError = ref.watch(calendarErrorProvider).value;
     final error = _error ?? syncError;
-    final writable = [for (final c in calendars) if (c.writable) c];
 
     return ListView(
       children: [
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(
-            'The Planner shows every calendar you show in Google Calendar, in its colours. Events you add, change or delete in the Planner are added, changed or deleted in Google Calendar too.',
+            "Today shows the day's events from every calendar you show in Google Calendar, in its colors. Précis only reads your calendar. It never adds or changes anything.",
             style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
@@ -104,7 +102,7 @@ class _GoogleCalendarDetailState extends ConsumerState<GoogleCalendarDetail> {
                 key: const ValueKey('calendar-allow'),
                 leading: const Icon(Icons.lock_open_rounded),
                 title: const Text('Allow calendar access'),
-                subtitle: const Text('Opens your browser to sign in to Google again, this time also allowing the calendar. Turn on the Google Calendar API first (steps below).'),
+                subtitle: const Text('Opens your browser to sign in to Google again, this time also letting Précis read your calendar. Turn on the Google Calendar API first (steps below).'),
                 trailing: FilledButton(onPressed: _busy ? null : _allow, child: const Text('Allow')),
               )
             else
@@ -132,28 +130,12 @@ class _GoogleCalendarDetailState extends ConsumerState<GoogleCalendarDetail> {
                   key: ValueKey('calendar-show-${c.id}'),
                   secondary: CircleAvatar(backgroundColor: Color(c.color), radius: 8),
                   title: Text(c.name),
-                  subtitle: Text([if (c.primary) 'Main calendar', if (!c.writable) 'View only'].join(' · ').isEmpty ? 'Shown in the Planner' : [if (c.primary) 'Main calendar', if (!c.writable) 'View only'].join(' · ')),
+                  subtitle: Text(c.primary ? 'Main calendar' : 'Shown on Today'),
                   value: !hidden.contains(c.id),
                   onChanged: (v) => ref.read(calendarSyncProvider).setHidden(c.id, !v),
                 ),
             ],
           ),
-          if (writable.length > 1) ...[
-            Padding(padding: const EdgeInsets.fromLTRB(0, 24, 0, 8), child: Text('NEW EVENTS GO TO', style: text.labelSmall!.copyWith(letterSpacing: 1))),
-            DropdownButtonFormField<String>(
-              key: const ValueKey('calendar-default'),
-              initialValue: defaultId,
-              isExpanded: true,
-              decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-              items: [
-                for (final c in writable)
-                  DropdownMenuItem(value: c.id, child: Row(children: [CircleAvatar(backgroundColor: Color(c.color), radius: 6), const SizedBox(width: 8), Flexible(child: Text(c.name, overflow: TextOverflow.ellipsis))])),
-              ],
-              onChanged: (v) {
-                if (v != null) ref.read(calendarSyncProvider).setDefaultCalendar(v);
-              },
-            ),
-          ],
         ],
         Padding(padding: const EdgeInsets.fromLTRB(0, 24, 0, 8), child: Text('TURNING ON THE GOOGLE CALENDAR API', style: text.labelSmall!.copyWith(letterSpacing: 1))),
         Text(
