@@ -115,6 +115,24 @@ extension DoneQueries on AppDatabase {
     return [for (final r in rows) messages.map(r.data)];
   }
 
+  /// How many of the user's own recent emails still wait to be read by
+  /// [sentWithoutWords]. Until it is zero, "Waiting on" is not complete.
+  Stream<int> watchSentWithoutWordsCount({int? accountId, DateTime? now}) {
+    final since = (now ?? DateTime.now()).subtract(waitingWindow).millisecondsSinceEpoch ~/ 1000;
+    return customSelect(
+      '''
+      SELECT COUNT(*) AS n FROM messages m
+      JOIN folders f ON f.id = m.folder_id
+      WHERE m.is_from_me = 1 AND m.is_deleted = 0 AND m.is_draft = 0 AND m.body_fetched_at IS NULL
+        ${accountId == null ? '' : 'AND m.account_id = ?'}
+        AND COALESCE(m.date, m.internal_date) >= ?
+        AND f.role NOT IN ('junk', 'trash', 'drafts')
+      ''',
+      variables: [if (accountId != null) Variable.withInt(accountId), Variable.withInt(since)],
+      readsFrom: {messages, folders},
+    ).watchSingle().map((r) => r.read<int>('n'));
+  }
+
   static final _attribution = RegExp(r'\bOn .{5,120}? wrote:', dotAll: true);
 
   /// Whether the user's own words in [m] (not the mail quoted below them)

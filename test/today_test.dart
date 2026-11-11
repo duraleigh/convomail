@@ -11,6 +11,7 @@ import 'package:convomail/store/done_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/planner_queries.dart';
 import 'package:convomail/store/settings_store.dart';
+import 'package:convomail/store/sync_queries.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/chats/people_list_pane.dart';
@@ -257,6 +258,7 @@ void main() {
       }
       expect(find.textContaining('The assistant is not connected yet'), findsOneWidget);
       expect(find.textContaining('Nobody. Everyone you asked has answered'), findsOneWidget);
+      expect(tester.getTopLeft(find.byKey(const ValueKey('today-date'))).dy, lessThan(40), reason: 'a short page starts at the top, not in the middle');
       expect(find.text('Nothing marked done yet today.'), findsOneWidget);
       await teardown(tester);
     });
@@ -267,7 +269,7 @@ void main() {
       final container = await pumpApp(tester);
       final m = await mine('The contract');
       expect(find.byKey(ValueKey('waiting-${m.id}')), findsOneWidget);
-      expect(find.textContaining('has not answered', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Sarah Chen has not answered', findRichText: true), findsOneWidget);
       expect(find.textContaining('The contract · you wrote 5 days ago'), findsOneWidget);
 
       await tester.tap(find.byKey(ValueKey('waiting-${m.id}')));
@@ -287,6 +289,29 @@ void main() {
       expect(find.byKey(ValueKey('waiting-${m.id}')), findsNothing);
       expect((await mine('The contract')).doneAt, isNotNull);
       expect(find.descendant(of: find.byKey(const ValueKey('today-done')), matching: find.textContaining('The contract')), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('while sent emails are still being read, Waiting on says so and does not claim everyone answered', (tester) async {
+      imap.folder('Sent').add(RemoteMessageHeader(uid: 0, from: me, to: const [RemoteAddress('sarah@x.com')], subject: 'The contract', date: ago(days: 5)), body: const RemoteMessageBody(text: 'Can you send the signed copy?'));
+      imap.folder('Sent').add(RemoteMessageHeader(uid: 0, from: me, to: const [RemoteAddress('ann@x.com')], subject: 'Notes', date: ago(days: 4)), body: const RemoteMessageBody(text: 'Here are the notes.'));
+      await pumpApp(tester);
+      expect(find.textContaining('Still reading 2 of the emails you sent'), findsOneWidget);
+      expect(find.textContaining('Nobody. Everyone you asked has answered'), findsNothing);
+
+      // One is read: a line shows, with the note under it.
+      final first = await mine('The contract');
+      await db.storeBody(first.id, const RemoteMessageBody(text: 'Can you send the signed copy?'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('waiting-${first.id}')), findsOneWidget);
+      expect(find.byKey(const ValueKey('waiting-reading')), findsOneWidget);
+      expect(find.textContaining('Still reading 1 of the emails you sent'), findsOneWidget);
+
+      // All read: the note goes.
+      await db.storeBody((await mine('Notes')).id, const RemoteMessageBody(text: 'Here are the notes.'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Still reading'), findsNothing);
+      expect(find.byKey(ValueKey('waiting-${first.id}')), findsOneWidget);
       await teardown(tester);
     });
 

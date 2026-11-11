@@ -29,6 +29,7 @@ final todayEventsProvider = StreamProvider<List<PlannerEvent>>((ref) {
 });
 
 final waitingOnProvider = StreamProvider<List<WaitingItem>>((ref) => ref.watch(databaseProvider).watchWaitingOn(accountId: ref.watch(accountScopeProvider)));
+final sentNotReadYetProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchSentWithoutWordsCount(accountId: ref.watch(accountScopeProvider)));
 final laterRowsProvider = StreamProvider<List<LaterRow>>((ref) => ref.watch(databaseProvider).watchLaterRows());
 final openRemindersProvider = StreamProvider<List<Reminder>>((ref) => ref.watch(databaseProvider).watchReminders());
 final doneTodayProvider = StreamProvider<List<DoneItem>>((ref) => ref.watch(databaseProvider).watchDoneToday());
@@ -89,42 +90,64 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final name = accounts.isEmpty ? null : accounts.first.displayName;
     final openThread = ref.watch(openThreadProvider);
 
-    return LayoutBuilder(builder: (context, box) {
-      final two = box.maxWidth >= 860;
-      final left = [const _NeedsYou(), const _WaitingOn()];
-      final right = [const _Schedule(), const _Fyi(), const _Later(), const _Done()];
-      return Stack(
-        children: [
-          SingleChildScrollView(
-            key: const PageStorageKey('today-scroll'),
-            padding: const EdgeInsets.fromLTRB(24, 14, 16, 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(_date(now), key: const ValueKey('today-date'), style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
-                const SizedBox(height: 2),
-                Text(_greeting(now, name), key: const ValueKey('today-greeting'), style: text.headlineMedium),
-                const SizedBox(height: AppSpace.lg),
-                if (two)
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 4, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left)),
-                      const SizedBox(width: AppSpace.md),
-                      Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right)),
+    return LayoutBuilder(
+      builder: (context, box) {
+        final two = box.maxWidth >= 860;
+        final left = [const _NeedsYou(), const _WaitingOn()];
+        final right = [const _Schedule(), const _Fyi(), const _Later(), const _Done()];
+        return Stack(
+          children: [
+            // Fills its area, so a short page starts at the top.
+            Positioned.fill(
+              child: SingleChildScrollView(
+                key: const PageStorageKey('today-scroll'),
+                padding: const EdgeInsets.fromLTRB(24, 14, 16, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      _date(now),
+                      key: const ValueKey('today-date'),
+                      style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(_greeting(now, name), key: const ValueKey('today-greeting'), style: text.headlineMedium),
+                    const SizedBox(height: AppSpace.lg),
+                    if (two)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: left),
+                          ),
+                          const SizedBox(width: AppSpace.md),
+                          Expanded(
+                            flex: 3,
+                            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: right),
+                          ),
+                        ],
+                      )
+                    else ...[
+                      ...left,
+                      ...right,
                     ],
-                  )
-                else ...[...left, ...right],
-              ],
+                  ],
+                ),
+              ),
             ),
-          ),
-          // An email opened from a line slides in over the page from the
-          // right, the same way the full thread does in Chats. A click
-          // beside it closes it.
-          if (openThread != null) KeyedSubtree(key: const ValueKey('today-email'), child: ThreadViewPanel(key: ValueKey(openThread), threadKey: openThread)),
-        ],
-      );
-    });
+            // An email opened from a line slides in over the page from the
+            // right, the same way the full thread does in Chats. A click
+            // beside it closes it.
+            if (openThread != null)
+              KeyedSubtree(
+                key: const ValueKey('today-email'),
+                child: ThreadViewPanel(key: ValueKey(openThread), threadKey: openThread),
+              ),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -166,7 +189,9 @@ class _Section extends StatelessWidget {
                     child: Icon(icon, size: 17, color: color),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(title, style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700))),
+                  Expanded(
+                    child: Text(title, style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700)),
+                  ),
                   if (count != null && count! > 0)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 1),
@@ -182,10 +207,7 @@ class _Section extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(2, 4, 4, 8),
                   child: Text(empty!, style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
                 ),
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
-                children[i],
-              ],
+              for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)), children[i]],
             ],
           ),
         ),
@@ -198,14 +220,8 @@ class _NeedsYou extends StatelessWidget {
   const _NeedsYou();
 
   @override
-  Widget build(BuildContext context) => const _Section(
-        id: 'needs-you',
-        icon: Icons.bolt_rounded,
-        color: Color(0xFFF48FB1),
-        title: 'Needs you',
-        empty: 'The assistant is not connected yet. When it is, the emails that need you are listed here.',
-        children: [],
-      );
+  Widget build(BuildContext context) =>
+      const _Section(id: 'needs-you', icon: Icons.bolt_rounded, color: Color(0xFFF48FB1), title: 'Needs you', empty: 'The assistant is not connected yet. When it is, the emails that need you are listed here.', children: []);
 }
 
 class _WaitingOn extends ConsumerWidget {
@@ -221,6 +237,9 @@ class _WaitingOn extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final items = ref.watch(waitingOnProvider).value ?? const <WaitingItem>[];
+    // Sent emails whose words are not here yet cannot be judged.
+    final unread = ref.watch(sentNotReadYetProvider).value ?? 0;
+    final reading = 'Still reading $unread of the emails you sent, to see who has not answered.';
     final now = DateTime.now();
     return _Section(
       id: 'waiting-on',
@@ -228,7 +247,7 @@ class _WaitingOn extends ConsumerWidget {
       color: scheme.primary,
       title: 'Waiting on',
       count: items.length,
-      empty: 'Nobody. Everyone you asked has answered, or it has been less than three days.',
+      empty: unread > 0 ? reading : 'Nobody. Everyone you asked has answered, or it has been less than three days.',
       children: [
         for (final w in items)
           InkWell(
@@ -252,8 +271,26 @@ class _WaitingOn extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text.rich(TextSpan(children: [TextSpan(text: w.name, style: const TextStyle(fontWeight: FontWeight.w700)), const TextSpan(text: ' has not answered')]), maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
-                        Text('${w.message.subject.isEmpty ? '(no subject)' : w.message.subject} · you wrote ${_ago(w.sentAt, now)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(
+                                text: w.name,
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              const TextSpan(text: ' has not answered'),
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodyMedium,
+                        ),
+                        Text(
+                          '${w.message.subject.isEmpty ? '(no subject)' : w.message.subject} · you wrote ${_ago(w.sentAt, now)}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                        ),
                       ],
                     ),
                   ),
@@ -275,6 +312,12 @@ class _WaitingOn extends ConsumerWidget {
                 ],
               ),
             ),
+          ),
+        if (items.isNotEmpty && unread > 0)
+          Padding(
+            key: const ValueKey('waiting-reading'),
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(reading, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
           ),
       ],
     );
@@ -313,7 +356,9 @@ class _Schedule extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(2, 2, 0, 6),
             child: Row(
               children: [
-                Expanded(child: Text('Connect your Google Calendar to see your day here. It is only read, never changed.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant))),
+                Expanded(
+                  child: Text('Connect your Google Calendar to see your day here. It is only read, never changed.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
+                ),
                 TextButton(
                   key: const ValueKey('today-connect-calendar'),
                   onPressed: () {
@@ -332,15 +377,34 @@ class _Schedule extends ConsumerWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(padding: const EdgeInsets.only(top: 6), child: Container(width: 9, height: 9, decoration: BoxDecoration(color: e.color != null ? Color(e.color!) : scheme.primary, shape: BoxShape.circle))),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Container(
+                    width: 9,
+                    height: 9,
+                    decoration: BoxDecoration(color: e.color != null ? Color(e.color!) : scheme.primary, shape: BoxShape.circle),
+                  ),
+                ),
                 const SizedBox(width: 10),
-                SizedBox(width: 76, child: Text(e.allDay ? 'All day' : _time(e.startAt!), style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w700, color: !e.allDay && (e.endAt ?? e.startAt!).isBefore(now) ? scheme.onSurfaceVariant : null))),
+                SizedBox(
+                  width: 76,
+                  child: Text(
+                    e.allDay ? 'All day' : _time(e.startAt!),
+                    style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w700, color: !e.allDay && (e.endAt ?? e.startAt!).isBefore(now) ? scheme.onSurfaceVariant : null),
+                  ),
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(e.title, style: text.bodyMedium),
-                      if ((e.location ?? '').isNotEmpty) Text(e.location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+                      if ((e.location ?? '').isNotEmpty)
+                        Text(
+                          e.location!,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                        ),
                     ],
                   ),
                 ),
