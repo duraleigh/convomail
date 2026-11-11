@@ -12,6 +12,7 @@ import '../../app/mail_state.dart';
 import '../../app/people_state.dart';
 import '../../app/settings_navigation.dart';
 import '../../app/timely_state.dart';
+import '../../helper/helper_sync.dart';
 import '../../store/database.dart';
 import '../../store/done_queries.dart';
 import '../../store/mail_queries.dart';
@@ -23,7 +24,7 @@ import '../widgets/tonal_avatar.dart';
 import 'chats/later_dialogs.dart';
 import 'chats/thread_view_panel.dart';
 import 'chats/timely_strip.dart';
-import 'mail/mail_widgets.dart' show openMail;
+import 'mail/mail_widgets.dart' show openMail, putOffFocusMail;
 
 /// Today's calendar events, in the calendars the user shows.
 final todayEventsProvider = StreamProvider<List<PlannerEvent>>((ref) {
@@ -109,13 +110,27 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      _date(now),
-                      key: const ValueKey('today-date'),
-                      style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _date(now),
+                                key: const ValueKey('today-date'),
+                                style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(_greeting(now, name), key: const ValueKey('today-greeting'), style: text.headlineMedium),
+                            ],
+                          ),
+                        ),
+                        const _UpToDate(),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(_greeting(now, name), key: const ValueKey('today-greeting'), style: text.headlineMedium),
+                    const _Sentence(),
                     const SizedBox(height: AppSpace.lg),
                     if (two)
                       Row(
@@ -220,8 +235,89 @@ class _Section extends StatelessWidget {
   }
 }
 
-/// The emails in Focus: what to do in bold, who asked, a "by" time when
-/// there is one, and Done on the line.
+/// "Up to date · 8:02 AM": this PC is in step with the helper, and when it
+/// last checked. Shown only while the PC follows a helper.
+class _UpToDate extends ConsumerWidget {
+  const _UpToDate();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final link = ref.watch(helperProvider);
+    final at = link.inStepAt;
+    if (!link.connected || at == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final behind = link.error != null;
+    return Container(
+      key: const ValueKey('today-up-to-date'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppShapes.full)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(width: 8, height: 8, decoration: BoxDecoration(color: behind ? scheme.error : const Color(0xFF81C784), shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Text('${behind ? 'Last in step' : 'Up to date'} · ${_clock(at)}', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
+        ],
+      ),
+    );
+  }
+}
+
+String _clock(DateTime t) {
+  final l = t.toLocal();
+  final h = l.hour % 12 == 0 ? 12 : l.hour % 12;
+  return '$h:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'AM' : 'PM'}';
+}
+
+/// The one sentence at the top of the page, written by the assistant from
+/// the lines below it, with a small star so it is plain who wrote it, and
+/// when it was written.
+class _Sentence extends ConsumerWidget {
+  const _Sentence();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(daySentenceProvider).value;
+    if (s == null) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final now = DateTime.now();
+    final sameDay = s.at.year == now.year && s.at.month == now.month && s.at.day == now.day;
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpace.md),
+      child: Container(
+        key: const ValueKey('today-sentence'),
+        padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
+        decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.38), borderRadius: BorderRadius.circular(AppShapes.lgIncreased)),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(padding: const EdgeInsets.only(top: 3), child: Icon(Icons.auto_awesome_rounded, size: 18, color: scheme.primary)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.text, key: const ValueKey('today-sentence-text'), style: text.titleMedium!.copyWith(height: 1.35, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Written ${sameDay ? _clock(s.at) : 'on ${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][s.at.month - 1]} ${s.at.day} at ${_clock(s.at)}'}${s.after > 0 ? ', after ${s.after} new email${s.after == 1 ? '' : 's'}' : ''}',
+                    key: const ValueKey('today-sentence-when'),
+                    style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The emails in Focus, in full: what to do in bold, why, who and which
+/// email, a "by" time when there is one, and Done and Later on the line.
 class _NeedsYou extends ConsumerWidget {
   const _NeedsYou();
 
@@ -250,28 +346,72 @@ class _NeedsYou extends ConsumerWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TonalAvatar(identityKey: i.senderKey, name: i.senderName, size: 32),
+                  Padding(padding: const EdgeInsets.only(top: 2), child: TonalAvatar(identityKey: i.senderKey, name: i.senderName, size: 32)),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // What to do, in bold; then why; then who and which email.
                         Text(i.ask, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700)),
-                        Text(
-                          [i.senderName, if (i.reading?.due != null) 'by ${dueLabel(i.reading!.due!)}'].join(' · '),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                        if ((i.reading?.line ?? '').isNotEmpty && i.reading!.line != i.ask)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 1),
+                            child: Text(i.reading!.line, key: ValueKey('needs-why-${i.id}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
+                          ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            '${i.senderName} · ${i.subject.isEmpty ? '(no subject)' : i.subject}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Wrap(
+                            spacing: 4,
+                            runSpacing: 2,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              if (i.reading?.due != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(right: 6),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.schedule_rounded, size: 14, color: i.reading!.due!.isBefore(DateTime.now()) ? scheme.error : const Color(0xFFFFB74D)),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'by ${dueLabel(i.reading!.due!)}',
+                                        key: ValueKey('needs-by-${i.id}'),
+                                        style: text.labelMedium!.copyWith(color: i.reading!.due!.isBefore(DateTime.now()) ? scheme.error : const Color(0xFFFFB74D), fontWeight: FontWeight.w700),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              TextButton.icon(
+                                key: ValueKey('needs-done-${i.id}'),
+                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                onPressed: () => ref.read(databaseProvider).setMessagesDone([i.id], true),
+                                icon: const Icon(Icons.check_rounded, size: 16),
+                                label: const Text('Done'),
+                              ),
+                              TextButton.icon(
+                                key: ValueKey('needs-later-${i.id}'),
+                                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                onPressed: () => putOffFocusMail(context, ref, i),
+                                icon: const Icon(Icons.snooze_rounded, size: 16),
+                                label: const Text('Later'),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  IconButton(
-                    key: ValueKey('needs-done-${i.id}'),
-                    tooltip: 'Done',
-                    icon: const Icon(Icons.check_rounded),
-                    onPressed: () => ref.read(databaseProvider).setMessagesDone([i.id], true),
                   ),
                 ],
               ),
@@ -353,7 +493,7 @@ class _WaitingOn extends ConsumerWidget {
                           style: text.bodyMedium,
                         ),
                         Text(
-                          '${w.message.subject.isEmpty ? '(no subject)' : w.message.subject} · you wrote ${_ago(w.sentAt, now)}',
+                          '${w.asked.isNotEmpty ? 'You asked for: ${w.asked}' : (w.message.subject.isEmpty ? '(no subject)' : w.message.subject)} · you wrote ${_ago(w.sentAt, now)}',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),

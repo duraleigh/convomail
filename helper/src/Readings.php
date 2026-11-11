@@ -220,6 +220,26 @@ final class Readings
         return gmdate('Y-m-d', ($at ?? $this->store->now()) + $this->zone() * 60);
     }
 
+    /** How many times the assistant was asked today for one purpose ('mail', 'day', ...). */
+    public function writtenToday(string $purpose): int
+    {
+        return (int) $this->store->db->val('SELECT COALESCE(SUM(calls), 0) FROM {spend} WHERE day = ? AND purpose = ?', [$this->localDay(), $purpose]);
+    }
+
+    /**
+     * Whether the earlier emails of a thread are shown with an email from a
+     * person. On unless the owner turned it off.
+     */
+    public function threads(): bool
+    {
+        return $this->store->get('assistant.threads', '1') === '1';
+    }
+
+    public function setThreads(bool $on): void
+    {
+        $this->store->set('assistant.threads', $on ? '1' : '0');
+    }
+
     /** What this month has cost so far, in millionths of a dollar. */
     public function monthSpend(): int
     {
@@ -547,7 +567,7 @@ final class Readings
 
         $full = null;
         $before = [];
-        if (!$mine && $person && $threadId !== '' && (int) $db->val('SELECT COUNT(*) FROM {emails} WHERE thread_id = ? AND gone = 0', [$threadId]) > 1) {
+        if (!$mine && $person && $threadId !== '' && $this->threads() && (int) $db->val('SELECT COUNT(*) FROM {emails} WHERE thread_id = ? AND gone = 0', [$threadId]) > 1) {
             foreach ($this->google->thread($accountId, $threadId) as $m) {
                 if ((string) ($m['id'] ?? '') === (string) $e['gmail_id']) {
                     $full = $m;

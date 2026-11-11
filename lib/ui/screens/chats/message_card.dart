@@ -8,9 +8,9 @@ import '../../../app/account_scope.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/search_state.dart';
-import '../../../domain/classifier.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
+import '../../../sync/classification_service.dart';
 import '../../../sync/row_actions.dart';
 import '../../../sync/sync_controller.dart';
 import '../../theme/tokens.dart';
@@ -19,7 +19,6 @@ import '../../widgets/tonal_avatar.dart';
 import 'files/attachment_ui.dart';
 import 'html_body_view.dart';
 import 'people_list_pane.dart';
-import 'rule_proposal_dialog.dart';
 import 'simple_mail_view.dart';
 import 'thread_actions.dart';
 
@@ -211,8 +210,8 @@ class MessageCard extends ConsumerWidget {
                   case 'read':
                     await actions.markMessageRead(message.id, seen: true);
                   case 'bucket':
-                    final target = message.classification == 'feeds' ? Bucket.people : Bucket.feeds;
-                    if (context.mounted) await correctClassification(context, ref, message: message, bucket: target, title: target == Bucket.people ? 'Move to Chats' : 'Move to Feed or Noise');
+                    // The "?" has both ways to correct it: this one email, or always for the sender.
+                    if (context.mounted) await showDialog<void>(context: context, builder: (_) => WhyDialog(messageId: message.id));
                   case 'category':
                     final names = await ref.read(databaseProvider).categoryNames();
                     if (!context.mounted) return;
@@ -223,7 +222,27 @@ class MessageCard extends ConsumerWidget {
                         children: [for (final n in names) SimpleDialogOption(onPressed: () => Navigator.pop(ctx, n), child: Text(n))],
                       ),
                     );
-                    if (picked != null && context.mounted) await correctClassification(context, ref, message: message, category: picked, title: 'Tag as $picked');
+                    if (picked == null || !context.mounted) return;
+                    // Two choices, as on the "?": this one email, or always for the sender.
+                    final always = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        title: Text('Tag as $picked'),
+                        content: Text('Only this email, or everything from ${message.fromName.isNotEmpty ? message.fromName : message.fromAddress}?'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+                          TextButton(key: const ValueKey('tag-once'), onPressed: () => Navigator.pop(ctx, false), child: const Text('Just this email')),
+                          FilledButton(key: const ValueKey('tag-always'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Always for this sender')),
+                        ],
+                      ),
+                    );
+                    if (always == null) return;
+                    final service = ref.read(classificationServiceProvider);
+                    if (always) {
+                      await service.setSenderCategory(message.fromContactKey, picked);
+                    } else {
+                      await service.setMessageCategory(message.id, picked);
+                    }
                   case 'trash':
                     final pending = await actions.trashRow('c:${message.fromContactKey}', messageIds: [message.id], label: 'Moved to Trash');
                     if (pending != null && context.mounted) {
@@ -244,7 +263,7 @@ class MessageCard extends ConsumerWidget {
                 const PopupMenuItem(value: 'trash', child: Text('Move to Trash')),
                 if (!message.isFromMe) ...[
                   const PopupMenuDivider(),
-                  PopupMenuItem(value: 'bucket', child: Text(message.classification == 'feeds' ? 'This is a person → Chats…' : 'This is not a person → Feed or Noise…')),
+                  PopupMenuItem(value: 'bucket', child: Text(message.classification == 'feeds' ? 'This is a person…' : 'This is not a person…')),
                   if (message.classification == 'feeds') const PopupMenuItem(value: 'category', child: Text('Change category…')),
                 ],
               ],

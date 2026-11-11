@@ -284,6 +284,38 @@ return [
         same(1, count(array_filter($w->fake->calls, static fn (string $c): bool => str_contains($c, '/threads/'))));
     },
 
+    'showing earlier emails of a thread can be turned off; and the day\'s sentence is written at most 24 times a day' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        $w->readings->setThreads(false);
+        foreach ([1, 2] as $i) {
+            $id = $w->fake->add($renee + ['Message-ID' => "<off-$i@x>"], ['INBOX'], '', $w->clock->now - (3 - $i) * 3600);
+            $w->fake->messages[$id]['threadId'] = 'thread-off';
+            $w->fake->setBody($id, "WORDS-OF-$i");
+        }
+        $w->reader->poll($w->account);
+        $w->store->db->run('UPDATE {emails} SET read_state = ? WHERE message_id = ?', [Readings::SKIPPED, '<off-1@x>']);
+        $w->readings->plan();
+        same(1, $w->readings->work());
+        $shown = (string) $w->claude->readings()[0]['body']['messages'][0]['content'];
+        check(!str_contains($shown, 'WORDS-OF-1') && str_contains($shown, 'WORDS-OF-2'), 'only the email itself');
+        same(0, count(array_filter($w->fake->calls, static fn (string $c): bool => str_contains($c, '/threads/'))));
+
+        // 24 sentences written today: no more today, whatever changes.
+        $day = new \Precis\Day($w->store, $w->readings);
+        for ($i = 0; $i < \Precis\Day::A_DAY; $i++) {
+            $w->readings->count('claude-opus-5-5', 'day', ['in' => 1, 'out' => 1, 'cacheRead' => 0, 'cacheWrite' => 0]);
+        }
+        $w->claude->answer = static fn (): array => ['line' => 'x', 'needs_owner' => true, 'ask' => 'y', 'due' => '', 'place' => 'none', 'reasons' => []];
+        $w->arriveWith($renee + ['Message-ID' => '<cap@x>'], 'Question?');
+        $w->readings->plan();
+        $w->readings->work();
+        $before = count($w->claude->readings());
+        same(false, $day->refresh());
+        same($before, count($w->claude->readings()));
+    },
+
     'a long earlier thread is trimmed: the newest few emails, each cut short' => function () use ($person, $renee): void {
         $w = new World();
         $person($w);

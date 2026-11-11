@@ -106,17 +106,19 @@ List<String> whyReasons(MailItem i) {
 /// Moves everything from an email's sender for good: to Feed or Noise
 /// ([pile]), or to Chats when [pile] is null ("This is a person"). The
 /// user's move stays until they change it; Undo puts it back.
-Future<void> moveSenderOf(BuildContext context, WidgetRef ref, MailItem item, {FeedsPile? pile}) async {
+Future<void> moveSenderOf(BuildContext context, WidgetRef ref, MailItem item, {FeedsPile? pile, bool notPerson = false}) async {
   final messenger = ScaffoldMessenger.of(context);
   final db = ref.read(databaseProvider);
   final service = ref.read(classificationServiceProvider);
   final before = item.senderChosen;
-  if (pile == null) {
+  if (notPerson) {
+    await service.moveSender(item.senderKey, Bucket.feeds);
+  } else if (pile == null) {
     await service.moveSender(item.senderKey, Bucket.people);
   } else {
     await db.setSenderPile(item.senderKey, pile);
   }
-  final where = pile == null ? 'Chats' : (pile == FeedsPile.feed ? 'Feed' : 'Noise');
+  final where = notPerson ? 'Feed or Noise' : (pile == null ? 'Chats' : (pile == FeedsPile.feed ? 'Feed' : 'Noise'));
   messenger.hideCurrentSnackBar();
   messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 8), 
     content: Text('${item.senderName} moved to $where. It stays there until you change it.'),
@@ -125,7 +127,7 @@ Future<void> moveSenderOf(BuildContext context, WidgetRef ref, MailItem item, {F
     action: SnackBarAction(
       label: 'Undo',
       onPressed: () async {
-        if (pile == null) {
+        if (pile == null || notPerson) {
           await service.moveSender(item.senderKey, null);
         } else {
           await db.setSenderPile(item.senderKey, before);
@@ -217,7 +219,35 @@ class WhyDialog extends ConsumerWidget {
                     },
                     child: const Text('This needs me'),
                   ),
+                // Mail from a person that is not really from one: this one
+                // email, or the sender for good.
+                if (item.person) ...[
+                  OutlinedButton(
+                    key: const ValueKey('why-not-person-one'),
+                    onPressed: () async {
+                      await ref.read(classificationServiceProvider).setMessageBucket(item.id, Bucket.feeds);
+                      done('This one email moved out of Chats. The sender is still a person.');
+                    },
+                    child: const Text('This one is not from a person'),
+                  ),
+                  OutlinedButton(
+                    key: const ValueKey('why-not-person'),
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      moveSenderOf(context, ref, item, notPerson: true);
+                    },
+                    child: const Text('Always: this sender is not a person'),
+                  ),
+                ],
                 if (!item.person) ...[
+                  OutlinedButton(
+                    key: const ValueKey('why-chats-one'),
+                    onPressed: () async {
+                      await ref.read(classificationServiceProvider).setMessageBucket(item.id, Bucket.people);
+                      done('This one email moved to Chats.');
+                    },
+                    child: const Text('This one belongs in Chats'),
+                  ),
                   FilledButton.tonal(
                     key: const ValueKey('why-move-one'),
                     onPressed: () async {

@@ -833,7 +833,7 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('message overflow → "This is not a person" proposes a rule; Accept creates it and moves the sender', (tester) async {
+    testWidgets('an email\'s menu → "This is not a person" opens the "?"; "Always" moves the sender for good, and Undo puts it back', (tester) async {
       await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
@@ -843,17 +843,22 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('This is not a person'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('proposal-text')), findsOneWidget);
-      expect(find.text('Mail from sarah@x.com → Feed or Noise'), findsOneWidget);
-      await tester.tap(find.byKey(const ValueKey('proposal-accept')));
+      expect(find.byKey(const ValueKey('why-dialog')), findsOneWidget);
+      expect(find.text('Why this is in Chats'), findsOneWidget);
+      expect(find.byKey(const ValueKey('proposal-text')), findsNothing, reason: 'the old four-button pop-up is gone');
+      await tester.tap(find.byKey(const ValueKey('why-not-person')));
       await tester.pumpAndSettle();
-      expect((await db.loadRules()).single.describe(), 'Mail from sarah@x.com → Feed or Noise');
       expect((await contact('sarah@x.com')).classification, 'feeds');
-      expect((await contact('sarah@x.com')).classificationSource, 'rule');
+      expect((await contact('sarah@x.com')).classificationSource, 'override');
+      expect(await db.loadRules(), isEmpty, reason: 'a move, not a written rule');
+      expect(find.textContaining('moved to Feed or Noise'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect((await contact('sarah@x.com')).classification, 'people');
       await teardown(tester);
     });
 
-    testWidgets('"Just this once" changes only the message and writes no rule', (tester) async {
+    testWidgets('"This one is not from a person" changes only that email', (tester) async {
       await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
@@ -863,11 +868,39 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.textContaining('This is not a person'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('proposal-once')));
+      await tester.tap(find.byKey(const ValueKey('why-not-person-one')));
       await tester.pumpAndSettle();
       expect(await db.loadRules(), isEmpty);
       expect((await contact('sarah@x.com')).classification, 'people');
       expect((await db.messagesFromSender('sarah@x.com')).single.classification, 'feeds');
+      await teardown(tester);
+    });
+
+    testWidgets('a tag is set for just one email, or always for its sender: two choices, no rule pop-up', (tester) async {
+      final container = await pumpApp(tester);
+      container.read(destinationProvider.notifier).select(Destination.feed);
+      await tester.pumpAndSettle();
+      final shipped = (await db.messagesFromSender('noreply@shop.com')).firstWhere((m) => m.subject.contains('shipped'));
+      await tester.tap(find.byKey(ValueKey('mail-row-${shipped.id}')));
+      await tester.pumpAndSettle();
+      Future<void> tag(String name, Key choice) async {
+        await tester.tap(find.byTooltip('More').first);
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Change category…'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.widgetWithText(SimpleDialogOption, name));
+        await tester.pumpAndSettle();
+        expect(find.text('Tag as $name'), findsOneWidget);
+        await tester.tap(find.byKey(choice));
+        await tester.pumpAndSettle();
+      }
+
+      await tag('Receipt', const ValueKey('tag-once'));
+      expect((await db.messageById(shipped.id))!.feedsCategory, 'Receipt');
+      expect((await contact('noreply@shop.com')).feedsCategory, isNot('Receipt'), reason: 'only this email');
+      await tag('Travel', const ValueKey('tag-always'));
+      expect((await contact('noreply@shop.com')).feedsCategory, 'Travel');
+      expect(await db.loadRules(), isEmpty);
       await teardown(tester);
     });
   });

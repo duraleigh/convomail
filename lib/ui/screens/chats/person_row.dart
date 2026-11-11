@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/account_scope.dart';
+import '../../../app/mail_state.dart';
 import '../../../domain/piles.dart';
 import '../../../store/people_queries.dart';
 import '../../theme/tokens.dart';
@@ -224,6 +225,20 @@ class _PersonRowState extends ConsumerState<PersonRow> {
                                       style: text.titleMedium!.copyWith(fontWeight: unread ? FontWeight.w700 : FontWeight.w500, height: 1.2),
                                     ),
                                   ),
+                                  // A small pink dot when one of this person's emails
+                                  // is in Focus.
+                                  if (!row.onFeedsTab && ref.watch(focusRowKeysProvider).contains(row.rowKey)) ...[
+                                    const SizedBox(width: 8),
+                                    Tooltip(
+                                      message: 'Has an email in Focus',
+                                      child: Container(
+                                        key: ValueKey('focus-dot-${row.rowKey}'),
+                                        width: 8,
+                                        height: 8,
+                                        decoration: const BoxDecoration(color: Color(0xFFF48FB1), shape: BoxShape.circle),
+                                      ),
+                                    ),
+                                  ],
                                   // The category as a dot in its colour (the pills along
                                   // the top say which colour is which): no written tag
                                   // taking the name's room.

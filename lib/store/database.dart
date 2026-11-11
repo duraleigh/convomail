@@ -628,6 +628,13 @@ class HelperReadings extends Table {
   BoolColumn get answered => boolean().withDefault(const Constant(false))();
   DateTimeColumn get readAt => dateTime().nullable()();
 
+  /// This is an email the user sent (the reading says whether it asked for
+  /// something, for Waiting on).
+  BoolColumn get sent => boolean().withDefault(const Constant(false))();
+
+  /// For an email the user sent: it asked its recipient for something.
+  BoolColumn get asks => boolean().withDefault(const Constant(false))();
+
   @override
   Set<Column> get primaryKey => {messageId};
 }
@@ -686,7 +693,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 22;
+  int get schemaVersion => 23;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -848,6 +855,15 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           }
           if (from < 22) {
             await m.addColumn(messages, messages.laterUntil);
+          }
+          if (from < 23) {
+            if (from >= 21) {
+              await m.addColumn(helperReadings, helperReadings.sent);
+              await m.addColumn(helperReadings, helperReadings.asks);
+            }
+            // The helper now also sends the day's sentence and its readings
+            // of sent mail; an older version of the app let those go by.
+            if (from >= 20) await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
           }
         },
         beforeOpen: (details) async {

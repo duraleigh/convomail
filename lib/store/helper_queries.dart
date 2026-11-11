@@ -34,6 +34,10 @@ class HelperEntry {
 }
 
 int? _secs(DateTime? t) => t == null ? null : t.millisecondsSinceEpoch ~/ 1000;
+/// The setting that holds the sentence for the top of Today, as the
+/// helper last sent it.
+const kDaySentence = 'helper.day';
+
 DateTime? _time(Object? secs) => secs is num && secs > 0 ? DateTime.fromMillisecondsSinceEpoch(secs.toInt() * 1000) : null;
 
 /// The device's side of keeping in step with the helper: what waits to go
@@ -406,7 +410,13 @@ extension HelperQueries on AppDatabase {
           why: Value(jsonEncode(why is List ? [for (final w in why) if (w is String) w] : const <String>[])),
           answered: Value(data['answered'] == true),
           readAt: Value(_time(data['at'])),
+          sent: Value(data['sent'] == true),
+          asks: Value(data['asks'] == true),
         ));
+        return const {};
+      case 'day':
+        // The one sentence at the top of Today, with when it was written.
+        await putSetting(kDaySentence, deleted ? '' : jsonEncode({'text': data['text'], 'at': data['at'], 'after': data['after']}));
         return const {};
       default:
         // Things only this device tells the helper (own addresses, the

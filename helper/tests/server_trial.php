@@ -282,6 +282,11 @@ switch ($argv[1] ?? '') {
         echo 'cost of this pass: ' . $money($t['micro']) . ' | per email ' . $money((int) round($t['micro'] / max(1, $t['read'] + $t['failed']))) . ' | fresh input ' . $t['in'] . ' | kept-ready input ' . $t['cr'] . ' | stored-for-reuse input ' . $t['cw'] . ' | output ' . $t['out'] . "\n";
         break;
 
+    case 'setthreads':
+        $readings->setThreads(($argv[2] ?? '') === 'on');
+        echo 'earlier emails of a thread are ' . ($readings->threads() ? 'shown' : 'not shown') . " to the assistant\n";
+        break;
+
     case 'step4':
         $s4 = $db->one("SELECT COUNT(*) AS n, SUM(r.asks) AS asks FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE e.is_from_me = 1") ?? [];
         $mineAll = (int) $db->val('SELECT COUNT(*) FROM {emails} WHERE is_from_me = 1 AND gone = 0 AND at > ?', [$now - Readings::DAYS * 86400]);
@@ -290,6 +295,7 @@ switch ($argv[1] ?? '') {
         $dayItem = $store->item('day', 'today');
         echo 'the day\'s sentence: ' . ($dayItem === null ? 'not written yet' : (($dayItem['text'] ?? '') === '' ? 'empty (nothing below it)' : mb_strlen((string) $dayItem['text']) . ' characters') . ', written ' . ($now - (int) ($dayItem['at'] ?? 0)) . ' s ago, after ' . (int) ($dayItem['after'] ?? 0) . ' new emails') . "\n";
         $st = $readings->status();
+        echo 'earlier emails of a thread shown: ' . ($readings->threads() ? 'yes' : 'no') . "\n";
         echo 'need the owner now: ' . $st['focus'] . ' | past week: ' . $st['made7'] . ' lines made, ' . $st['fixed7'] . " corrected by the owner\n";
         foreach ($db->all("SELECT purpose, SUM(calls) AS calls, SUM(micro) AS micro FROM {spend} WHERE day LIKE ? GROUP BY purpose ORDER BY purpose", [gmdate('Y-m', $now + $readings->zone() * 60) . '-%']) as $r) {
             echo '  this month, ' . $r['purpose'] . ': ' . (int) $r['calls'] . ' readings, ' . $money((int) $r['micro']) . ((int) $r['calls'] > 0 ? ' (' . $money((int) round((int) $r['micro'] / (int) $r['calls'])) . ' each)' : '') . "\n";

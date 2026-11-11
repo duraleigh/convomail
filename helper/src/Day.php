@@ -11,13 +11,17 @@ namespace Precis;
  * knowing. Those lines are the assistant's own earlier readings (an ask, a
  * one-sentence summary, a name, a time). No email text is sent for it.
  *
- * It is rewritten when a line is added, finished, or comes due, and never
- * more often than every twenty minutes. Not on every email.
+ * It is rewritten when a line is added, finished, or comes due, never more
+ * often than every twenty minutes, and at most 24 times a day. Not on
+ * every email.
  */
 final class Day
 {
     /** The shortest time between two rewrites, in seconds. */
     public const EVERY = 1200;
+
+    /** The most rewrites in one day, however busy the day. */
+    public const A_DAY = 24;
 
     private const MAX_NEEDS = 12;
     private const MAX_FEED = 8;
@@ -96,6 +100,9 @@ final class Day
         if ($lines['needs'] === [] && $lines['feed'] === []) {
             $this->publish('', $lines['key'], $last);
             return true;
+        }
+        if ($this->readings->writtenToday('day') >= self::A_DAY) {
+            return false;
         }
         $model = $this->readings->model();
         try {

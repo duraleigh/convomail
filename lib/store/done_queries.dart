@@ -2,10 +2,15 @@ import 'package:drift/drift.dart';
 
 import '../domain/quoted_mail.dart';
 import 'database.dart';
+import 'mail_queries.dart';
 
 /// An email the user is waiting on an answer to.
 class WaitingItem {
-  const WaitingItem({required this.message, required this.rowKey, required this.name, required this.sentAt});
+  const WaitingItem({required this.message, required this.rowKey, required this.name, required this.sentAt, this.asked = ''});
+
+  /// What the user is waiting for, in a few words, when the assistant read
+  /// the email ("The signed contract."). Empty when the plain rule decided.
+  final String asked;
 
   /// The user's own email that has had no answer.
   final Message message;
@@ -61,7 +66,9 @@ extension DoneQueries on AppDatabase {
       '''
       SELECT x.*, (SELECT COALESCE(NULLIF(c.user_label, ''), NULLIF(c.display_name, ''), c.key) FROM contacts c WHERE c.key = substr(x.w_row, 3)) AS w_name
       FROM (
-      SELECT m.*, MIN(r.row_key) AS w_row
+      SELECT m.*, MIN(r.row_key) AS w_row,
+             (SELECT hr.asks FROM helper_readings hr WHERE hr.message_id = m.message_id AND hr.sent = 1) AS h_asks,
+             (SELECT hr.ask FROM helper_readings hr WHERE hr.message_id = m.message_id AND hr.sent = 1) AS h_ask
       FROM messages m
       JOIN message_row_assignments r ON r.message_id = m.id
       JOIN folders f ON f.id = m.folder_id
@@ -82,13 +89,24 @@ extension DoneQueries on AppDatabase {
       LIMIT 60
       ''',
       variables: [if (accountId != null) Variable.withInt(accountId), Variable.withInt(oldest), Variable.withInt(newest)],
-      readsFrom: {messages, messageRowAssignments, contacts, folders},
-    ).watch().map((rows) {
+      readsFrom: {messages, messageRowAssignments, contacts, folders, helperReadings, helperState, settings},
+    ).watch().asyncMap((rows) async {
+      // With the assistant on, its reading of the email decides whether the
+      // user asked for something; without one (or with it off), the plain
+      // rule does, as before.
+      final read = await readingsShown();
       final out = <WaitingItem>[];
       for (final r in rows) {
         final m = messages.map(r.data);
-        if (!_asks(m)) continue;
-        out.add(WaitingItem(message: m, rowKey: r.read<String>('w_row'), name: r.readNullable<String>('w_name') ?? '', sentAt: m.date ?? m.internalDate ?? at));
+        final said = read ? r.readNullable<bool>('h_asks') : null;
+        if (!(said ?? _asks(m))) continue;
+        out.add(WaitingItem(
+          message: m,
+          rowKey: r.read<String>('w_row'),
+          name: r.readNullable<String>('w_name') ?? '',
+          sentAt: m.date ?? m.internalDate ?? at,
+          asked: said == true ? (r.readNullable<String>('h_ask') ?? '') : '',
+        ));
       }
       return out;
     });

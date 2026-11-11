@@ -247,6 +247,35 @@ void main() {
       expect(await waiting(), ['{"later":${until.millisecondsSinceEpoch ~/ 1000}}', '{"focus":false}']);
     });
 
+    test('Waiting on: with the assistant on, its reading of what you sent decides; without one, the plain rule does', () async {
+      DateTime ago2({int days = 0}) => DateTime.now().subtract(Duration(days: days));
+      void sent(String to, String subject, String words, String id) =>
+          imap.folder('Sent').add(RemoteMessageHeader(uid: 0, from: me, to: [RemoteAddress(to)], subject: subject, messageId: id, date: ago2(days: 5), snippet: words));
+      // Three people the user has heard from, so they are people.
+      for (final p in ['ann', 'bob', 'cy']) {
+        got('$p@x.example', p, 'Hello', id: '<in-$p@x>', at: ago2(days: 12));
+      }
+      sent('ann@x.example', 'The contract', 'Please send the signed copy when you can.', '<s-ann@x>');
+      sent('bob@x.example', 'Thanks', 'Thanks, does that sound right?', '<s-bob@x>');
+      sent('cy@x.example', 'Price', 'What is the price?', '<s-cy@x>');
+      await sync();
+      Future<Map<String, String>> waiting() async => {for (final w in await db.watchWaitingOn().first) w.message.messageId!: w.asked};
+      // No assistant: the plain rule lists the two with a question mark.
+      expect((await waiting()).keys.toSet(), {'<s-bob@x>', '<s-cy@x>'});
+
+      await assistantOn();
+      // The assistant read two of them: Ann's does ask (with no question mark); Bob's does not.
+      await helperSays('read', '<s-ann@x>', {'line': 'You asked Ann to send the signed copy.', 'focus': false, 'ask': 'The signed copy.', 'why': <String>[], 'answered': false, 'at': 1, 'sent': true, 'asks': true});
+      await helperSays('read', '<s-bob@x>', {'line': 'You thanked Bob.', 'focus': false, 'ask': '', 'why': <String>[], 'answered': false, 'at': 1, 'sent': true, 'asks': false});
+      final w = await waiting();
+      expect(w.keys.toSet(), {'<s-ann@x>', '<s-cy@x>'}, reason: 'Ann by the reading, Cy by the plain rule (not read yet), Bob dropped by the reading');
+      expect(w['<s-ann@x>'], 'The signed copy.');
+      expect(w['<s-cy@x>'], '');
+      // Switched off: back to the plain rule alone.
+      await db.putSetting('helper.assistantOn', '0');
+      expect((await waiting()).keys.toSet(), {'<s-bob@x>', '<s-cy@x>'});
+    });
+
     test('what you set on another device arrives here too', () async {
       await assistantOn();
       await reading('<bank@x>', 'A payment failed.', focus: true, ask: 'Update the card.');
@@ -550,6 +579,67 @@ void main() {
       expect(find.text('FlashDeals'), findsNothing);
       final flash = await tester.runAsync(() async => (await db.watchOtherMail().first).where((i) => i.senderKey == 'deals@flash.example').map((i) => i.pile).toSet());
       expect(flash, {FeedsPile.feed});
+      await teardown(tester);
+    });
+
+    testWidgets('Today, in full: the sentence on top says when it was written; each Needs you line says what, why, who, by when, with Done and Later', (tester) async {
+      await tester.runAsync(filled);
+      final wrote = DateTime.now().subtract(const Duration(minutes: 5));
+      await tester.runAsync(() => helperSays('day', 'today', {'text': 'Renee needs your yes or no on Charlotte by tomorrow, and the bank payment failed.', 'at': wrote.millisecondsSinceEpoch ~/ 1000, 'after': 14}));
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      await pumpApp(tester, Destination.today);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'Renee needs your yes or no on Charlotte by tomorrow, and the bank payment failed.');
+      final when = tester.widget<Text>(find.byKey(const ValueKey('today-sentence-when'))).data!;
+      expect(when, startsWith('Written '));
+      expect(when, endsWith(', after 14 new emails'));
+      expect(tester.getTopLeft(find.byKey(const ValueKey('today-sentence'))).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('today-needs-you'))).dy), reason: 'above the cards');
+
+      // The line: what to do, why, who and which email, by when.
+      expect(find.text('Say yes or no to Charlotte, March 14.'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-why-${renee.id}'))).data, 'Renee needs your yes or no on Charlotte, March 14.');
+      expect(find.text('Renee Calloway · Re: Spring dates'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-by-${renee.id}'))).data, startsWith('by tomorrow'));
+      expect(find.textContaining('Draft'), findsNothing, reason: 'nothing is drafted');
+
+      // Later on the line: it moves down to Later.
+      await tester.tap(find.byKey(ValueKey('needs-later-${renee.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('snooze-Tomorrow morning')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('needs-${renee.id}')), findsNothing);
+      expect(find.byKey(ValueKey('later-mail-${renee.id}')), findsOneWidget);
+      // Done on the line.
+      final bank = (await tester.runAsync(() => message('<bank@x>')))!;
+      await tester.tap(find.byKey(ValueKey('needs-done-${bank.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('needs-${bank.id}')), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('with the assistant off there is no sentence; an empty one is not shown either', (tester) async {
+      await tester.runAsync(filled);
+      await tester.runAsync(() => helperSays('day', 'today', {'text': '', 'at': DateTime.now().millisecondsSinceEpoch ~/ 1000, 'after': 0}));
+      await pumpApp(tester, Destination.today);
+      expect(find.byKey(const ValueKey('today-sentence')), findsNothing);
+      await tester.runAsync(() => helperSays('day', 'today', {'text': 'Two things need you.', 'at': DateTime.now().millisecondsSinceEpoch ~/ 1000, 'after': 0}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-sentence')), findsOneWidget);
+      await tester.runAsync(() => db.putSetting('helper.assistantOn', '0'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-sentence')), findsNothing);
+      expect(find.byKey(const ValueKey('today-up-to-date')), findsNothing, reason: 'this check has no helper to be in step with');
+      await teardown(tester);
+    });
+
+    testWidgets('a person with an email in Focus gets a small pink dot on their row in Chats; it goes when the email is done', (tester) async {
+      await tester.runAsync(filled);
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      await pumpApp(tester, Destination.chats);
+      expect(find.byKey(const ValueKey('focus-dot-c:renee@booking.example')), findsOneWidget);
+      expect(find.byTooltip('Has an email in Focus'), findsOneWidget, reason: 'one person, one dot');
+      await tester.runAsync(() => db.setMessagesDone([renee.id], true));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('focus-dot-c:renee@booking.example')), findsNothing);
       await teardown(tester);
     });
 

@@ -17448,6 +17448,32 @@ class $HelperReadingsTable extends HelperReadings
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _sentMeta = const VerificationMeta('sent');
+  @override
+  late final GeneratedColumn<bool> sent = GeneratedColumn<bool>(
+    'sent',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("sent" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _asksMeta = const VerificationMeta('asks');
+  @override
+  late final GeneratedColumn<bool> asks = GeneratedColumn<bool>(
+    'asks',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("asks" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -17458,6 +17484,8 @@ class $HelperReadingsTable extends HelperReadings
     why,
     answered,
     readAt,
+    sent,
+    asks,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -17521,6 +17549,18 @@ class $HelperReadingsTable extends HelperReadings
         readAt.isAcceptableOrUnknown(data['read_at']!, _readAtMeta),
       );
     }
+    if (data.containsKey('sent')) {
+      context.handle(
+        _sentMeta,
+        sent.isAcceptableOrUnknown(data['sent']!, _sentMeta),
+      );
+    }
+    if (data.containsKey('asks')) {
+      context.handle(
+        _asksMeta,
+        asks.isAcceptableOrUnknown(data['asks']!, _asksMeta),
+      );
+    }
     return context;
   }
 
@@ -17562,6 +17602,14 @@ class $HelperReadingsTable extends HelperReadings
         DriftSqlType.dateTime,
         data['${effectivePrefix}read_at'],
       ),
+      sent: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}sent'],
+      )!,
+      asks: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}asks'],
+      )!,
     );
   }
 
@@ -17584,6 +17632,13 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
   /// The user has answered this email since.
   final bool answered;
   final DateTime? readAt;
+
+  /// This is an email the user sent (the reading says whether it asked for
+  /// something, for Waiting on).
+  final bool sent;
+
+  /// For an email the user sent: it asked its recipient for something.
+  final bool asks;
   const HelperReading({
     required this.messageId,
     required this.line,
@@ -17593,6 +17648,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     required this.why,
     required this.answered,
     this.readAt,
+    required this.sent,
+    required this.asks,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -17609,6 +17666,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     if (!nullToAbsent || readAt != null) {
       map['read_at'] = Variable<DateTime>(readAt);
     }
+    map['sent'] = Variable<bool>(sent);
+    map['asks'] = Variable<bool>(asks);
     return map;
   }
 
@@ -17624,6 +17683,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       readAt: readAt == null && nullToAbsent
           ? const Value.absent()
           : Value(readAt),
+      sent: Value(sent),
+      asks: Value(asks),
     );
   }
 
@@ -17641,6 +17702,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       why: serializer.fromJson<String>(json['why']),
       answered: serializer.fromJson<bool>(json['answered']),
       readAt: serializer.fromJson<DateTime?>(json['readAt']),
+      sent: serializer.fromJson<bool>(json['sent']),
+      asks: serializer.fromJson<bool>(json['asks']),
     );
   }
   @override
@@ -17655,6 +17718,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       'why': serializer.toJson<String>(why),
       'answered': serializer.toJson<bool>(answered),
       'readAt': serializer.toJson<DateTime?>(readAt),
+      'sent': serializer.toJson<bool>(sent),
+      'asks': serializer.toJson<bool>(asks),
     };
   }
 
@@ -17667,6 +17732,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     String? why,
     bool? answered,
     Value<DateTime?> readAt = const Value.absent(),
+    bool? sent,
+    bool? asks,
   }) => HelperReading(
     messageId: messageId ?? this.messageId,
     line: line ?? this.line,
@@ -17676,6 +17743,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     why: why ?? this.why,
     answered: answered ?? this.answered,
     readAt: readAt.present ? readAt.value : this.readAt,
+    sent: sent ?? this.sent,
+    asks: asks ?? this.asks,
   );
   HelperReading copyWithCompanion(HelperReadingsCompanion data) {
     return HelperReading(
@@ -17687,6 +17756,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       why: data.why.present ? data.why.value : this.why,
       answered: data.answered.present ? data.answered.value : this.answered,
       readAt: data.readAt.present ? data.readAt.value : this.readAt,
+      sent: data.sent.present ? data.sent.value : this.sent,
+      asks: data.asks.present ? data.asks.value : this.asks,
     );
   }
 
@@ -17700,14 +17771,26 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           ..write('due: $due, ')
           ..write('why: $why, ')
           ..write('answered: $answered, ')
-          ..write('readAt: $readAt')
+          ..write('readAt: $readAt, ')
+          ..write('sent: $sent, ')
+          ..write('asks: $asks')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(messageId, line, focus, ask, due, why, answered, readAt);
+  int get hashCode => Object.hash(
+    messageId,
+    line,
+    focus,
+    ask,
+    due,
+    why,
+    answered,
+    readAt,
+    sent,
+    asks,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -17719,7 +17802,9 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           other.due == this.due &&
           other.why == this.why &&
           other.answered == this.answered &&
-          other.readAt == this.readAt);
+          other.readAt == this.readAt &&
+          other.sent == this.sent &&
+          other.asks == this.asks);
 }
 
 class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
@@ -17731,6 +17816,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
   final Value<String> why;
   final Value<bool> answered;
   final Value<DateTime?> readAt;
+  final Value<bool> sent;
+  final Value<bool> asks;
   final Value<int> rowid;
   const HelperReadingsCompanion({
     this.messageId = const Value.absent(),
@@ -17741,6 +17828,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     this.why = const Value.absent(),
     this.answered = const Value.absent(),
     this.readAt = const Value.absent(),
+    this.sent = const Value.absent(),
+    this.asks = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HelperReadingsCompanion.insert({
@@ -17752,6 +17841,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     this.why = const Value.absent(),
     this.answered = const Value.absent(),
     this.readAt = const Value.absent(),
+    this.sent = const Value.absent(),
+    this.asks = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId);
   static Insertable<HelperReading> custom({
@@ -17763,6 +17854,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     Expression<String>? why,
     Expression<bool>? answered,
     Expression<DateTime>? readAt,
+    Expression<bool>? sent,
+    Expression<bool>? asks,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -17774,6 +17867,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
       if (why != null) 'why': why,
       if (answered != null) 'answered': answered,
       if (readAt != null) 'read_at': readAt,
+      if (sent != null) 'sent': sent,
+      if (asks != null) 'asks': asks,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -17787,6 +17882,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     Value<String>? why,
     Value<bool>? answered,
     Value<DateTime?>? readAt,
+    Value<bool>? sent,
+    Value<bool>? asks,
     Value<int>? rowid,
   }) {
     return HelperReadingsCompanion(
@@ -17798,6 +17895,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
       why: why ?? this.why,
       answered: answered ?? this.answered,
       readAt: readAt ?? this.readAt,
+      sent: sent ?? this.sent,
+      asks: asks ?? this.asks,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -17829,6 +17928,12 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     if (readAt.present) {
       map['read_at'] = Variable<DateTime>(readAt.value);
     }
+    if (sent.present) {
+      map['sent'] = Variable<bool>(sent.value);
+    }
+    if (asks.present) {
+      map['asks'] = Variable<bool>(asks.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -17846,6 +17951,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
           ..write('why: $why, ')
           ..write('answered: $answered, ')
           ..write('readAt: $readAt, ')
+          ..write('sent: $sent, ')
+          ..write('asks: $asks, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -29981,6 +30088,8 @@ typedef $$HelperReadingsTableCreateCompanionBuilder =
       Value<String> why,
       Value<bool> answered,
       Value<DateTime?> readAt,
+      Value<bool> sent,
+      Value<bool> asks,
       Value<int> rowid,
     });
 typedef $$HelperReadingsTableUpdateCompanionBuilder =
@@ -29993,6 +30102,8 @@ typedef $$HelperReadingsTableUpdateCompanionBuilder =
       Value<String> why,
       Value<bool> answered,
       Value<DateTime?> readAt,
+      Value<bool> sent,
+      Value<bool> asks,
       Value<int> rowid,
     });
 
@@ -30042,6 +30153,16 @@ class $$HelperReadingsTableFilterComposer
 
   ColumnFilters<DateTime> get readAt => $composableBuilder(
     column: $table.readAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get sent => $composableBuilder(
+    column: $table.sent,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get asks => $composableBuilder(
+    column: $table.asks,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -30094,6 +30215,16 @@ class $$HelperReadingsTableOrderingComposer
     column: $table.readAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get sent => $composableBuilder(
+    column: $table.sent,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get asks => $composableBuilder(
+    column: $table.asks,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HelperReadingsTableAnnotationComposer
@@ -30128,6 +30259,12 @@ class $$HelperReadingsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get readAt =>
       $composableBuilder(column: $table.readAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get sent =>
+      $composableBuilder(column: $table.sent, builder: (column) => column);
+
+  GeneratedColumn<bool> get asks =>
+      $composableBuilder(column: $table.asks, builder: (column) => column);
 }
 
 class $$HelperReadingsTableTableManager
@@ -30171,6 +30308,8 @@ class $$HelperReadingsTableTableManager
                 Value<String> why = const Value.absent(),
                 Value<bool> answered = const Value.absent(),
                 Value<DateTime?> readAt = const Value.absent(),
+                Value<bool> sent = const Value.absent(),
+                Value<bool> asks = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperReadingsCompanion(
                 messageId: messageId,
@@ -30181,6 +30320,8 @@ class $$HelperReadingsTableTableManager
                 why: why,
                 answered: answered,
                 readAt: readAt,
+                sent: sent,
+                asks: asks,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -30193,6 +30334,8 @@ class $$HelperReadingsTableTableManager
                 Value<String> why = const Value.absent(),
                 Value<bool> answered = const Value.absent(),
                 Value<DateTime?> readAt = const Value.absent(),
+                Value<bool> sent = const Value.absent(),
+                Value<bool> asks = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperReadingsCompanion.insert(
                 messageId: messageId,
@@ -30203,6 +30346,8 @@ class $$HelperReadingsTableTableManager
                 why: why,
                 answered: answered,
                 readAt: readAt,
+                sent: sent,
+                asks: asks,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

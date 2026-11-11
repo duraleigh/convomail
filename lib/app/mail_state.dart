@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/piles.dart';
@@ -41,6 +43,40 @@ final focusDoneTodayProvider = StreamProvider<List<MailItem>>((ref) => ref.watch
 
 /// One email as the lists see it, for the sentence and the "?" on it.
 final mailItemProvider = StreamProvider.family<MailItem?, int>((ref, id) => ref.watch(databaseProvider).watchMailItem(id));
+
+/// The row keys (people in Chats) that have an email in Focus right now:
+/// each gets a small pink dot on its row.
+final focusRowKeysProvider = Provider<Set<String>>((ref) => {for (final i in ref.watch(focusMailProvider).value ?? const <MailItem>[]) i.rowKey});
+
+/// The sentence at the top of Today, as the helper last wrote it.
+class DaySentence {
+  const DaySentence({required this.text, required this.at, this.after = 0});
+  final String text;
+  final DateTime at;
+
+  /// How many emails had come in since the sentence before it.
+  final int after;
+}
+
+final daySentenceProvider = StreamProvider<DaySentence?>((ref) {
+  final db = ref.watch(databaseProvider);
+  return db
+      .customSelect(
+        "SELECT (SELECT connected FROM helper_state WHERE id = 1) AS c, (SELECT value FROM settings WHERE key = 'helper.assistantOn') AS a, (SELECT value FROM settings WHERE key = 'helper.day') AS d",
+        readsFrom: {db.helperState, db.settings},
+      )
+      .watchSingle()
+      .map((r) {
+    if (r.data['c'] != 1 || r.data['a'] != '1') return null;
+    try {
+      final j = jsonDecode((r.data['d'] as String?) ?? '');
+      if (j is! Map || j['text'] is! String || (j['text'] as String).trim().isEmpty || j['at'] is! num) return null;
+      return DaySentence(text: (j['text'] as String).trim(), at: DateTime.fromMillisecondsSinceEpoch((j['at'] as num).toInt() * 1000), after: (j['after'] as num?)?.toInt() ?? 0);
+    } catch (_) {
+      return null;
+    }
+  });
+});
 
 /// Whether the assistant's readings are being shown at all.
 final readingsShownProvider = StreamProvider<bool>((ref) {

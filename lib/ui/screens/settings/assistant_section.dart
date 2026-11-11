@@ -202,6 +202,12 @@ class _AssistantDetailState extends ConsumerState<AssistantDetail> {
                 subtitle: Text('${(a['waiting'] as num?)?.toInt() ?? 0} waiting to be read · ${(a['focus'] as num?)?.toInt() ?? 0} need you now'),
               ),
               ListTile(
+                key: const ValueKey('assistant-corrected'),
+                leading: const Icon(Icons.rule_rounded),
+                title: Text('This past week you corrected ${(a['fixed7'] as num?)?.toInt() ?? 0} of the ${(a['made7'] as num?)?.toInt() ?? 0} lines it made'),
+                subtitle: const Text('A correction is Not Focus, This needs me, or moving an email between Feed and Noise. If this number is not small, the assistant is not doing its job.'),
+              ),
+              ListTile(
                 leading: const Icon(Icons.key_outlined),
                 title: const Text('The key'),
                 subtitle: Text('Kept locked on $host. To replace or remove it, open that page in your browser.'),
