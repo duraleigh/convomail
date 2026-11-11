@@ -20,8 +20,21 @@ final noiseMailProvider = Provider<List<MailItem>>((ref) => [
         if (i.pile == FeedsPile.noise) i,
     ]);
 
+/// Ticks every half minute. An email put off until a time comes back into
+/// Focus when the clock passes it, without anything else having to change.
+final focusClockProvider = StreamProvider<int>((ref) => Stream.periodic(const Duration(seconds: 30), (n) => n + 1));
+
 /// Focus: the emails that need the user.
-final focusMailProvider = StreamProvider<List<MailItem>>((ref) => ref.watch(databaseProvider).watchFocus(accountId: ref.watch(accountScopeProvider)));
+final focusMailProvider = StreamProvider<List<MailItem>>((ref) {
+  ref.watch(focusClockProvider);
+  return ref.watch(databaseProvider).watchFocus(accountId: ref.watch(accountScopeProvider));
+});
+
+/// Focus emails put off until later, soonest back first.
+final focusLaterProvider = StreamProvider<List<MailItem>>((ref) {
+  ref.watch(focusClockProvider);
+  return ref.watch(databaseProvider).watchFocusLater(accountId: ref.watch(accountScopeProvider));
+});
 
 /// Focus emails marked done today.
 final focusDoneTodayProvider = StreamProvider<List<MailItem>>((ref) => ref.watch(databaseProvider).watchFocusDoneToday(accountId: ref.watch(accountScopeProvider)));

@@ -92,7 +92,21 @@ extension HelperQueries on AppDatabase {
   /// or a tag renamed or removed. Nothing is noted when no helper is followed.
   Future<void> noteForHelper(String kind, String k, Map<String, Object?> data) async {
     if (!await helperConnected()) return;
-    await customStatement('INSERT OR IGNORE INTO helper_outbox (kind, k, data) VALUES (?, ?, ?)', [kind, k, jsonEncode(data)]);
+    await transaction(() async {
+      // A newer word on the same thing replaces an older one still waiting
+      // to go up, so the helper always ends on the user's last word.
+      final fields = data.keys.toSet();
+      for (final r in await customSelect('SELECT id, data FROM helper_outbox WHERE kind = ? AND k = ?', variables: [Variable.withString(kind), Variable.withString(k)]).get()) {
+        Object? old;
+        try {
+          old = jsonDecode(r.read<String>('data'));
+        } catch (_) {}
+        if (old is Map && old.keys.toSet().containsAll(fields) && old.length == fields.length) {
+          await customStatement('DELETE FROM helper_outbox WHERE id = ?', [r.read<int>('id')]);
+        }
+      }
+      await customStatement('INSERT OR IGNORE INTO helper_outbox (kind, k, data) VALUES (?, ?, ?)', [kind, k, jsonEncode(data)]);
+    });
   }
 
   /// Notes everything the helper keeps, for the first sending-up. Senders go
@@ -366,10 +380,11 @@ extension HelperQueries on AppDatabase {
         return const {};
       case 'msgfix':
         // What the user set on one email on another device: Focus or not,
-        // Feed or Noise. (Its place among Chats and Feed arrives as 'sort'.)
+        // put off until later, Feed or Noise. (Its place among Chats and Feed arrives as 'sort'.)
         if (deleted) return const {};
-        if (data.containsKey('focus') || data.containsKey('pile')) {
+        if (data.containsKey('focus') || data.containsKey('pile') || data.containsKey('later')) {
           await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(
+            laterUntil: data.containsKey('later') ? Value(_time(data['later'])) : const Value.absent(),
             focusFix: data.containsKey('focus') ? Value(data['focus'] == true ? 'yes' : (data['focus'] == false ? 'no' : null)) : const Value.absent(),
             pileFix: data.containsKey('pile') ? Value(data['pile'] == 'feed' || data['pile'] == 'noise' ? data['pile'] as String : null) : const Value.absent(),
           ));

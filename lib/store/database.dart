@@ -180,6 +180,10 @@ class Messages extends Table {
   /// Focus") or 'yes' (put in Focus by hand). Null leaves it to the assistant.
   TextColumn get focusFix => text().nullable()();
 
+  /// "Later": the user put this Focus email off until this time. It stays
+  /// out of Focus until then, and comes back by itself.
+  DateTimeColumn get laterUntil => dateTime().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
         {folderId, uid},
@@ -682,7 +686,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -841,6 +845,9 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             }
             await m.createTable(helperReadings);
             await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages (message_id)');
+          }
+          if (from < 22) {
+            await m.addColumn(messages, messages.laterUntil);
           }
         },
         beforeOpen: (details) async {

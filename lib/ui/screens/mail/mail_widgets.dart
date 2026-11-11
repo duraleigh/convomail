@@ -19,6 +19,7 @@ import '../../widgets/category_color.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/reading_line.dart';
 import '../../widgets/tonal_avatar.dart';
+import '../chats/later_dialogs.dart';
 import '../chats/people_list_pane.dart' show relativeTime;
 import '../chats/thread_view_panel.dart';
 import '../chats/timely_strip.dart' show TimelyCodePill;
@@ -168,7 +169,10 @@ String pluralTag(String tag) => switch (tag) {
 /// One email as a row: who on top, what underneath, when on the right.
 /// Nothing else, so a list reads at a glance.
 class MailRowTile extends StatelessWidget {
-  const MailRowTile({super.key, required this.item, required this.selected, required this.onTap, this.focus = false, this.onMenu, this.faded = false, this.code});
+  const MailRowTile({super.key, required this.item, required this.selected, required this.onTap, this.focus = false, this.onMenu, this.faded = false, this.code, this.note});
+
+  /// A few words under the time, in place of the "by" time ("back tomorrow 8:00 AM").
+  final String? note;
 
   /// A sign-in code from this sender that is still in date, offered for
   /// copying without opening the email.
@@ -186,7 +190,7 @@ class MailRowTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final due = focus ? item.reading?.due : null;
+    final due = focus && note == null ? item.reading?.due : null;
     final late = due != null && due.isBefore(DateTime.now());
     return Opacity(
       opacity: faded ? 0.55 : 1,
@@ -232,6 +236,18 @@ class MailRowTile extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: text.bodyMedium!.copyWith(color: item.unread && !faded ? scheme.onSurface : scheme.onSurfaceVariant),
                         ),
+                        // When it comes back, on a line of its own so it fits a narrow list.
+                        if (note != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              note!,
+                              key: ValueKey('mail-note-${item.id}'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: text.labelSmall!.copyWith(color: const Color(0xFFCE93D8), fontWeight: FontWeight.w700, letterSpacing: 0),
+                            ),
+                          ),
                         if (code != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 4),
@@ -253,7 +269,13 @@ class MailRowTile extends StatelessWidget {
                           style: text.labelSmall!.copyWith(color: late ? scheme.error : const Color(0xFFFFB74D), fontWeight: FontWeight.w700, letterSpacing: 0),
                         ),
                       ],
-                      if (faded) ...[const SizedBox(height: 3), Icon(Icons.check_rounded, size: 16, color: scheme.primary)],
+                      if (note != null) ...[
+                        const SizedBox(height: 3),
+                        const Icon(Icons.snooze_rounded, size: 16, color: Color(0xFFCE93D8)),
+                      ] else if (faded) ...[
+                        const SizedBox(height: 3),
+                        Icon(Icons.check_rounded, size: 16, color: scheme.primary),
+                      ],
                     ],
                   ),
                 ],
@@ -270,10 +292,13 @@ class MailRowTile extends StatelessWidget {
 /// the row shows two buttons at its right end, Done and Not Focus; swiping
 /// it right is Done, swiping it left is Not Focus.
 class QuickActions extends StatefulWidget {
-  const QuickActions({super.key, required this.id, required this.child, required this.onDone, required this.onIgnore});
+  const QuickActions({super.key, required this.id, required this.child, required this.onDone, required this.onIgnore, this.onLater});
   final int id;
   final Widget child;
   final VoidCallback onDone;
+
+  /// "Later": put it off until a time the user picks.
+  final VoidCallback? onLater;
 
   /// "Not Focus": this one did not need the user.
   final VoidCallback onIgnore;
@@ -329,6 +354,8 @@ class _QuickActionsState extends State<QuickActions> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           IconButton(key: ValueKey('quick-done-${widget.id}'), tooltip: 'Done', visualDensity: VisualDensity.compact, icon: const Icon(Icons.check_rounded, size: 20), onPressed: widget.onDone),
+                          if (widget.onLater != null)
+                            IconButton(key: ValueKey('quick-later-${widget.id}'), tooltip: 'Later: bring it back at a time I pick', visualDensity: VisualDensity.compact, icon: const Icon(Icons.snooze_rounded, size: 20), onPressed: widget.onLater),
                           IconButton(
                             key: ValueKey('quick-ignore-${widget.id}'),
                             tooltip: 'Not Focus: this did not need me',
@@ -349,6 +376,29 @@ class _QuickActionsState extends State<QuickActions> {
   }
 }
 
+/// "Later" on a Focus email: asks until when (the same choices Chats
+/// offers), takes it out of Focus until then, and offers Undo. Picking
+/// "Bring it back now" on one already put off returns it at once.
+Future<void> putOffFocusMail(BuildContext context, WidgetRef ref, MailItem item) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final db = ref.read(databaseProvider);
+  final was = item.laterUntil;
+  final already = item.putOffAt(DateTime.now());
+  final until = await showSnoozePicker(context, currentlySnoozedUntil: already ? was : null);
+  if (until == null) return;
+  final back = until == SnoozeChoice.unsnooze;
+  await db.setLaterUntil(item.id, back ? null : until);
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(SnackBar(
+    persist: false,
+    duration: const Duration(seconds: 8),
+    content: Text(back ? 'Back in Focus.' : 'Put off until ${describeSnooze(until)}. It comes back to Focus then.', maxLines: 1, overflow: TextOverflow.ellipsis),
+    behavior: SnackBarBehavior.floating,
+    width: 460,
+    action: SnackBarAction(label: 'Undo', onPressed: () => db.setLaterUntil(item.id, already ? was : null)),
+  ));
+}
+
 /// Opens an email beside its list: its words are shown, and it counts as read.
 void openMail(WidgetRef ref, MailItem item) {
   ref.read(expandedMessagesProvider.notifier).expand(item.id);
@@ -365,7 +415,8 @@ Future<void> showMailMenu(BuildContext context, WidgetRef ref, MailItem item, Of
     position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
     items: [
       PopupMenuItem(value: 'done', child: Text(item.doneAt == null ? 'Done' : 'Not done')),
-      if (item.inFocus) const PopupMenuItem(value: 'notfocus', child: Text('Not Focus')) else if (item.doneAt == null) const PopupMenuItem(value: 'focus', child: Text('This needs me')),
+      if (item.needsYou) PopupMenuItem(value: 'later', child: Text(item.putOffAt(DateTime.now()) ? 'Later: change or bring back…' : 'Later…')),
+      if (item.needsYou) const PopupMenuItem(value: 'notfocus', child: Text('Not Focus')) else if (item.doneAt == null) const PopupMenuItem(value: 'focus', child: Text('This needs me')),
       if (!item.person) ...[
         PopupMenuItem(value: 'one', child: Text('Move this one to $otherName')),
         PopupMenuItem(value: 'sender', child: Text('Always $otherName for this sender')),
@@ -378,6 +429,8 @@ Future<void> showMailMenu(BuildContext context, WidgetRef ref, MailItem item, Of
   switch (picked) {
     case 'done':
       await db.setMessagesDone([item.id], item.doneAt == null);
+    case 'later':
+      if (context.mounted) await putOffFocusMail(context, ref, item);
     case 'notfocus':
       await db.setFocusFix(item.id, false);
     case 'focus':
@@ -428,6 +481,16 @@ class MailEmailPane extends ConsumerWidget {
               )
             else
               TextButton(key: const ValueKey('mail-undone'), onPressed: () => db.setMessagesDone([item.id], false), child: const Text('Not done')),
+            // Later, beside Done, on an email that needs the user.
+            if (item.needsYou) ...[
+              const SizedBox(width: 8),
+              FilledButton.tonalIcon(
+                key: const ValueKey('mail-later'),
+                onPressed: () => putOffFocusMail(context, ref, item),
+                icon: const Icon(Icons.snooze_rounded, size: 18),
+                label: Text(item.putOffAt(DateTime.now()) ? 'Back ${describeSnooze(item.laterUntil!)}' : 'Later'),
+              ),
+            ],
             const SizedBox(width: 4),
             // Answering happens in the chat, where the reply box and the
             // whole history with this person are.

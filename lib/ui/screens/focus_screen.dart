@@ -6,6 +6,7 @@ import '../../store/database.dart';
 import '../../store/done_queries.dart';
 import '../../store/mail_queries.dart';
 import '../widgets/empty_state.dart';
+import 'chats/later_dialogs.dart' show describeSnooze;
 import 'mail/mail_widgets.dart';
 
 /// Focus: every email that needs the user, as a list of emails (not of
@@ -32,10 +33,11 @@ class FocusScreen extends ConsumerWidget {
         if (!dealt.contains(i.id)) i,
     ];
     final done = ref.watch(focusDoneTodayProvider).value ?? const <MailItem>[];
+    final later = ref.watch(focusLaterProvider).value ?? const <MailItem>[];
     final openId = ref.watch(openMailProvider('focus'));
-    final open = [...items, ...done].where((i) => i.id == openId).firstOrNull;
+    final open = [...items, ...later, ...done].where((i) => i.id == openId).firstOrNull;
 
-    if (!shown && items.isEmpty) {
+    if (!shown && items.isEmpty && later.isEmpty) {
       return const Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -106,8 +108,24 @@ class FocusScreen extends ConsumerWidget {
             key: ValueKey('quick-row-${i.id}'),
             id: i.id,
             onDone: () => deal(i, done: true),
+            onLater: () => putOffFocusMail(context, ref, i),
             onIgnore: () => deal(i, done: false),
             child: MailRowTile(item: i, focus: true, selected: i.id == openId, onTap: () => tap(i), onMenu: (at) => showMailMenu(context, ref, i, at)),
+          ),
+      ],
+      // Put off until a time: out of the way, but findable, and each one
+      // says when it comes back.
+      if (later.isNotEmpty) ...[
+        MailGroupLabel(label: 'Later', count: later.length),
+        for (final i in later)
+          MailRowTile(
+            item: i,
+            focus: true,
+            faded: true,
+            note: 'back ${describeSnooze(i.laterUntil!)}',
+            selected: i.id == openId,
+            onTap: () => tap(i),
+            onMenu: (at) => showMailMenu(context, ref, i, at),
           ),
       ],
       if (done.isNotEmpty) ...[

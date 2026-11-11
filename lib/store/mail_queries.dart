@@ -56,6 +56,7 @@ class MailItem {
     this.focusFix,
     this.senderChosen,
     this.countsTowardUnread = false,
+    this.laterUntil,
   });
 
   final int id;
@@ -92,9 +93,19 @@ class MailItem {
   /// The user asked for this sender's mail to count as unread on the app's icon.
   final bool countsTowardUnread;
 
-  /// Whether this email is in Focus: the user said so, or the assistant
-  /// did and the user has not answered it or said otherwise.
-  bool get inFocus => doneAt == null && (focusFix == 'yes' || (focusFix != 'no' && reading != null && reading!.focus && !reading!.answered && (person || pile != FeedsPile.noise)));
+  /// "Later": put off by the user until this time.
+  final DateTime? laterUntil;
+
+  /// Whether this email needs the user: they said so, or the assistant did
+  /// and the user has not answered it or said otherwise.
+  bool get needsYou => doneAt == null && (focusFix == 'yes' || (focusFix != 'no' && reading != null && reading!.focus && !reading!.answered && (person || pile != FeedsPile.noise)));
+
+  /// Whether the user has put this email off and its time has not come yet.
+  bool putOffAt(DateTime now) => laterUntil != null && laterUntil!.isAfter(now);
+
+  /// Whether this email is in Focus right now: it needs the user and is
+  /// not put off until later.
+  bool get inFocus => needsYou && !putOffAt(DateTime.now());
 
   /// The second line of a row: the assistant's sentence, else the subject.
   String get line => (reading?.line.isNotEmpty ?? false) ? reading!.line : (subject.isEmpty ? '(no subject)' : subject);
@@ -106,7 +117,7 @@ class MailItem {
 extension MailQueries on AppDatabase {
   static const _select = '''
     SELECT m.id, m.account_id, m.message_id, m.thread_key, m.subject, m.is_seen, m.classification, m.provider_category, m.done_at,
-           m.from_contact_key, m.from_name, m.from_address, m.pile_fix, m.focus_fix,
+           m.from_contact_key, m.from_name, m.from_address, m.pile_fix, m.focus_fix, m.later_until,
            COALESCE(m.date, m.internal_date) AS ts,
            COALESCE(NULLIF(c.user_label, ''), NULLIF(c.display_name, ''), NULLIF(m.from_name, ''), m.from_address) AS who,
            c.feeds_pile AS chosen, COALESCE(m.feeds_category, c.feeds_category) AS tag, c.class_reasons AS sender_why, c.counts_toward_unread AS counts,
@@ -178,6 +189,7 @@ extension MailQueries on AppDatabase {
       doneAt: t('done_at'),
       senderWhy: r.readNullable<String>('sender_why') ?? '',
       focusFix: r.readNullable<String>('focus_fix'),
+      laterUntil: t('later_until'),
       senderChosen: FeedsPile.parse(r.readNullable<String>('chosen')),
       countsTowardUnread: r.readNullable<bool>('counts') ?? false,
     );
@@ -214,6 +226,26 @@ extension MailQueries on AppDatabase {
             for (final i in items)
               if (i.inFocus) i,
           ]);
+
+  /// Focus emails the user put off until later, soonest back first.
+  Stream<List<MailItem>> watchFocusLater({int? accountId}) => _watchMail('AND m.later_until IS NOT NULL AND m.done_at IS NULL', const [], accountId: accountId, limit: 200).map((items) {
+        final now = DateTime.now();
+        return [
+          for (final i in items)
+            if (i.needsYou && i.putOffAt(now)) i,
+        ]..sort((a, b) => a.laterUntil!.compareTo(b.laterUntil!));
+      });
+
+  /// "Later" on a Focus email: it leaves Focus until [until] and then comes
+  /// back by itself. Null brings it back now. Told to the helper too, so
+  /// every device agrees.
+  Future<void> setLaterUntil(int id, DateTime? until) async {
+    final m = await (select(messages)..where((t) => t.id.equals(id))).getSingleOrNull();
+    if (m == null) return;
+    await (update(messages)..where((t) => t.id.equals(id))).write(MessagesCompanion(laterUntil: Value(until)));
+    final mid = m.messageId;
+    if (mid != null && mid.isNotEmpty) await noteForHelper('msgfix', mid, {'later': until == null ? null : until.millisecondsSinceEpoch ~/ 1000});
+  }
 
   /// Focus emails marked done today, newest first.
   Stream<List<MailItem>> watchFocusDoneToday({int? accountId, DateTime? day}) {

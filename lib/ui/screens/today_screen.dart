@@ -510,14 +510,41 @@ class _Later extends ConsumerWidget {
     final text = Theme.of(context).textTheme;
     final rows = ref.watch(laterRowsProvider).value ?? const <LaterRow>[];
     final reminders = ref.watch(openRemindersProvider).value ?? const <Reminder>[];
+    final mail = ref.watch(focusLaterProvider).value ?? const <MailItem>[];
     return _Section(
       id: 'later',
       icon: Icons.snooze_rounded,
       color: const Color(0xFFCE93D8),
       title: 'Later',
-      count: rows.length + reminders.length,
-      empty: 'Nothing put off. Use Later on a chat, or Remind me on a thread.',
+      count: rows.length + reminders.length + mail.length,
+      empty: 'Nothing put off. Use Later on a Focus email or a chat, or Remind me on a thread.',
       children: [
+        for (final i in mail)
+          InkWell(
+            key: ValueKey('later-mail-${i.id}'),
+            onTap: () {
+              ref.read(openMailProvider('focus').notifier).open(i.id);
+              openMail(ref, i);
+              ref.read(destinationProvider.notifier).select(Destination.focus);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(i.ask, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
+                        Text('${i.senderName} · back ${describeSnooze(i.laterUntil!)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  TextButton(key: ValueKey('later-mail-back-${i.id}'), onPressed: () => ref.read(databaseProvider).setLaterUntil(i.id, null), child: const Text('Bring back now')),
+                ],
+              ),
+            ),
+          ),
         for (final r in rows)
           InkWell(
             key: ValueKey('later-row-${r.rowKey}'),

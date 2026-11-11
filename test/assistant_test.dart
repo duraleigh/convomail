@@ -197,6 +197,56 @@ void main() {
       expect(await focus(), ['<daily-1@x>']);
     });
 
+    test('Later: a Focus email put off until a time is out of Focus until then, and comes back by itself', () async {
+      await assistantOn();
+      await reading('<renee@x>', 'Renee needs your yes or no.', focus: true, ask: 'Say yes or no.');
+      await reading('<bank@x>', 'A payment failed.', focus: true, ask: 'Update the card.');
+      Future<List<String>> focus() async => [for (final i in await db.watchFocus().first) i.messageId!];
+      Future<List<String>> later() async => [for (final i in await db.watchFocusLater().first) i.messageId!];
+      final renee = await message('<renee@x>');
+      final until = DateTime.now().add(const Duration(hours: 5));
+      await db.setLaterUntil(renee.id, until);
+      expect(await focus(), ['<bank@x>']);
+      expect(await later(), ['<renee@x>']);
+      expect((await db.watchFocusLater().first).single.laterUntil!.difference(until).inSeconds.abs(), lessThan(2));
+      expect((await db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'msgfix' AND k = '<renee@x>'").get()).single.read<String>('data'), contains('"later":${until.millisecondsSinceEpoch ~/ 1000}'));
+
+      // Its time has come: it is in Focus again, with nothing else changed.
+      await db.setLaterUntil(renee.id, DateTime.now().subtract(const Duration(minutes: 1)));
+      expect(await focus(), ['<renee@x>', '<bank@x>']);
+      expect(await later(), isEmpty);
+
+      // Put off, then brought back by hand.
+      await db.setLaterUntil(renee.id, until);
+      await db.setLaterUntil(renee.id, null);
+      expect(await focus(), ['<renee@x>', '<bank@x>']);
+      // Done while put off: it is finished, not waiting to come back.
+      await db.setLaterUntil(renee.id, until);
+      await db.setMessagesDone([renee.id], true);
+      expect(await later(), isEmpty);
+      // Put off on another device: it is out of Focus here too.
+      await helperSays('msgfix', '<bank@x>', {'later': until.millisecondsSinceEpoch ~/ 1000});
+      expect(await focus(), isEmpty);
+      expect(await later(), ['<bank@x>']);
+    });
+
+    test('the helper is told your last word, whatever came before it', () async {
+      await assistantOn();
+      final renee = await message('<renee@x>');
+      final until = DateTime(2030, 1, 1, 8);
+      Future<List<String>> waiting() async => [for (final r in await db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'msgfix' AND k = '<renee@x>' ORDER BY id").get()) r.read<String>('data')];
+      // Later, Undo, Later again at the same time, before anything was sent.
+      await db.setLaterUntil(renee.id, until);
+      await db.setLaterUntil(renee.id, null);
+      await db.setLaterUntil(renee.id, until);
+      expect(await waiting(), ['{"later":${until.millisecondsSinceEpoch ~/ 1000}}']);
+      // Not Focus, Undo, Not Focus: the same. And one kind of word does not push out another.
+      await db.setFocusFix(renee.id, false);
+      await db.setFocusFix(renee.id, null);
+      await db.setFocusFix(renee.id, false);
+      expect(await waiting(), ['{"later":${until.millisecondsSinceEpoch ~/ 1000}}', '{"focus":false}']);
+    });
+
     test('what you set on another device arrives here too', () async {
       await assistantOn();
       await reading('<bank@x>', 'A payment failed.', focus: true, ask: 'Update the card.');
@@ -379,6 +429,61 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.textContaining('Nothing needs you'), findsOneWidget);
       expect((await tester.runAsync(() => message('<renee@x>')))!.doneAt, isNotNull);
+      await teardown(tester);
+    });
+
+    testWidgets('Later on a Focus row: pick a time, it leaves Focus, shows under Later, and can be brought back', (tester) async {
+      await tester.runAsync(filled);
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      final container = await pumpApp(tester, Destination.focus);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.byKey(ValueKey('mail-row-${renee.id}'))));
+      await tester.pumpAndSettle();
+      // Three buttons on the row: Done, Later, Not Focus.
+      expect(find.byKey(ValueKey('quick-done-${renee.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('quick-ignore-${renee.id}')), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey('quick-later-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(find.text('Later, until'), findsOneWidget, reason: 'the same choices Later offers in Chats');
+      await tester.tap(find.byKey(const ValueKey('snooze-Tomorrow morning')));
+      await tester.pumpAndSettle();
+      await mouse.moveTo(const Offset(1400, 900));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('1 email needs you'), findsOneWidget);
+      expect(find.textContaining('Put off until tomorrow 8:00 AM'), findsOneWidget);
+      expect(find.text('Later'), findsOneWidget, reason: 'its own group at the bottom of Focus');
+      expect(tester.widget<Text>(find.byKey(ValueKey('mail-note-${renee.id}'))).data, 'back tomorrow 8:00 AM');
+      expect(find.descendant(of: find.byKey(const ValueKey('focus-badge')), matching: find.text('1')), findsWidgets, reason: 'the count on the rail goes down');
+      expect(container.read(openMailProvider('focus')), isNull, reason: 'nothing was opened');
+
+      // Today lists it under Later, and brings it back with one press.
+      container.read(destinationProvider.notifier).select(Destination.today);
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('later-mail-${renee.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('needs-${renee.id}')), findsNothing, reason: 'not under Needs you while it is put off');
+      await tester.tap(find.byKey(ValueKey('later-mail-back-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('needs-${renee.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('later-mail-${renee.id}')), findsNothing);
+
+      // On the open email, Later sits beside Done; Undo takes it back.
+      container.read(destinationProvider.notifier).select(Destination.focus);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(ValueKey('mail-row-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('mail-done')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('mail-later')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('snooze-Next Monday')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('1 email needs you'), findsOneWidget);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('2 emails need you'), findsOneWidget);
+      expect((await tester.runAsync(() => message('<renee@x>')))!.laterUntil, isNull);
       await teardown(tester);
     });
 

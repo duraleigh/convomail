@@ -3192,6 +3192,17 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _laterUntilMeta = const VerificationMeta(
+    'laterUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> laterUntil = GeneratedColumn<DateTime>(
+    'later_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3233,6 +3244,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     doneAt,
     pileFix,
     focusFix,
+    laterUntil,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3528,6 +3540,12 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         focusFix.isAcceptableOrUnknown(data['focus_fix']!, _focusFixMeta),
       );
     }
+    if (data.containsKey('later_until')) {
+      context.handle(
+        _laterUntilMeta,
+        laterUntil.isAcceptableOrUnknown(data['later_until']!, _laterUntilMeta),
+      );
+    }
     return context;
   }
 
@@ -3697,6 +3715,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.string,
         data['${effectivePrefix}focus_fix'],
       ),
+      laterUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}later_until'],
+      ),
     );
   }
 
@@ -3785,6 +3807,10 @@ class Message extends DataClass implements Insertable<Message> {
   /// The user's own word on whether this email needs them: 'no' ("Not
   /// Focus") or 'yes' (put in Focus by hand). Null leaves it to the assistant.
   final String? focusFix;
+
+  /// "Later": the user put this Focus email off until this time. It stays
+  /// out of Focus until then, and comes back by itself.
+  final DateTime? laterUntil;
   const Message({
     required this.id,
     required this.accountId,
@@ -3825,6 +3851,7 @@ class Message extends DataClass implements Insertable<Message> {
     this.doneAt,
     this.pileFix,
     this.focusFix,
+    this.laterUntil,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3906,6 +3933,9 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || focusFix != null) {
       map['focus_fix'] = Variable<String>(focusFix);
     }
+    if (!nullToAbsent || laterUntil != null) {
+      map['later_until'] = Variable<DateTime>(laterUntil);
+    }
     return map;
   }
 
@@ -3986,6 +4016,9 @@ class Message extends DataClass implements Insertable<Message> {
       focusFix: focusFix == null && nullToAbsent
           ? const Value.absent()
           : Value(focusFix),
+      laterUntil: laterUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(laterUntil),
     );
   }
 
@@ -4034,6 +4067,7 @@ class Message extends DataClass implements Insertable<Message> {
       doneAt: serializer.fromJson<DateTime?>(json['doneAt']),
       pileFix: serializer.fromJson<String?>(json['pileFix']),
       focusFix: serializer.fromJson<String?>(json['focusFix']),
+      laterUntil: serializer.fromJson<DateTime?>(json['laterUntil']),
     );
   }
   @override
@@ -4079,6 +4113,7 @@ class Message extends DataClass implements Insertable<Message> {
       'doneAt': serializer.toJson<DateTime?>(doneAt),
       'pileFix': serializer.toJson<String?>(pileFix),
       'focusFix': serializer.toJson<String?>(focusFix),
+      'laterUntil': serializer.toJson<DateTime?>(laterUntil),
     };
   }
 
@@ -4122,6 +4157,7 @@ class Message extends DataClass implements Insertable<Message> {
     Value<DateTime?> doneAt = const Value.absent(),
     Value<String?> pileFix = const Value.absent(),
     Value<String?> focusFix = const Value.absent(),
+    Value<DateTime?> laterUntil = const Value.absent(),
   }) => Message(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -4174,6 +4210,7 @@ class Message extends DataClass implements Insertable<Message> {
     doneAt: doneAt.present ? doneAt.value : this.doneAt,
     pileFix: pileFix.present ? pileFix.value : this.pileFix,
     focusFix: focusFix.present ? focusFix.value : this.focusFix,
+    laterUntil: laterUntil.present ? laterUntil.value : this.laterUntil,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -4248,6 +4285,9 @@ class Message extends DataClass implements Insertable<Message> {
       doneAt: data.doneAt.present ? data.doneAt.value : this.doneAt,
       pileFix: data.pileFix.present ? data.pileFix.value : this.pileFix,
       focusFix: data.focusFix.present ? data.focusFix.value : this.focusFix,
+      laterUntil: data.laterUntil.present
+          ? data.laterUntil.value
+          : this.laterUntil,
     );
   }
 
@@ -4292,7 +4332,8 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('extractedAt: $extractedAt, ')
           ..write('doneAt: $doneAt, ')
           ..write('pileFix: $pileFix, ')
-          ..write('focusFix: $focusFix')
+          ..write('focusFix: $focusFix, ')
+          ..write('laterUntil: $laterUntil')
           ..write(')'))
         .toString();
   }
@@ -4338,6 +4379,7 @@ class Message extends DataClass implements Insertable<Message> {
     doneAt,
     pileFix,
     focusFix,
+    laterUntil,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4381,7 +4423,8 @@ class Message extends DataClass implements Insertable<Message> {
           other.extractedAt == this.extractedAt &&
           other.doneAt == this.doneAt &&
           other.pileFix == this.pileFix &&
-          other.focusFix == this.focusFix);
+          other.focusFix == this.focusFix &&
+          other.laterUntil == this.laterUntil);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -4424,6 +4467,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<DateTime?> doneAt;
   final Value<String?> pileFix;
   final Value<String?> focusFix;
+  final Value<DateTime?> laterUntil;
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -4464,6 +4508,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.doneAt = const Value.absent(),
     this.pileFix = const Value.absent(),
     this.focusFix = const Value.absent(),
+    this.laterUntil = const Value.absent(),
   });
   MessagesCompanion.insert({
     this.id = const Value.absent(),
@@ -4505,6 +4550,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.doneAt = const Value.absent(),
     this.pileFix = const Value.absent(),
     this.focusFix = const Value.absent(),
+    this.laterUntil = const Value.absent(),
   }) : accountId = Value(accountId),
        folderId = Value(folderId),
        uid = Value(uid);
@@ -4548,6 +4594,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<DateTime>? doneAt,
     Expression<String>? pileFix,
     Expression<String>? focusFix,
+    Expression<DateTime>? laterUntil,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4589,6 +4636,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (doneAt != null) 'done_at': doneAt,
       if (pileFix != null) 'pile_fix': pileFix,
       if (focusFix != null) 'focus_fix': focusFix,
+      if (laterUntil != null) 'later_until': laterUntil,
     });
   }
 
@@ -4632,6 +4680,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<DateTime?>? doneAt,
     Value<String?>? pileFix,
     Value<String?>? focusFix,
+    Value<DateTime?>? laterUntil,
   }) {
     return MessagesCompanion(
       id: id ?? this.id,
@@ -4673,6 +4722,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       doneAt: doneAt ?? this.doneAt,
       pileFix: pileFix ?? this.pileFix,
       focusFix: focusFix ?? this.focusFix,
+      laterUntil: laterUntil ?? this.laterUntil,
     );
   }
 
@@ -4796,6 +4846,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (focusFix.present) {
       map['focus_fix'] = Variable<String>(focusFix.value);
     }
+    if (laterUntil.present) {
+      map['later_until'] = Variable<DateTime>(laterUntil.value);
+    }
     return map;
   }
 
@@ -4840,7 +4893,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('extractedAt: $extractedAt, ')
           ..write('doneAt: $doneAt, ')
           ..write('pileFix: $pileFix, ')
-          ..write('focusFix: $focusFix')
+          ..write('focusFix: $focusFix, ')
+          ..write('laterUntil: $laterUntil')
           ..write(')'))
         .toString();
   }
@@ -20020,6 +20074,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<DateTime?> doneAt,
   Value<String?> pileFix,
   Value<String?> focusFix,
+  Value<DateTime?> laterUntil,
 });
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
@@ -20061,6 +20116,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<DateTime?> doneAt,
   Value<String?> pileFix,
   Value<String?> focusFix,
+  Value<DateTime?> laterUntil,
 });
 
 final class $$MessagesTableReferences
@@ -20396,6 +20452,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get focusFix => $composableBuilder(
     column: $table.focusFix,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20766,6 +20827,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$AccountsTableOrderingComposer get accountId {
     final $$AccountsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -20964,6 +21030,11 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get focusFix =>
       $composableBuilder(column: $table.focusFix, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => column,
+  );
 
   $$AccountsTableAnnotationComposer get accountId {
     final $$AccountsTableAnnotationComposer composer = $composerBuilder(
@@ -21214,6 +21285,7 @@ class $$MessagesTableTableManager
                 Value<DateTime?> doneAt = const Value.absent(),
                 Value<String?> pileFix = const Value.absent(),
                 Value<String?> focusFix = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
               }) => MessagesCompanion(
                 id: id,
                 accountId: accountId,
@@ -21254,6 +21326,7 @@ class $$MessagesTableTableManager
                 doneAt: doneAt,
                 pileFix: pileFix,
                 focusFix: focusFix,
+                laterUntil: laterUntil,
               ),
           createCompanionCallback:
               ({
@@ -21296,6 +21369,7 @@ class $$MessagesTableTableManager
                 Value<DateTime?> doneAt = const Value.absent(),
                 Value<String?> pileFix = const Value.absent(),
                 Value<String?> focusFix = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
               }) => MessagesCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -21336,6 +21410,7 @@ class $$MessagesTableTableManager
                 doneAt: doneAt,
                 pileFix: pileFix,
                 focusFix: focusFix,
+                laterUntil: laterUntil,
               ),
           withReferenceMapper: (p0) => p0
               .map(
