@@ -1,0 +1,53 @@
+#!/bin/sh
+# Talks to the hosting account that runs the Précis helper, with the
+# helper's own access key (never a password).
+#
+#   tool/helper_remote.sh check           is the key let in? what does the server have?
+#   tool/helper_remote.sh install         put the helper's program in place (or update it)
+#   tool/helper_remote.sh webroot DIR     put the small index.php and .htaccess in the web folder DIR
+#   tool/helper_remote.sh servercheck     prove the helper's storage on the live kind of database
+#   tool/helper_remote.sh run 'COMMAND'   run one command there
+#
+# The helper lives in ~/precis-helper, outside any web folder. Its private
+# files (config, sealing key, lock) are in ~/precis-helper/data and are never
+# copied from here or to here.
+set -eu
+
+HOST="${PRECIS_SSH_HOST:-76.13.207.102}"
+PORT="${PRECIS_SSH_PORT:-65002}"
+USER_AT="${PRECIS_SSH_USER:-u227274523}"
+KEY="${PRECIS_SSH_KEY:-$HOME/.ssh/precis_helper}"
+KNOWN="${PRECIS_SSH_KNOWN:-$HOME/.ssh/precis_helper_known_hosts}"
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+
+remote() {
+  ssh -i "$KEY" -p "$PORT" -o IdentitiesOnly=yes -o BatchMode=yes -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$KNOWN" -o ConnectTimeout=20 "$USER_AT@$HOST" "$@"
+}
+
+case "${1:-}" in
+  check)
+    remote 'echo "in as $(whoami)"; php -v | head -1; php -m | grep -i -E "^(pdo_mysql|curl|openssl|mbstring|iconv|json)$" | tr "\n" " "; echo; ls -d ~/precis-helper 2>/dev/null || echo "helper not installed yet"; ls -d ~/domains/clayaiken.com/public_html/precis 2>/dev/null || echo "web folder for precis not there yet"'
+    ;;
+  install)
+    # Only the program: src, web.php, cron.php. Never the private folder.
+    tar -czf - -C "$HERE/helper" src web.php cron.php | remote 'set -e; mkdir -p ~/precis-helper/data; chmod 700 ~/precis-helper ~/precis-helper/data; rm -rf ~/precis-helper/src.new; mkdir ~/precis-helper/src.new; tar -xzf - -C ~/precis-helper/src.new; rm -rf ~/precis-helper/src.old; [ -d ~/precis-helper/src ] && mv ~/precis-helper/src ~/precis-helper/src.old; mv ~/precis-helper/src.new/src ~/precis-helper/src; mv -f ~/precis-helper/src.new/web.php ~/precis-helper/src.new/cron.php ~/precis-helper/; rm -rf ~/precis-helper/src.new ~/precis-helper/src.old; find ~/precis-helper -type f -name "*.php" | wc -l'
+    ;;
+  webroot)
+    DIR="${2:?the web folder, for example domains/clayaiken.com/public_html/precis}"
+    tar -czf - -C "$HERE/helper/public" index.php .htaccess | remote "set -e; cd ~/'$DIR'; tar -xzf -; printf '%s\n' '<?php' '// The only file of the Précis helper inside the web folder.' \"require '/home/$USER_AT/precis-helper/web.php';\" > index.php; ls -la index.php .htaccess | awk '{print \$1, \$5, \$9}'"
+    ;;
+  servercheck)
+    # Proves the helper's storage on the live kind of database, in scratch tables it removes.
+    remote 'cat > ~/precis-helper/server_check.php' < "$HERE/helper/tests/server_check.php"
+    remote 'php ~/precis-helper/server_check.php; code=$?; rm -f ~/precis-helper/server_check.php; exit $code'
+    ;;
+  run)
+    shift
+    remote "$@"
+    ;;
+  *)
+    sed -n '2,13p' "$0"
+    exit 2
+    ;;
+esac
