@@ -26,6 +26,14 @@ final noiseMailProvider = Provider<List<MailItem>>((ref) => [
 /// Focus when the clock passes it, without anything else having to change.
 final focusClockProvider = StreamProvider<int>((ref) => Stream.periodic(const Duration(seconds: 30), (n) => n + 1));
 
+/// Today's date. It changes at midnight even when Précis has been left
+/// open for days, so "done today" empties itself each night.
+final todayDateProvider = Provider<DateTime>((ref) {
+  ref.watch(focusClockProvider);
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day);
+});
+
 /// Focus: the emails that need the user.
 final focusMailProvider = StreamProvider<List<MailItem>>((ref) {
   ref.watch(focusClockProvider);
@@ -39,7 +47,7 @@ final focusLaterProvider = StreamProvider<List<MailItem>>((ref) {
 });
 
 /// Focus emails marked done today.
-final focusDoneTodayProvider = StreamProvider<List<MailItem>>((ref) => ref.watch(databaseProvider).watchFocusDoneToday(accountId: ref.watch(accountScopeProvider)));
+final focusDoneTodayProvider = StreamProvider<List<MailItem>>((ref) => ref.watch(databaseProvider).watchFocusDoneToday(accountId: ref.watch(accountScopeProvider), day: ref.watch(todayDateProvider)));
 
 /// One email as the lists see it, for the sentence and the "?" on it.
 final mailItemProvider = StreamProvider.family<MailItem?, int>((ref, id) => ref.watch(databaseProvider).watchMailItem(id));
@@ -62,7 +70,7 @@ final daySentenceProvider = StreamProvider<DaySentence?>((ref) {
   final db = ref.watch(databaseProvider);
   return db
       .customSelect(
-        "SELECT (SELECT connected FROM helper_state WHERE id = 1) AS c, (SELECT value FROM settings WHERE key = 'helper.assistantOn') AS a, (SELECT value FROM settings WHERE key = 'helper.day') AS d",
+        "SELECT (SELECT connected FROM helper_state WHERE id = 1) AS c, (SELECT value FROM settings WHERE key = 'helper.assistantOn') AS a, (SELECT value FROM settings WHERE key = 'helper.day') AS d, (SELECT value FROM settings WHERE key = 'helper.dayDismissed') AS x",
         readsFrom: {db.helperState, db.settings},
       )
       .watchSingle()
@@ -71,6 +79,9 @@ final daySentenceProvider = StreamProvider<DaySentence?>((ref) {
     try {
       final j = jsonDecode((r.data['d'] as String?) ?? '');
       if (j is! Map || j['text'] is! String || (j['text'] as String).trim().isEmpty || j['at'] is! num) return null;
+      // Dismissed: it stays away until a newer one is written.
+      final dismissed = int.tryParse((r.data['x'] as String?) ?? '');
+      if (dismissed != null && dismissed >= (j['at'] as num).toInt()) return null;
       return DaySentence(text: (j['text'] as String).trim(), at: DateTime.fromMillisecondsSinceEpoch((j['at'] as num).toInt() * 1000), after: (j['after'] as num?)?.toInt() ?? 0);
     } catch (_) {
       return null;

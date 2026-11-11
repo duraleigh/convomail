@@ -30,12 +30,14 @@ if [ "${2:-}" = "icons" ]; then
   rsync -a android/app/src/main/res/ "$WIN/android/app/src/main/res/"
 fi
 echo "=== make starts $(date)"
-flutter build apk "--$MODE" 2>&1 | grep -v '^\s*$' | tail -80
+# One file for the chips nearly every phone has (arm64). Always made the
+# same way, so each new version installs over the last.
+flutter build apk "--$MODE" --split-per-abi --target-platform android-arm64 2>&1 | grep -v '^\s*$' | tail -80
 echo "=== make exit: ${PIPESTATUS[0]} at $(date)"
-OUT="build/app/outputs/flutter-apk/app-$MODE.apk"
+OUT="build/app/outputs/flutter-apk/app-arm64-v8a-$MODE.apk"
 if [ -f "$OUT" ]; then
   mkdir -p "$WIN/build/android"
-  cp "$OUT" "$WIN/build/android/Precis-$MODE.apk"
+  cp "$OUT" "$WIN/build/android/Precis.apk"
   ls -la "$WIN/build/android/"
   echo "MADE"
 fi

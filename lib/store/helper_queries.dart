@@ -44,6 +44,10 @@ int? _secs(DateTime? t) => t == null ? null : t.millisecondsSinceEpoch ~/ 1000;
 /// helper last sent it.
 const kDaySentence = 'helper.day';
 
+/// The sentence the user dismissed, by when it was written (seconds). It
+/// stays away, on every device, until the assistant writes a new one.
+const kDayDismissed = 'helper.dayDismissed';
+
 DateTime? _time(Object? secs) => secs is num && secs > 0 ? DateTime.fromMillisecondsSinceEpoch(secs.toInt() * 1000) : null;
 
 /// The device's side of keeping in step with the helper: what waits to go
@@ -97,6 +101,15 @@ extension HelperQueries on AppDatabase {
     for (var i = 0; i < list.length; i += 400) {
       await (delete(helperOutbox)..where((o) => o.id.isIn(list.sublist(i, i + 400 > list.length ? list.length : i + 400)))).go();
     }
+  }
+
+  /// Dismisses the sentence at the top of Today that was written at [at]:
+  /// it goes away here and on every other device, and comes back only when
+  /// the assistant writes a new one. With [at] null, brings it back.
+  Future<void> dismissDaySentence(DateTime? at) async {
+    final secs = at == null ? 0 : at.millisecondsSinceEpoch ~/ 1000;
+    await putSetting(kDayDismissed, at == null ? '' : '$secs');
+    await noteForHelper('pref', 'day', {'dismissed': secs});
   }
 
   /// Notes a change that is not simply a row's state: a fix to one email,
@@ -441,6 +454,8 @@ extension HelperQueries on AppDatabase {
       case 'pref':
         // A setting that holds on every device: quiet hours.
         if (k == 'quiet') await putSetting(kQuietHours, deleted ? '' : jsonEncode({'on': data['on'] == true, 'from': data['from'], 'to': data['to']}));
+        // The sentence on Today, dismissed on another device.
+        if (k == 'day') await putSetting(kDayDismissed, deleted ? '' : '${(data['dismissed'] as num?)?.toInt() ?? ''}');
         return const {};
       case 'msgfix':
         // What the user set on one email on another device: Focus or not,

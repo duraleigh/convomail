@@ -15,6 +15,7 @@ import '../../app/timely_state.dart';
 import '../../helper/helper_sync.dart';
 import '../../store/database.dart';
 import '../../store/done_queries.dart';
+import '../../store/helper_queries.dart';
 import '../../store/mail_queries.dart';
 import '../../store/planner_queries.dart';
 import '../../sync/calendar_sync.dart';
@@ -38,7 +39,7 @@ final waitingOnProvider = StreamProvider<List<WaitingItem>>((ref) => ref.watch(d
 final sentNotReadYetProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchSentWithoutWordsCount(accountId: ref.watch(accountScopeProvider)));
 final laterRowsProvider = StreamProvider<List<LaterRow>>((ref) => ref.watch(databaseProvider).watchLaterRows());
 final openRemindersProvider = StreamProvider<List<Reminder>>((ref) => ref.watch(databaseProvider).watchReminders());
-final doneTodayProvider = StreamProvider<List<DoneItem>>((ref) => ref.watch(databaseProvider).watchDoneToday());
+final doneTodayProvider = StreamProvider<List<DoneItem>>((ref) => ref.watch(databaseProvider).watchDoneToday(day: ref.watch(todayDateProvider)));
 
 /// The front page: the day in cards. Needs you (filled once the assistant
 /// is connected), who the user is waiting on, the day's calendar, a few
@@ -323,7 +324,7 @@ class _Sentence extends ConsumerWidget {
       padding: const EdgeInsets.only(top: AppSpace.md),
       child: Container(
         key: const ValueKey('today-sentence'),
-        padding: const EdgeInsets.fromLTRB(14, 12, 16, 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
         decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.38), borderRadius: BorderRadius.circular(AppShapes.lgIncreased)),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,6 +344,26 @@ class _Sentence extends ConsumerWidget {
                   ),
                 ],
               ),
+            ),
+            // Dismiss: it goes away here and on your other devices, until the next one is written.
+            IconButton(
+              key: const ValueKey('today-sentence-dismiss'),
+              tooltip: 'Dismiss',
+              visualDensity: VisualDensity.compact,
+              icon: Icon(Icons.close_rounded, size: 20, color: scheme.onSurfaceVariant),
+              onPressed: () {
+                final db = ref.read(databaseProvider);
+                final messenger = ScaffoldMessenger.of(context);
+                db.dismissDaySentence(s.at);
+                messenger.hideCurrentSnackBar();
+                messenger.showSnackBar(SnackBar(
+                  persist: false,
+                  duration: const Duration(seconds: 8),
+                  content: const Text('Dismissed. It comes back when the next one is written.'),
+                  behavior: SnackBarBehavior.floating,
+                  action: SnackBarAction(label: 'Undo', onPressed: () => db.dismissDaySentence(null)),
+                ));
+              },
             ),
           ],
         ),

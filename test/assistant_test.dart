@@ -664,6 +664,37 @@ void main() {
       await teardown(tester);
     });
 
+    testWidgets('the sentence on Today can be dismissed: it stays away until a new one is written, and the other devices are told', (tester) async {
+      await tester.runAsync(filled);
+      final wrote = DateTime.now().subtract(const Duration(minutes: 5));
+      final at = wrote.millisecondsSinceEpoch ~/ 1000;
+      await tester.runAsync(() => helperSays('day', 'today', {'text': 'Two things need you.', 'at': at, 'after': 3}));
+      await pumpApp(tester, Destination.today);
+      expect(find.byKey(const ValueKey('today-sentence')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('today-sentence-dismiss')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-sentence')), findsNothing);
+      expect(find.byKey(const ValueKey('today-needs-you')), findsOneWidget, reason: 'the rest of Today is untouched');
+      final noted = await tester.runAsync(() => db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'pref' AND k = 'day'").get());
+      expect(noted!.single.read<String>('data'), '{"dismissed":$at}');
+      // The same sentence arriving again stays away.
+      await tester.runAsync(() => helperSays('day', 'today', {'text': 'Two things need you.', 'at': at, 'after': 3}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-sentence')), findsNothing);
+      // A new one shows.
+      await tester.runAsync(() => helperSays('day', 'today', {'text': 'One thing needs you now.', 'at': at + 1500, 'after': 1}));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'One thing needs you now.');
+      // Dismissed on another device: gone here too. Undone there: back here.
+      await tester.runAsync(() => helperSays('pref', 'day', {'dismissed': at + 1500}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-sentence')), findsNothing);
+      await tester.runAsync(() => helperSays('pref', 'day', {'dismissed': 0}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-sentence')), findsOneWidget);
+      await teardown(tester);
+    });
+
     testWidgets('with the assistant off there is no sentence; an empty one is not shown either', (tester) async {
       await tester.runAsync(filled);
       await tester.runAsync(() => helperSays('day', 'today', {'text': '', 'at': DateTime.now().millisecondsSinceEpoch ~/ 1000, 'after': 0}));
