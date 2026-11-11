@@ -94,7 +94,7 @@ switch ($argv[1] ?? '') {
                 $t = microtime(true);
                 for ($try = 0; $try < 4; $try++) {
                     try {
-                        $answer = $assistant->read($model, Readings::INSTRUCTIONS, $ctx['prompt'], Readings::SHAPE);
+                        $answer = $assistant->read($model, Readings::INSTRUCTIONS, $ctx['prompt'], Readings::SHAPE, true);
                         $error = null;
                         break;
                     } catch (AssistantError $err) {

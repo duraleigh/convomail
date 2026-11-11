@@ -33,6 +33,9 @@ final class Readings
 
     private const MAX_TRIES = 4;
 
+    /** From this many emails waiting at once, the instructions are kept ready between readings. */
+    private const BULK = 4;
+
     /** The ceiling used until the owner sets one: ten dollars a month. */
     public const DEFAULT_CEILING = 10_000_000;
 
@@ -322,6 +325,9 @@ final class Readings
         }
         $assistant = $this->assistant();
         $model = $this->model();
+        // Several waiting at once (the first fill, or a burst of mail): the
+        // instructions are kept ready between readings, which is cheaper.
+        $bulk = count($rows) >= self::BULK;
         $done = 0;
         foreach ($rows as $e) {
             if (microtime(true) - $started > $seconds) {
@@ -333,7 +339,7 @@ final class Readings
                 continue;
             }
             try {
-                $done += (int) $this->readOne($e, $assistant, $model);
+                $done += (int) $this->readOne($e, $assistant, $model, 'mail', $bulk);
             } catch (AssistantError $err) {
                 if ($err->kind === 'key' || $err->kind === 'credit') {
                     $this->problem($err->kind, $err->getMessage());
@@ -359,7 +365,7 @@ final class Readings
      *
      * @param array<string, mixed> $e a row of emails
      */
-    public function readOne(array $e, Assistant $assistant, string $model, string $purpose = 'mail'): bool
+    public function readOne(array $e, Assistant $assistant, string $model, string $purpose = 'mail', bool $keepReady = false): bool
     {
         $id = (int) $e['id'];
         $ctx = $this->prepare($e);
@@ -367,7 +373,7 @@ final class Readings
             $this->store->db->run('UPDATE {emails} SET read_state = ? WHERE id = ?', [self::SKIPPED, $id]);
             return false;
         }
-        $answer = $assistant->read($model, self::INSTRUCTIONS, $ctx['prompt'], self::SHAPE);
+        $answer = $assistant->read($model, self::INSTRUCTIONS, $ctx['prompt'], self::SHAPE, $keepReady);
         $this->count($model, $purpose, $answer);
         if ($answer['refused']) {
             $this->store->db->run('UPDATE {emails} SET read_state = ? WHERE id = ?', [self::GAVE_UP, $id]);

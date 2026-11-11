@@ -45,16 +45,18 @@ final class Claude implements Assistant
         );
     }
 
-    public function read(string $model, string $instructions, string $email, array $shape): array
+    public function read(string $model, string $instructions, string $email, array $shape, bool $keepReady = false): array
     {
         try {
             $message = $this->client->messages->create(
                 maxTokens: self::MAX_TOKENS,
                 messages: [['role' => 'user', 'content' => $email]],
                 model: $model,
-                // The instructions are the same for every email, so Anthropic
-                // can keep them ready and charge a fraction for them.
-                system: [['type' => 'text', 'text' => $instructions, 'cacheControl' => ['type' => 'ephemeral']]],
+                // The instructions are the same for every email. When many
+                // are read close together, Anthropic keeps them ready and
+                // charges a fraction for them; for one email on its own that
+                // would only cost more, so they are sent plainly.
+                system: $keepReady ? [['type' => 'text', 'text' => $instructions, 'cacheControl' => ['type' => 'ephemeral']]] : $instructions,
                 // A short, exact reading: little thinking, a fixed shape.
                 outputConfig: OutputConfig::with(effort: 'low', format: JSONOutputFormat::with(schema: $shape)),
             );

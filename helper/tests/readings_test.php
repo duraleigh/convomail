@@ -132,7 +132,7 @@ return [
         same('claude-opus-5-5', $sent['body']['model']);
         same('low', $sent['body']['output_config']['effort']);
         same('json_schema', $sent['body']['output_config']['format']['type']);
-        same(['type' => 'ephemeral'], $sent['body']['system'][0]['cache_control']);
+        check(is_string($sent['body']['system']), 'one email on its own: the instructions are sent plainly, with no keep-ready charge');
         check(!isset($sent['body']['thinking']) && !isset($sent['body']['temperature']), 'no settings the readers refuse');
         $shown = (string) $sent['body']['messages'][0]['content'];
         check(str_contains($shown, 'They will hold it until 3 today. Yes or no?'));
@@ -264,6 +264,24 @@ return [
         $row = $w->store->db->one('SELECT calls, tin, tout, tcr FROM {spend}');
         same([2, 400, 300, 1400], [(int) $row['calls'], (int) $row['tin'], (int) $row['tout'], (int) $row['tcr']]);
         same(2 * $each, $w->readings->status()['today']);
+    },
+
+    'several emails waiting at once are read with the instructions kept ready; one on its own is not' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        for ($i = 0; $i < 5; $i++) {
+            $w->arriveWith($renee, "Note $i");
+        }
+        $w->readings->plan();
+        same(5, $w->readings->work());
+        foreach ($w->claude->readings() as $r) {
+            same(['type' => 'ephemeral'], $r['body']['system'][0]['cache_control']);
+        }
+        $w->arriveWith($renee, 'One more');
+        $w->readings->plan();
+        same(1, $w->readings->work());
+        check(is_string($w->claude->readings()[5]['body']['system']));
     },
 
     'when the month\'s ceiling is reached the assistant pauses; raising it lets it go on' => function () use ($person, $renee): void {
