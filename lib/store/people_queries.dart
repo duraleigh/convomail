@@ -191,6 +191,32 @@ extension PeopleQueries on AppDatabase {
     return {for (final r in rows) r.read<String>('k')};
   }
 
+  /// For each row holding mail that is not from a person: its emails counted
+  /// by category (the one set on the email, else the sender's own), with how
+  /// many of each are unread. Decides the row's pile. One row only when
+  /// [rowKey] is given.
+  Future<Map<String, Map<String?, MailCount>>> rowMailByCategory({String? rowKey}) async {
+    final rows = await customSelect(
+      '''
+      SELECT r.row_key AS k, COALESCE(m.feeds_category, c.feeds_category) AS cat, COUNT(*) AS n,
+             SUM(CASE WHEN m.is_seen = 0 THEN 1 ELSE 0 END) AS unread
+      FROM message_row_assignments r
+      JOIN messages m ON m.id = r.message_id
+      LEFT JOIN contacts c ON c.key = m.from_contact_key
+      WHERE m.classification = 'feeds' AND m.is_deleted = 0 AND m.is_from_me = 0
+        AND m.folder_id NOT IN (SELECT id FROM folders WHERE role IN ('junk', 'trash'))
+        ${rowKey == null ? '' : 'AND r.row_key = ?'}
+      GROUP BY r.row_key, cat
+      ''',
+      variables: [if (rowKey != null) Variable.withString(rowKey)],
+    ).get();
+    final out = <String, Map<String?, MailCount>>{};
+    for (final r in rows) {
+      out.putIfAbsent(r.read<String>('k'), () => {})[r.readNullable<String>('cat')] = (total: r.read<int>('n'), unread: r.read<int>('unread'));
+    }
+    return out;
+  }
+
   /// Every row key holding mail that is not from a person, by category
   /// (the sender's own, or one set on a single email).
   Future<Map<String, Set<String>>> rowKeysByCategory() async {
@@ -412,6 +438,7 @@ extension PeopleQueries on AppDatabase {
 
   Future<List<PeopleRow>> _materialize(List<QueryRow> rows, {required PeopleFilter filter, required String search, InboxTab tab = InboxTab.people, String? category, PeopleSort sort = PeopleSort.newest}) async {
     final inCategory = category == null ? null : await _rowsInCategory(category);
+    final mailByRow = await rowMailByCategory();
     Map<int, List<(String, String)>>? membersByGroup;
     Future<List<(String, String)>> membersFor(int groupId) async {
       if (membersByGroup == null) {
@@ -449,7 +476,7 @@ extension PeopleQueries on AppDatabase {
       // nobody's conversation: it shows in neither list.
       final inFeeds = feedsSender && (feedsTotal > 0 || (!inPeople && d['last_received'] != null));
       if (tab == InboxTab.people ? !inPeople : !inFeeds) continue;
-      final pile = inFeeds ? pileFor(chosen: d['c_pile'] as String?, category: d['c_category'] as String?, total: feedsTotal, unread: feedsUnread) : null;
+      final pile = inFeeds ? pileFor(chosen: d['c_pile'] as String?, category: d['c_category'] as String?, total: feedsTotal, unread: feedsUnread, mail: mailByRow[rowKey]) : null;
       if (tab == InboxTab.feed && pile != FeedsPile.feed) continue;
       if (tab == InboxTab.noise && pile != FeedsPile.noise) continue;
       if (inCategory != null && !inCategory.contains(rowKey)) continue;

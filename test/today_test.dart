@@ -47,6 +47,21 @@ void main() {
       expect(pileFor(category: FeedsCategories.newsletter, total: 0, unread: 0), FeedsPile.noise, reason: 'nothing to go on');
     });
 
+    test('it goes by what the sender mostly sends, not by one label on the sender', () {
+      MailCount n(int total, [int unread = 0]) => (total: total, unread: unread);
+      // Labeled a notification sender, but nearly all of it is promotions.
+      expect(pileFor(category: FeedsCategories.notification, total: 10, unread: 0, mail: {FeedsCategories.promotion: n(8), FeedsCategories.receipt: n(2)}), FeedsPile.noise);
+      // A shop: mostly receipts and deliveries, a few promotions.
+      expect(pileFor(category: null, total: 10, unread: 0, mail: {FeedsCategories.receipt: n(5), 'Delivery': n(3), FeedsCategories.promotion: n(2)}), FeedsPile.feed);
+      // Exactly half is not "mostly".
+      expect(pileFor(category: null, total: 4, unread: 0, mail: {FeedsCategories.promotion: n(2), FeedsCategories.receipt: n(2)}), FeedsPile.feed);
+      // Mostly newsletters: only those emails' opens count.
+      expect(pileFor(category: null, total: 10, unread: 9, mail: {FeedsCategories.newsletter: n(8, 8), FeedsCategories.receipt: n(2, 1)}), FeedsPile.noise);
+      expect(pileFor(category: null, total: 10, unread: 5, mail: {FeedsCategories.newsletter: n(8, 5), FeedsCategories.receipt: n(2, 0)}), FeedsPile.feed);
+      // The user's choice still wins.
+      expect(pileFor(chosen: 'feed', category: null, total: 10, unread: 10, mail: {FeedsCategories.promotion: n(10, 10)}), FeedsPile.feed);
+    });
+
     test('everything else is Feed', () {
       for (final c in [FeedsCategories.receipt, FeedsCategories.notification, 'Delivery', 'Travel', 'OTP', 'A tag of my own', null]) {
         expect(pileFor(category: c, total: 5, unread: 5), FeedsPile.feed, reason: '$c');

@@ -3,6 +3,7 @@ import 'package:drift/drift.dart';
 import '../domain/classifier.dart';
 import '../domain/piles.dart';
 import 'database.dart' hide ClassificationRule;
+import 'people_queries.dart';
 
 /// Rows and aggregates the classifier needs, plus category / rule / event
 /// storage (spec 4.11).
@@ -398,7 +399,7 @@ extension ClassificationQueries on AppDatabase {
       variables: [Variable.withString(rowKey), Variable.withString(rowKey.substring(2))],
     ).getSingleOrNull();
     if (r == null) return null;
-    return pileFor(chosen: r.readNullable<String>('pile'), category: r.readNullable<String>('cat'), total: r.read<int>('total'), unread: r.read<int>('unread'));
+    return pileFor(chosen: r.readNullable<String>('pile'), category: r.readNullable<String>('cat'), total: r.read<int>('total'), unread: r.read<int>('unread'), mail: (await rowMailByCategory(rowKey: rowKey))[rowKey]);
   }
 
   /// Whether a row is listed on Feeds and not on Chats: a Feeds sender with
