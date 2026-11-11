@@ -157,7 +157,15 @@ return [
         same(303, $page->status);
         same('https://precis.example.com/', $page->headers['Location']);
         same(400, $s->app->handle(new Request('GET', '/api/ping', [], [], [], '', '1.1.1.1', false, 'precis.example.com'))->status);
-        same(200, $s->app->handle(new Request('GET', '/api/ping', [], [], [], '', '1.1.1.1', true, 'precis.example.com'))->status);
+        same(404, $s->app->handle(new Request('GET', '/api/ping', [], [], [], '', '1.1.1.1', true, 'precis.example.com'))->status, 'and over https, only its own address is answered');
+    },
+
+    'the helper answers at its own address only, not under another site\'s address' => function (): void {
+        $s = new Site();
+        // Set up at "localhost"; a request that names another host is turned away.
+        same(404, $s->app->handle(new Request('GET', '/api/ping', [], [], [], '', '1.1.1.1', true, 'www.other-site.com'))->status);
+        same(404, $s->app->handle(new Request('GET', '/', [], [], [], '', '1.1.1.1', true, 'www.other-site.com'))->status);
+        same(200, $s->api('GET', '/api/ping')->status);
     },
 
     'a device joins with the code from the owner\'s page and then talks with its token' => function (): void {

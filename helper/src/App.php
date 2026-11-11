@@ -86,6 +86,14 @@ final class App
             if (!$this->isSetUp()) {
                 return $this->setup($r);
             }
+            // The helper answers at its own address only. Its web folder sits
+            // inside the main website's folder on some hosts, which would make
+            // it reachable under the website's address too; that is refused.
+            $own = strtolower((string) parse_url($this->base($r), PHP_URL_HOST));
+            $asked = strtolower((string) preg_replace('~:\d+$~', '', $r->host));
+            if ($own !== '' && $asked !== $own && !$r->isLocal()) {
+                return new Response(404);
+            }
             return match (true) {
                 str_starts_with($r->path, '/api/') => $this->api($r),
                 $r->path === '/hook/gmail' => $this->hook($r),
