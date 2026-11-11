@@ -141,6 +141,22 @@ void main() {
       expect(names, ['Re: Dinner']);
     });
 
+    test('a question that is only in mail I forwarded does not count; my own question above a forward does', () async {
+      sent('fay@x.com', 'Fwd: The show', '', ago(days: 5));
+      sent('gus@x.com', 'Fwd: The venue', '', ago(days: 5));
+      sent('hal@x.com', 'FW: The budget', '', ago(days: 5));
+      await sync();
+      Future<void> body(String subject, String text) async {
+        final id = (await mine(subject)).id;
+        await (db.update(db.messages)..where((m) => m.id.equals(id))).write(MessagesCompanion(bodyText: Value(text)));
+      }
+
+      await body('Fwd: The show', '---------- Forwarded message ---------\nFrom: Radio <news@radio.example>\nSubject: The show\n\nDid you hear it? Listen again.\n');
+      await body('Fwd: The venue', 'Can you look at this before Friday?\n\n---------- Forwarded message ---------\nFrom: Venue <v@venue.example>\n\nThe hall is free.\n');
+      await body('FW: The budget', 'See below.\n\nFrom: Pat <pat@x.com>\nSent: Monday, November 2, 2026 9:00 AM\nTo: Me\nSubject: The budget\n\nIs this the final number?\n');
+      expect([for (final w in await db.watchWaitingOn().first) w.message.subject], ['Fwd: The venue']);
+    });
+
     test('Done takes it off the list and puts it under Done for today; Not done brings it back', () async {
       sent('sarah@x.com', 'The contract', 'Can you send the signed copy?', ago(days: 5));
       await sync();

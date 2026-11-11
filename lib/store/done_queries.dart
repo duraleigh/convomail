@@ -135,6 +135,14 @@ extension DoneQueries on AppDatabase {
 
   static final _attribution = RegExp(r'\bOn .{5,120}? wrote:', dotAll: true);
 
+  /// Where forwarded mail starts: Gmail's and Apple Mail's line, Outlook's
+  /// line, or Outlook's header block.
+  static final _forwarded = RegExp(
+    r'^[ \t>]*-{2,} ?Forwarded message ?-{2,}|^[ \t>]*Begin forwarded message:|^[ \t>]*-{2,} ?Original Message ?-{2,}|^From: .+\r?\n(?:Sent|Date): ',
+    multiLine: true,
+    caseSensitive: false,
+  );
+
   /// Whether the user's own words in [m] (not the mail quoted below them)
   /// hold a question.
   static bool _asks(Message m) {
@@ -142,6 +150,9 @@ extension DoneQueries on AppDatabase {
     var own = body.isNotEmpty ? splitQuotedText(body, subject: m.subject).fresh : m.snippet;
     final cut = _attribution.firstMatch(own);
     if (cut != null) own = own.substring(0, cut.start);
+    // What was passed along in a forward is somebody else's words too.
+    final forwarded = _forwarded.firstMatch(own);
+    if (forwarded != null) own = own.substring(0, forwarded.start);
     return own.contains('?');
   }
 
