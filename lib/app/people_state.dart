@@ -169,6 +169,18 @@ class PeopleSortNotifier extends AsyncNotifier<PeopleSort> {
   }
 }
 
+/// How many chats have mail from a person that has not been read. Chats
+/// put off until later and muted ones do not count. Any at all puts a dot
+/// on the Chats icon, so unread mail from people is never out of sight
+/// just because Focus is empty.
+final chatsUnreadProvider = Provider<int>((ref) {
+  var n = 0;
+  for (final r in ref.watch(listRowsProvider(InboxTab.people)).value ?? const <PeopleRow>[]) {
+    if (r.peopleUnread > 0 && !r.isSnoozed && !r.muted) n++;
+  }
+  return n;
+});
+
 /// When the newest mail in Feed arrived, in milliseconds. Noise never
 /// counts: it has no dot.
 final newestFeedsIdProvider = Provider<AsyncValue<int>>((ref) => ref.watch(listRowsProvider(InboxTab.feed)).whenData((rows) {

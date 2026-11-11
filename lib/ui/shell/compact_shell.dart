@@ -63,6 +63,7 @@ class CompactShell extends ConsumerWidget {
     final index = underMore ? tabs.length : tabs.indexOf(destination);
     final focusCount = ref.watch(focusMailProvider).value?.length ?? 0;
     final feedNew = ref.watch(feedsHasNewProvider) && destination != Destination.feed;
+    final chatsUnread = ref.watch(chatsUnreadProvider) > 0;
     final notice = ref.watch(joinNoticeProvider);
 
     void go(Destination d) {
@@ -135,8 +136,8 @@ class CompactShell extends ConsumerWidget {
                 destinations: [
                   for (final d in tabs)
                     NavigationDestination(
-                      icon: _icon(d, d.icon, focusCount, feedNew, scheme),
-                      selectedIcon: _icon(d, d.selectedIcon, focusCount, feedNew, scheme),
+                      icon: _icon(d, d.icon, focusCount, feedNew, chatsUnread, scheme),
+                      selectedIcon: _icon(d, d.selectedIcon, focusCount, feedNew, chatsUnread, scheme),
                       label: d.label,
                     ),
                   const NavigationDestination(icon: Icon(Icons.more_horiz_rounded), label: 'More'),
@@ -146,9 +147,11 @@ class CompactShell extends ConsumerWidget {
     );
   }
 
-  /// Focus carries the one number (how many emails need the user); Feed a
-  /// plain dot when something new came in.
-  static Widget _icon(Destination d, IconData icon, int focusCount, bool feedNew, ColorScheme scheme) => switch (d) {
+  /// Focus carries the one number (how many emails need the user); Chats a
+  /// plain dot while a chat has unread mail; Feed one when something new came in.
+  static Widget _icon(Destination d, IconData icon, int focusCount, bool feedNew, bool chatsUnread, ColorScheme scheme) => switch (d) {
+        // A plain dot while any chat has unread mail from a person.
+        Destination.chats => Badge(key: const ValueKey('chats-badge'), isLabelVisible: chatsUnread, backgroundColor: scheme.primary, smallSize: 8, child: Icon(icon)),
         Destination.focus => Badge(
             key: const ValueKey('focus-badge'),
             isLabelVisible: focusCount > 0,

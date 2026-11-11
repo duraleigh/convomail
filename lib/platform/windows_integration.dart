@@ -52,6 +52,7 @@ class WindowsIntegration with TrayListener, WindowListener {
   bool _trayReady = false;
   bool closeToTray = true;
   int _lastBadge = -1;
+  String _lastWords = '';
   bool _showBadge = true;
 
   Future<void> start() async {
@@ -119,20 +120,24 @@ class WindowsIntegration with TrayListener, WindowListener {
 
   /// Updates the taskbar overlay and tray tooltip. Icons for 1–9 and 9+ are
   /// bundled; 0 clears the overlay.
-  Future<void> setUnread(int count, {bool? showBadge}) async {
+  /// The number on the taskbar icon. With [needsYou] it is how many emails
+  /// need the user (the same number Focus shows); otherwise unread mail.
+  Future<void> setUnread(int count, {bool? showBadge, bool needsYou = false}) async {
     if (showBadge != null) _showBadge = showBadge;
     if (!Platform.isWindows) return;
     final effective = _showBadge ? count : 0;
-    if (effective == _lastBadge) return;
+    final words = needsYou ? (count == 1 ? '1 email needs you' : '$count emails need you') : '$count unread';
+    if (effective == _lastBadge && words == _lastWords) return;
     _lastBadge = effective;
+    _lastWords = words;
     try {
       if (effective <= 0) {
         await WindowsTaskbar.resetOverlayIcon();
       } else {
         final name = effective > 9 ? 'badge_9plus' : 'badge_$effective';
-        await WindowsTaskbar.setOverlayIcon(ThumbnailToolbarAssetIcon('assets/badges/$name.ico'), tooltip: '$count unread');
+        await WindowsTaskbar.setOverlayIcon(ThumbnailToolbarAssetIcon('assets/badges/$name.ico'), tooltip: words);
       }
-      if (_trayReady) await trayManager.setToolTip(count == 0 ? 'Précis' : 'Précis · $count unread');
+      if (_trayReady) await trayManager.setToolTip(count == 0 ? 'Précis' : 'Précis · $words');
     } catch (e) {
       debugPrint('badge failed: $e');
     }

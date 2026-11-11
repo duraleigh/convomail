@@ -129,6 +129,9 @@ void main() {
     // The one number on the bar: how many emails need you.
     expect(find.descendant(of: find.byKey(const ValueKey('focus-badge')), matching: find.text('2')), findsWidgets);
     expect(find.byKey(const ValueKey('compact-compose')), findsOneWidget);
+    // Chats shows a plain dot while a chat has unread mail from a person, so it is never out of sight.
+    expect(tester.widget<Badge>(find.byKey(const ValueKey('chats-badge')).first).isLabelVisible, isTrue);
+    expect(tester.widget<Badge>(find.byKey(const ValueKey('chats-badge')).first).label, isNull, reason: 'a dot, not a number');
     expect(tester.takeException(), isNull, reason: 'Today fits a phone without running off the edge');
     await teardown(tester);
   });
@@ -393,6 +396,13 @@ void main() {
     await pump(tester, Destination.focus, size: const Size(1400, 900), phone: false);
     expect(find.byType(NavigationRail), findsOneWidget);
     expect(find.byKey(const ValueKey('compact-bar')), findsNothing);
+    // The PC's side rail has the same dot on Chats; it goes when the chat is read.
+    expect(tester.widget<Badge>(find.byKey(const ValueKey('chats-badge')).first).isLabelVisible, isTrue);
+    await tester.runAsync(() => db.customStatement('UPDATE messages SET is_seen = 1'));
+    await tester.runAsync(() => db.customStatement('INSERT OR IGNORE INTO dirty_rows(row_key) SELECT DISTINCT row_key FROM message_row_assignments'));
+    await tester.runAsync(db.refreshDirtyRows);
+    await tester.pumpAndSettle();
+    expect(tester.widget<Badge>(find.byKey(const ValueKey('chats-badge')).first).isLabelVisible, isFalse);
     expect(find.text('Pick an email on the left to read it here.'), findsOneWidget);
     await teardown(tester);
   });

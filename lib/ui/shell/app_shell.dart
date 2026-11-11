@@ -15,6 +15,7 @@ import '../../app/settings_navigation.dart';
 import '../../app/shortcuts.dart';
 import '../../platform/windows_integration.dart';
 import '../../store/database.dart';
+import '../../store/mail_queries.dart';
 import '../../sync/notification_center.dart';
 import '../../sync/schedule_service.dart';
 import '../screens/chats_screen.dart';
@@ -59,8 +60,17 @@ class _AppShellState extends ConsumerState<AppShell> {
     final integration = ref.read(windowsIntegrationProvider);
     if (integration == null) return;
     final settings = ref.read(settingsProvider);
-    final n = await ref.read(notificationCenterProvider).badgeCount();
-    await integration.setUnread(n, showBadge: settings.showBadge);
+    // With the assistant on, the icon carries the one number that matters:
+    // how many emails need you, the same number Focus shows. Without it,
+    // unread mail, as before.
+    final db = ref.read(databaseProvider);
+    if (await db.readingsShown()) {
+      final n = (await db.watchFocus().first).length;
+      await integration.setUnread(n, showBadge: settings.showBadge, needsYou: true);
+    } else {
+      final n = await ref.read(notificationCenterProvider).badgeCount();
+      await integration.setUnread(n, showBadge: settings.showBadge);
+    }
   }
 
   @override
@@ -81,6 +91,9 @@ class _AppShellState extends ConsumerState<AppShell> {
       if (prev?.showBadge != next.showBadge) unawaited(_updateBadge());
       if (prev != null && prev.launchAtLogin != next.launchAtLogin) unawaited(integration.setLaunchAtLogin(next.launchAtLogin));
     });
+    // The icon's number follows Focus.
+    ref.listen(focusMailProvider, (_, _) => unawaited(_updateBadge()));
+    ref.listen(readingsShownProvider, (_, _) => unawaited(_updateBadge()));
     // A clicked toast opens its row.
     ref.listen<OutgoingNotification?>(notificationClickProvider, (prev, next) {
       if (next == null) return;
@@ -197,6 +210,28 @@ class _FeedsRailIcon extends ConsumerWidget {
   }
 }
 
+/// The Chats icon, with a plain dot while any chat has unread mail from a
+/// person (no count: Focus carries the one number).
+class _ChatsRailIcon extends ConsumerWidget {
+  const _ChatsRailIcon({required this.icon});
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(chatsUnreadProvider);
+    return Tooltip(
+      message: n == 0 ? '' : (n == 1 ? '1 chat has unread mail' : '$n chats have unread mail'),
+      child: Badge(
+        key: const ValueKey('chats-badge'),
+        isLabelVisible: n > 0,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        smallSize: 8,
+        child: Icon(icon),
+      ),
+    );
+  }
+}
+
 /// The Focus icon, with how many emails need the user: the only number on
 /// the rail. It goes down when something is answered or marked done.
 class _FocusRailIcon extends ConsumerWidget {
@@ -241,8 +276,10 @@ class _Rail extends ConsumerWidget {
       destinations: [
         for (final d in Destination.rail)
           NavigationRailDestination(
-            icon: d == Destination.feed ? _FeedsRailIcon(icon: d.icon) : (d == Destination.focus ? _FocusRailIcon(icon: d.icon) : Icon(d.icon)),
-            selectedIcon: d == Destination.feed ? _FeedsRailIcon(icon: d.selectedIcon) : (d == Destination.focus ? _FocusRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon)),
+            icon: d == Destination.feed ? _FeedsRailIcon(icon: d.icon) : (d == Destination.focus ? _FocusRailIcon(icon: d.icon) : (d == Destination.chats ? _ChatsRailIcon(icon: d.icon) : Icon(d.icon))),
+            selectedIcon: d == Destination.feed
+                ? _FeedsRailIcon(icon: d.selectedIcon)
+                : (d == Destination.focus ? _FocusRailIcon(icon: d.selectedIcon) : (d == Destination.chats ? _ChatsRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon))),
             label: Text(d.label),
           ),
       ],

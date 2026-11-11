@@ -81,8 +81,8 @@ class NotificationsDetail extends ConsumerWidget {
             SwitchListTile(
               key: const ValueKey('show-badge'),
               secondary: Icon(Icons.filter_9_plus_outlined, color: scheme.primary),
-              title: const Text('Unread count on the taskbar icon'),
-              subtitle: const Text('Off hides the badge entirely.'),
+              title: const Text('Number on the taskbar icon'),
+              subtitle: const Text('How many emails need you, the same number Focus shows. (With the assistant off: unread mail.) Off hides it entirely.'),
               value: settings.showBadge,
               onChanged: n.setShowBadge,
             ),
