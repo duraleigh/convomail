@@ -34,13 +34,16 @@ $rows = $db->all("SELECT e.id, e.subject, e.from_name, e.from_addr, e.inbox, r.l
     WHERE e.is_from_me = 0 AND e.cls = 'people' AND e.gone = 0 AND e.read_state = ?", [Readings::READ]);
 $suspect = [];
 $focus = 0;
+$inbox = 0;
 foreach ($rows as $r) {
     $ctx = ['person' => true, 'subject' => (string) $r['subject'], 'shown' => (string) $r['from_name'] . ' ' . (string) $r['from_addr'] . $owner];
     if (Readings::borrowedNames(['line' => (string) $r['line'], 'ask' => (string) $r['ask']], $ctx) !== []) {
         $suspect[] = (int) $r['id'];
         $focus += (int) $r['focus'];
+        $inbox += (int) $r['inbox'];
     }
 }
+echo 'of the suspect ones: still in the inbox ' . $inbox . ' | no longer in the inbox (never read again) ' . (count($suspect) - $inbox) . "\n";
 echo 'readings of replies from people: ' . count($rows) . ' | that use a name found in the Subject and not in who it is from: ' . count($suspect) . ' | of those, in Focus: ' . $focus . "\n";
 if (($argv[1] ?? '') === 'go' && $suspect !== []) {
     foreach (array_chunk($suspect, 200) as $chunk) {

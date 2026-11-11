@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/layout.dart';
-import '../../../app/people_state.dart';
 import '../../../app/settings.dart';
 import '../../../domain/piles.dart';
 import '../../../store/database.dart';
@@ -522,17 +521,13 @@ class MailEmailPane extends ConsumerWidget {
               ),
             ],
             const SizedBox(width: 4),
-            // Answering happens in the chat, where the reply box and the
-            // whole history with this person are.
+            // Answering happens right here, under the email.
             if (item.person)
               IconButton(
                 key: const ValueKey('mail-reply'),
-                tooltip: 'Reply in the chat',
+                tooltip: 'Reply',
                 icon: const Icon(Icons.reply_rounded),
-                onPressed: () async {
-                  await openRow(ref.read, item.rowKey);
-                  ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(item.id, rowKey: item.rowKey));
-                },
+                onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(item.id, rowKey: item.rowKey)),
               ),
           ],
         ),

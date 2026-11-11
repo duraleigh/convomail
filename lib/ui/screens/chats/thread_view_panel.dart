@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/layout.dart';
 import '../../../store/database.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/tonal_avatar.dart';
+import 'compose/compose_form.dart';
+import 'compose/reply_composer.dart' show rowDraftProvider;
 import 'message_card.dart';
 import 'people_list_pane.dart';
 
@@ -104,6 +107,25 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
   /// Emails the user folded or opened by hand; the rest follow [ThreadView.focusId].
   final Map<int, bool> _open = {};
 
+  /// The reply box this view is showing, so it is closed when the view goes.
+  late final ReplyRequestNotifier _replies = ref.read(replyRequestProvider.notifier);
+  ComposeRequest? _showing;
+
+  @override
+  void initState() {
+    super.initState();
+    _replies;
+  }
+
+  @override
+  void dispose() {
+    // A reply left open here does not follow the user to another email.
+    final showing = _showing;
+    final replies = _replies;
+    if (showing != null) Future.microtask(() => replies.closeIfStill(showing));
+    super.dispose();
+  }
+
   bool _isOpen(Message m, List<Message> all) {
     final chosen = _open[m.id];
     if (chosen != null) return chosen;
@@ -122,6 +144,13 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
       error: (e, _) => Center(child: Text('$e')),
       data: (list) {
         final subject = list.isEmpty ? 'Thread' : (list.first.subject.isEmpty ? '(no subject)' : list.first.subject);
+        // Reply, Reply all and Forward on an email here open the reply box
+        // right here, under the email (the same box Chats has).
+        final asked = ref.watch(replyRequestProvider);
+        final request = asked != null && list.any((m) => m.id == asked.messageId) ? asked : null;
+        _showing = request;
+        final rowKey = request?.rowKey;
+        final draft = rowKey == null ? null : ref.watch(rowDraftProvider(rowKey)).value;
         final people = <String, String>{};
         for (final m in list) {
           people[m.isFromMe ? 'me' : m.fromContactKey] = m.isFromMe ? 'You' : (m.fromName.isNotEmpty ? m.fromName : m.fromAddress);
@@ -194,6 +223,44 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
                 },
               ),
             ),
+            if (request != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                child: Material(
+                  key: const ValueKey('thread-reply'),
+                  color: scheme.surfaceContainerLowest,
+                  borderRadius: BorderRadius.circular(AppShapes.xl),
+                  clipBehavior: Clip.antiAlias,
+                  elevation: 2,
+                  shadowColor: scheme.shadow.withValues(alpha: 0.2),
+                  child: ComposeForm(
+                    key: ValueKey('thread-reply-${request.hashCode}'),
+                    request: request,
+                    compact: true,
+                    // A draft already begun for this same email, in the same way, is picked up again.
+                    existingDraft: draft != null && draft.kind == request.kind && draft.inReplyToMessageId == request.messageId ? draft : null,
+                    onClose: () => ref.read(replyRequestProvider.notifier).close(),
+                    header: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 8, 2),
+                      child: Row(
+                        children: [
+                          Icon(request.isForward ? Icons.forward_rounded : Icons.reply_rounded, size: 20, color: scheme.primary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${switch (request.kind) { 'forward' => 'Forward', 'replyAll' => 'Reply all', _ => 'Reply' }} · $subject',
+                              style: text.titleSmall,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          IconButton(tooltip: 'Close (Esc)', onPressed: () => ref.read(replyRequestProvider.notifier).close(), icon: const Icon(Icons.close_rounded, size: 20)),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
           ],
         );
       },

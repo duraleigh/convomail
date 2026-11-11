@@ -83,4 +83,11 @@ class ReplyRequestNotifier extends Notifier<ComposeRequest?> {
   ComposeRequest? build() => null;
   void open(ComposeRequest r) => state = r;
   void close() => state = null;
+
+  /// Closes the reply box only if it is still [r]'s (the view that showed
+  /// it is going away, and nothing else has asked for one since).
+  void closeIfStill(ComposeRequest r) {
+    // The app itself may be closing by the time this is asked.
+    if (ref.mounted && identical(state, r)) state = null;
+  }
 }

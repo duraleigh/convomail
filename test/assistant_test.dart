@@ -1,3 +1,4 @@
+import 'package:convomail/app/compose_state.dart';
 import 'package:convomail/app/destinations.dart';
 import 'package:convomail/app/mail_state.dart';
 import 'package:convomail/domain/classifier.dart';
@@ -15,6 +16,7 @@ import 'package:convomail/store/mail_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
 import 'package:convomail/sync/sync_engine.dart';
+import 'package:convomail/ui/screens/chats/compose/compose_form.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/mail/mail_widgets.dart';
 import 'package:convomail/ui/screens/noise_screen.dart';
@@ -366,6 +368,52 @@ void main() {
     }
 
     setUp(() => settings = InMemorySettingsStore());
+
+    testWidgets('Reply, Reply all and Forward under an email in Focus open the reply box right there', (tester) async {
+      await tester.runAsync(filled);
+      final renee = await tester.runAsync(() => message('<renee@x>'));
+      final bank = await tester.runAsync(() => message('<bank@x>'));
+      final c = await pumpApp(tester, Destination.focus);
+      await tester.tap(find.byKey(ValueKey('mail-row-${renee!.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('thread-reply')), findsNothing);
+
+      // The Reply button under the email.
+      await tester.tap(find.widgetWithText(TextButton, 'Reply'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('thread-reply')), findsOneWidget, reason: 'Reply opens the reply box under the email');
+      expect(find.byType(ComposeForm), findsOneWidget);
+      expect(find.byKey(const ValueKey('compose-send')), findsOneWidget);
+      expect(c.read(destinationProvider), Destination.focus, reason: 'it stays in Focus');
+      expect(find.textContaining('Reply · Spring dates'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // Forward, then Reply all: the box changes to what was asked.
+      await tester.tap(find.widgetWithText(TextButton, 'Forward'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Forward · Spring dates'), findsOneWidget);
+      await tester.ensureVisible(find.byTooltip('Reply all'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Reply all'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Reply all · Spring dates'), findsOneWidget);
+
+      // The arrow at the top does the same; nothing jumps to Chats.
+      await tester.tap(find.byTooltip('Close (Esc)'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('thread-reply')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('mail-reply')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('thread-reply')), findsOneWidget);
+      expect(c.read(destinationProvider), Destination.focus);
+
+      // Opening another email leaves the reply behind: it does not follow.
+      await tester.tap(find.byKey(ValueKey('mail-row-${bank!.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('thread-reply')), findsNothing);
+      expect(c.read(replyRequestProvider), isNull);
+      await teardown(tester);
+    });
 
     testWidgets('Focus lists emails, not people: who, what is asked, and by when; the rail shows how many', (tester) async {
       await tester.runAsync(filled);
