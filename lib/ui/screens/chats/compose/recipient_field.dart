@@ -124,7 +124,15 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                         runSpacing: 4,
                         children: [
                           for (final r in widget.recipients)
-                            InputChip(
+                            // Each name stands in a line as tall as the typing
+                            // space, so it is level with the label whether or
+                            // not the typing space shares its line.
+                            SizedBox(
+                              height: 44,
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                widthFactor: 1,
+                                child: InputChip(
                               key: ValueKey('chip-${widget.label}-${r.address}'),
                               avatar: TonalAvatar(identityKey: r.address.toLowerCase(), name: r.name.isEmpty ? r.address : r.name, size: 20),
                               label: Text(r.name.isEmpty ? r.address : r.name, style: text.labelLarge!.copyWith(fontWeight: FontWeight.w500)),
@@ -133,10 +141,15 @@ class _RecipientFieldState extends ConsumerState<RecipientField> {
                               tooltip: r.address,
                               onDeleted: () => _remove(r),
                               visualDensity: VisualDensity.compact,
+                              // The same height on a phone as on a PC, so the row lines up with its label.
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               shape: const StadiumBorder(),
                             ),
+                              ),
+                            ),
                           ConstrainedBox(
-                            constraints: const BoxConstraints(minWidth: 160, maxWidth: 420),
+                            // On a narrow screen the typing space takes what is left beside a name, and does not push onto a line of its own.
+                            constraints: BoxConstraints(minWidth: constraints.maxWidth < 300 ? 72 : 160, maxWidth: 420),
                             child: IntrinsicWidth(
                               child: TextField(
                                 controller: controller,

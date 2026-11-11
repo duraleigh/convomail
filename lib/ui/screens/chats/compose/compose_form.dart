@@ -14,6 +14,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../../app/account_scope.dart';
 import '../../../../app/compose_state.dart';
+import '../../../../app/layout.dart';
 import '../../../../domain/signature.dart';
 import '../../../../mail/mail_transport.dart';
 import '../../../../mail/models.dart';
@@ -344,6 +345,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     final inFlight = _sending && (progress?.inFlight ?? true);
     final showQuoteToggle = _original != null && _kind != 'forward';
     final subjectVisible = !_kind.startsWith('reply') || _showSubject || !widget.compact;
+    final phone = isCompactLayout(context, ref);
 
     final fields = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -357,13 +359,30 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
             setState(() => _to = v);
             _touched();
           },
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (!_showCcBcc) _fieldLink('Cc/Bcc', () => setState(() => _showCcBcc = true), scheme, text),
-              if (!subjectVisible) _fieldLink('Subject', () => setState(() => _showSubject = true), scheme, text, key: const ValueKey('compose-show-subject')),
-            ],
-          ),
+          // On a phone there is no room for two word links beside a name:
+          // one small arrow opens Cc, Bcc and the subject together.
+          trailing: phone
+              ? (_showCcBcc && subjectVisible
+                  ? null
+                  : IconButton(
+                      key: const ValueKey('compose-show-more'),
+                      tooltip: 'Cc, Bcc and subject',
+                      visualDensity: VisualDensity.compact,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints.tightFor(width: 36, height: 40),
+                      icon: Icon(Icons.expand_more_rounded, color: scheme.onSurfaceVariant),
+                      onPressed: () => setState(() {
+                        _showCcBcc = true;
+                        _showSubject = true;
+                      }),
+                    ))
+              : Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!_showCcBcc) _fieldLink('Cc/Bcc', () => setState(() => _showCcBcc = true), scheme, text),
+                    if (!subjectVisible) _fieldLink('Subject', () => setState(() => _showSubject = true), scheme, text, key: const ValueKey('compose-show-subject')),
+                  ],
+                ),
         ),
         if (_showCcBcc) ...[
           _line(scheme),
@@ -491,6 +510,14 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                       child: FilledButton.icon(key: const ValueKey('compose-send'), onPressed: _send, icon: const Icon(Icons.send_rounded, size: 18), label: const Text('Send')),
                     ),
                     const SizedBox(width: 8),
+                    // The middle buttons give way first on a narrow screen
+                    // (they slide sideways); Send and Discard always show.
+                    Expanded(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
                     _barButton(
                       key: const ValueKey('compose-formatting'),
                       icon: Icons.text_format_rounded,
@@ -533,7 +560,10 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                           _touched();
                         },
                       ),
-                    const Spacer(),
+                          ],
+                        ),
+                      ),
+                    ),
                     _barButton(key: const ValueKey('compose-discard'), icon: Icons.delete_outline_rounded, tooltip: 'Discard draft', onPressed: _discard),
                   ],
                 ),

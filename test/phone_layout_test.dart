@@ -15,6 +15,7 @@ import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -180,6 +181,45 @@ void main() {
     expect(find.text('Done'), findsWidgets);
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
+    await teardown(tester);
+  });
+
+  testWidgets('replying on a phone: the name in To is whole and in line with its label; one arrow opens Cc, Bcc and the subject; the title has the full width', (tester) async {
+    final renee = await tester.runAsync(() => message('<renee@x>'));
+    await pump(tester, Destination.focus);
+    await tester.tap(find.byKey(ValueKey('mail-row-${renee!.id}')));
+    await tester.pumpAndSettle();
+    // The heading: the title runs the width of the screen, with Done, Later and Reply under it.
+    final title = find.text('Spring dates');
+    expect(tester.getSize(title).width, greaterThan(250), reason: 'the title is not squeezed by the buttons');
+    expect(tester.getTopLeft(find.byKey(const ValueKey('mail-done'))).dy, greaterThan(tester.getBottomLeft(title).dy - 1), reason: 'Done sits under the title');
+
+    await tester.tap(find.byKey(const ValueKey('mail-reply')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    final chip = find.byKey(const ValueKey('chip-To-renee@booking.example'));
+    expect(chip, findsOneWidget);
+    final name = tester.renderObject<RenderParagraph>(find.descendant(of: chip, matching: find.text('Renee Calloway')));
+    // The name has the row to itself up to the arrow (the checks' own letters are far wider than real ones, so a long name still ends in dots here).
+    expect(name.size.width, greaterThan(150), reason: 'the name in To is squeezed');
+    // "To" and the name sit on one line.
+    final label = find.descendant(of: find.byKey(const ValueKey('thread-reply')), matching: find.text('To'));
+    expect((tester.getCenter(label).dy - tester.getCenter(chip).dy).abs(), lessThan(7), reason: '"To" and the name are out of line');
+    // One small arrow at the end of the row, in line with it too, and no word links crowding the name.
+    final more = find.byKey(const ValueKey('compose-show-more'));
+    expect(more, findsOneWidget);
+    expect(find.text('Cc/Bcc'), findsNothing);
+    expect((tester.getCenter(more).dy - tester.getCenter(chip).dy).abs(), lessThan(9));
+    expect(tester.getTopRight(chip).dx, lessThanOrEqualTo(tester.getTopLeft(more).dx + 0.5));
+    // It opens Cc, Bcc and the subject, each on a line of its own, labels in one column.
+    await tester.tap(more);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compose-subject')), findsOneWidget);
+    final reply = find.byKey(const ValueKey('thread-reply'));
+    final lefts = {for (final l in ['To', 'Cc', 'Bcc', 'Subject']) tester.getTopLeft(find.descendant(of: reply, matching: find.text(l)).first).dx.round()};
+    expect(lefts.length, 1, reason: 'the labels start at different places: $lefts');
+    expect(find.byKey(const ValueKey('compose-show-more')), findsNothing);
+    expect(tester.takeException(), isNull);
     await teardown(tester);
   });
 

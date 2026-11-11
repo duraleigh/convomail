@@ -149,6 +149,7 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
         final asked = ref.watch(replyRequestProvider);
         final request = asked != null && list.any((m) => m.id == asked.messageId) ? asked : null;
         _showing = request;
+        final below = widget.actions.isNotEmpty && isCompactLayout(context, ref);
         final rowKey = request?.rowKey;
         final draft = rowKey == null ? null : ref.watch(rowDraftProvider(rowKey)).value;
         final people = <String, String>{};
@@ -160,7 +161,10 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 8, 6),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+              Row(
                 children: [
                   Expanded(
                     child: Column(
@@ -171,8 +175,12 @@ class _ThreadViewState extends ConsumerState<ThreadView> {
                       ],
                     ),
                   ),
-                  ...widget.actions,
+                  if (!below) ...widget.actions,
                   if (widget.onClose != null) IconButton(tooltip: 'Close', onPressed: widget.onClose, icon: const Icon(Icons.close_rounded)),
+                ],
+              ),
+                  // On a phone the title gets the full width, and Done, Later and Reply sit under it.
+                  if (below) Padding(padding: const EdgeInsets.only(top: 8), child: Wrap(crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 4, children: widget.actions)),
                 ],
               ),
             ),
