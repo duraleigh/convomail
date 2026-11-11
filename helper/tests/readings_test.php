@@ -372,6 +372,62 @@ return [
         same(null, $w->reading('<shop@me>'));
     },
 
+    'a name is never taken from the subject line to say who "he" is' => function () use ($person): void {
+        // The rule is in what the assistant is told, for mail received and mail sent.
+        check(str_contains(Readings::INSTRUCTIONS, 'Never take a name from the Subject') && str_contains(Readings::INSTRUCTIONS, 'keep the email\'s own word'));
+        check(str_contains(Readings::SENT_INSTRUCTIONS, 'never take a name from it'));
+
+        $w = new World();
+        $person($w, 'marya@tour.example');
+        $w->assistantOn();
+        $reply = ['From' => 'Marya Glur <marya@tour.example>', 'To' => 'Clay Example <me@example.com>', 'Subject' => 'Re: Ruben and Clay musicians'];
+        $guess = ['line' => 'Marya agrees the salary is fine and asks whether Ruben can do the tracks.', 'needs_owner' => true, 'ask' => 'Tell Marya whether Ruben can do the tracks.', 'due' => '', 'place' => 'none', 'reasons' => ['It asks you a question.']];
+        $plain = ['line' => 'Marya agrees the salary is fine and asks whether he can do the tracks.', 'needs_owner' => true, 'ask' => 'Tell Marya whether he can do the tracks.', 'due' => '', 'place' => 'none', 'reasons' => ['It asks you a question.']];
+
+        // It guesses; the helper catches the name that is only in the Subject and asks once more, saying so.
+        $w->claude->answer = static fn (string $email): array => str_contains($email, 'Check before you answer') ? $plain : $guess;
+        $mid = $w->arriveWith($reply, "absolutely. I think that salary would be fine.\n\nCan he do the tracks or would that be someone else managing that?");
+        $w->readings->plan();
+        same(1, $w->readings->work());
+        same(2, count($w->claude->readings()), 'asked once more');
+        $second = (string) $w->claude->readings()[1]['body']['messages'][0]['content'];
+        check(str_contains($second, '"Ruben"') && str_contains($second, 'in the Subject but nowhere in the words of the email'));
+        same('Marya agrees the salary is fine and asks whether he can do the tracks.', $w->reading($mid)['line']);
+        same('Tell Marya whether he can do the tracks.', $w->reading($mid)['ask']);
+        same(2, (int) $w->store->db->val('SELECT SUM(calls) FROM {spend}'), 'both readings are on the meter');
+
+        // It insists on the name: the name is taken out by hand, so a guess is never shown as fact.
+        $w->claude->requests = [];
+        $w->claude->answer = static fn (): array => $guess;
+        $mid2 = $w->arriveWith(['Message-ID' => '<again@tour.example>'] + $reply, 'Can he do the tracks?');
+        $w->readings->plan();
+        $w->readings->work();
+        same(2, count($w->claude->readings()));
+        check(!str_contains($w->reading($mid2)['line'] . $w->reading($mid2)['ask'], 'Ruben'), 'a guessed name was shown');
+        same('Tell Marya whether someone can do the tracks.', $w->reading($mid2)['ask']);
+
+        // A name the email's own words give is used, with no second asking.
+        $w->claude->requests = [];
+        $mid3 = $w->arriveWith(['Message-ID' => '<named@tour.example>'] + $reply, 'Can Ruben do the tracks, or is that someone else?');
+        $w->readings->plan();
+        $w->readings->work();
+        same(1, count($w->claude->readings()));
+        check(str_contains($w->reading($mid3)['line'], 'Ruben'));
+
+        // In a first email the Subject is part of what the sender is saying now: nothing is second-guessed.
+        $w->claude->requests = [];
+        $mid4 = $w->arriveWith(['Message-ID' => '<first@tour.example>', 'Subject' => 'Ruben and Clay musicians'] + $reply, 'Can he do the tracks?');
+        $w->readings->plan();
+        $w->readings->work();
+        same(1, count($w->claude->readings()));
+        check(str_contains($w->reading($mid4)['line'], 'Ruben'));
+
+        // The sender's and the owner's own names are never taken for guesses, wherever they stand in the sentence.
+        same([], Readings::borrowedNames(['line' => 'The salary is fine, says Marya, and Clay should confirm.', 'ask' => ''], ['person' => true, 'subject' => 'Re: Marya and Clay', 'shown' => "ok\nMarya Glur marya@tour.example Clay Example"]));
+        same(['Ruben'], Readings::borrowedNames(['line' => 'Marya asks whether Ruben can do it.', 'ask' => 'Tell Marya about Ruben.'], ['person' => true, 'subject' => 'RE: Ruben and Clay musicians', 'shown' => "can he do it\nMarya Glur marya@tour.example Clay Example"]));
+        same([], Readings::borrowedNames(['line' => 'Your order from Ruben Foods shipped.', 'ask' => ''], ['person' => false, 'subject' => 'Re: Ruben Foods order', 'shown' => 'it shipped']), 'mail from a company is left alone');
+    },
+
     'Focus as it stands: not what you answered, finished, put off or said was not Focus; and what you added by hand' => function () use ($person, $renee, $news): void {
         $w = new World();
         $person($w);
