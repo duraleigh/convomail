@@ -90,7 +90,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     ref.listen<List<AppNotice>>(appNoticesProvider, (prev, next) {
       final seen = {for (final n in prev ?? const <AppNotice>[]) n.id};
       for (final n in next.where((n) => !seen.contains(n.id))) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(persist: false, 
           content: Text(n.body.isEmpty ? n.title : '${n.title}: ${n.body}'),
           behavior: SnackBarBehavior.floating,
           width: 440,

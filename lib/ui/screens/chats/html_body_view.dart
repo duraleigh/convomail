@@ -4,9 +4,12 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_windows/webview_windows.dart';
+
+import '../../../app/web_selection.dart';
 
 /// Builds the widget that shows a sanitized HTML document. The default is
 /// WebView2 on Windows; tests override it with a plain text renderer.
@@ -62,6 +65,21 @@ class WebViewPool {
         var href = a.getAttribute('href') || '';
         if (href) window.chrome.webview.postMessage(JSON.stringify({type:'link', href: href}));
       }, true);
+      // This box gets the mouse but never the keyboard, and has no menu of
+      // its own. So the app is told what is highlighted, and does the
+      // copying itself (Ctrl+C, or the menu a right-click asks for).
+      function picked(){ return String(window.getSelection() || '').slice(0, 500000); }
+      var pickTimer = null;
+      document.addEventListener('selectionchange', function(){
+        clearTimeout(pickTimer);
+        pickTimer = setTimeout(function(){
+          window.chrome.webview.postMessage(JSON.stringify({type:'selection', text: picked(), p: page()}));
+        }, 60);
+      });
+      document.addEventListener('contextmenu', function(e){
+        e.preventDefault();
+        window.chrome.webview.postMessage(JSON.stringify({type:'menu', x: e.clientX, y: e.clientY, text: picked(), p: page()}));
+      });
       function height(){ return Math.ceil(document.documentElement.scrollHeight); }
       // Which load this page is, so word from an earlier page is ignored.
       function page(){ return document.documentElement.getAttribute('data-cm') || ''; }
@@ -271,13 +289,46 @@ class _WebView2BodyState extends State<WebView2Body> {
           if (mounted && (h - _height).abs() > 16) setState(() => _height = h);
         case 'link':
           openMailLink(msg['href'] as String? ?? '');
+        case 'selection' when msg['p'] == _page:
+          WebSelection.report(this, msg['text'] as String? ?? '', _clearSelection);
+        case 'menu' when msg['p'] == _page:
+          final text = msg['text'] as String? ?? '';
+          WebSelection.report(this, text, _clearSelection);
+          unawaited(_showMenu(((msg['x'] as num?) ?? 0).toDouble(), ((msg['y'] as num?) ?? 0).toDouble(), text));
       }
     } catch (_) {}
+  }
+
+  void _clearSelection() {
+    final v = _view;
+    if (v != null && !_disposed) unawaited(v.controller.executeScript('window.getSelection().removeAllRanges()').catchError((Object _) {}));
+  }
+
+  /// The menu a right-click inside the email brings up: Copy and Select all.
+  Future<void> _showMenu(double x, double y, String text) async {
+    final box = context.findRenderObject();
+    if (!mounted || box is! RenderBox) return;
+    final at = box.localToGlobal(Offset(x, y));
+    final picked = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(at.dx, at.dy, at.dx, at.dy),
+      items: [
+        PopupMenuItem(key: const ValueKey('web-copy'), value: 'copy', enabled: text.isNotEmpty, child: const Text('Copy')),
+        const PopupMenuItem(key: ValueKey('web-select-all'), value: 'all', child: Text('Select all')),
+      ],
+    );
+    if (picked == 'copy') {
+      await Clipboard.setData(ClipboardData(text: text));
+    } else if (picked == 'all') {
+      final v = _view;
+      if (v != null && !_disposed) await v.controller.executeScript('window.getSelection().selectAllChildren(document.body)').catchError((Object _) {});
+    }
   }
 
   @override
   void dispose() {
     _disposed = true;
+    WebSelection.drop(this);
     _fallback?.cancel();
     _slowTimer?.cancel();
     final v = _view;
@@ -297,7 +348,15 @@ class _WebView2BodyState extends State<WebView2Body> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (view != null) Webview(view.controller),
+            // A click anywhere else in the app lets go of what was
+            // highlighted in here, as it would in any text.
+            if (view != null)
+              TapRegion(
+                onTapOutside: (_) {
+                  if (WebSelection.text != null) WebSelection.clear();
+                },
+                child: Webview(view.controller),
+              ),
             // Lifted in one step: a fade from the dark card to a white email
             // passes through grey, which reads as a flash.
             if (!_shown)

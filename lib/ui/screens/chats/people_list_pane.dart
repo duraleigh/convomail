@@ -66,7 +66,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     _offeredSelectAll = true;
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
-    _selectAllToast = messenger.showSnackBar(SnackBar(
+    _selectAllToast = messenger.showSnackBar(SnackBar(persist: false, 
       key: const ValueKey('select-all-toast'),
       content: Text(mode == InboxMode.people ? 'Select all ${list.length} chats?' : 'Select all ${list.length} in ${mode.label}?'),
       behavior: SnackBarBehavior.floating,
@@ -169,7 +169,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         }
         if (!mounted) return;
         messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(SnackBar(
+        messenger.showSnackBar(SnackBar(persist: false, 
           content: Text('Archived ${pending.length} conversation${pending.length == 1 ? '' : 's'}'),
           duration: actions.undoWindow,
           behavior: SnackBarBehavior.floating,
@@ -208,7 +208,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     if (moved.isEmpty || !mounted) return;
     final one = moved.length == 1;
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
+    messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 8), 
       content: Text('${one ? name : '${moved.length} senders'} moved to ${target.label}. ${one ? 'It stays' : 'They stay'} there until you change it.'),
       behavior: SnackBarBehavior.floating,
       width: 480,
@@ -257,7 +257,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     final selected = ref.read(selectedRowProvider);
     if (selected != null && candidates.any((c) => 'c:${c.contactKey}' == selected)) ref.read(selectedRowProvider.notifier).select('c:$keep');
     messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(SnackBar(
+    messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 8), 
       content: Text('Merged ${candidates.length} people into $name'),
       behavior: SnackBarBehavior.floating,
       width: 480,
@@ -304,13 +304,13 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
         final muted = !(pref?.muted ?? false);
         await db.into(db.rowPrefs).insertOnConflictUpdate(RowPrefsCompanion(rowKey: Value(row.rowKey), muted: Value(muted), updatedAt: Value(DateTime.now())));
         messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(SnackBar(content: Text(muted ? 'Notifications muted for ${row.title}' : 'Notifications on for ${row.title}'), behavior: SnackBarBehavior.floating, width: 420));
+        messenger.showSnackBar(SnackBar(persist: false, content: Text(muted ? 'Notifications muted for ${row.title}' : 'Notifications on for ${row.title}'), behavior: SnackBarBehavior.floating, width: 420));
       case RowAction.snooze:
         final until = await showSnoozePicker(context, currentlySnoozedUntil: row.snoozedUntil);
         if (until == null || !mounted) return;
         await ref.read(databaseProvider).snoozeRow(row.rowKey, until == SnoozeChoice.unsnooze ? null : until);
         messenger.hideCurrentSnackBar();
-        messenger.showSnackBar(SnackBar(
+        messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 8), 
           content: Text(until == SnoozeChoice.unsnooze ? '${row.title} is back in the list' : '${row.title} put off until ${describeSnooze(until)}'),
           behavior: SnackBarBehavior.floating,
           width: 420,
@@ -376,7 +376,7 @@ class _PeopleListPaneState extends ConsumerState<PeopleListPane> {
     }
     if (pending != null && mounted) {
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(
+      messenger.showSnackBar(SnackBar(persist: false, 
         content: Text(pending.label),
         duration: actions.undoWindow,
         behavior: SnackBarBehavior.floating,

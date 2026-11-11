@@ -89,7 +89,7 @@ class _AddAddressDialogState extends ConsumerState<AddAddressDialog> {
     }
     if (!mounted) return;
     Navigator.of(context).pop();
-    messenger?.showSnackBar(SnackBar(
+    messenger?.showSnackBar(SnackBar(persist: false, 
       content: Text(ready ? '$email is added and ready to send.' : '$email is added. Click "Set up sending" next to it before sending from it.'),
     ));
   }

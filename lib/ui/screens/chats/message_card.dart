@@ -228,7 +228,7 @@ class MessageCard extends ConsumerWidget {
                     final pending = await actions.trashRow('c:${message.fromContactKey}', messageIds: [message.id], label: 'Moved to Trash');
                     if (pending != null && context.mounted) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
+                        SnackBar(persist: false, 
                           content: Text(pending.label),
                           duration: actions.undoWindow,
                           behavior: SnackBarBehavior.floating,

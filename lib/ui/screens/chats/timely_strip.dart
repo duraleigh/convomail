@@ -18,7 +18,7 @@ Future<void> copyTimelyCode(BuildContext context, String code) async {
   final messenger = ScaffoldMessenger.of(context);
   await Clipboard.setData(ClipboardData(text: code));
   messenger.hideCurrentSnackBar();
-  messenger.showSnackBar(const SnackBar(content: Text('Code copied'), behavior: SnackBarBehavior.floating, width: 240, duration: Duration(seconds: 2)));
+  messenger.showSnackBar(const SnackBar(persist: false, content: Text('Code copied'), behavior: SnackBarBehavior.floating, width: 240, duration: Duration(seconds: 2)));
 }
 
 /// Timely things pinned above the list (spec 4.21): a one-time code just

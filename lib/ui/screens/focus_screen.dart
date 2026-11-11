@@ -80,7 +80,7 @@ class FocusScreen extends ConsumerWidget {
         await db.setFocusFix(i.id, false);
       }
       messenger.hideCurrentSnackBar();
-      messenger.showSnackBar(SnackBar(
+      messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 8), 
         content: Text(done ? 'Done: ${i.ask}' : 'Taken out of Focus. The email is still in ${i.person ? 'its chat' : 'Feed'}.', maxLines: 1, overflow: TextOverflow.ellipsis),
         behavior: SnackBarBehavior.floating,
         width: 460,

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'destinations.dart';
 import 'search_state.dart';
+import 'web_selection.dart';
 
 /// Intents for app-wide keyboard shortcuts (spec 5.3 "Keyboard").
 class GoToDestinationIntent extends Intent {
@@ -19,6 +20,11 @@ class FocusSearchIntent extends Intent {
   const FocusSearchIntent();
 }
 
+/// Ctrl+C while words are highlighted inside a designed email.
+class CopyWebSelectionIntent extends Intent {
+  const CopyWebSelectionIntent();
+}
+
 /// The shortcut table. Kept in one place so Settings can list it.
 abstract final class AppShortcuts {
   static final Map<ShortcutActivator, Intent> table = {
@@ -30,6 +36,9 @@ abstract final class AppShortcuts {
     const SingleActivator(LogicalKeyboardKey.digit6, control: true): const GoToDestinationIntent(Destination.settings),
     const SingleActivator(LogicalKeyboardKey.keyN, control: true): const ComposeIntent(),
     const SingleActivator(LogicalKeyboardKey.keyF, control: true): const FocusSearchIntent(),
+    // Only acts when words are highlighted in a designed email; otherwise
+    // Ctrl+C goes on to whatever text is selected in the app itself.
+    const SingleActivator(LogicalKeyboardKey.keyC, control: true): const CopyWebSelectionIntent(),
     const SingleActivator(LogicalKeyboardKey.slash): const FocusSearchIntent(),
   };
 
@@ -43,6 +52,19 @@ abstract final class AppShortcuts {
     ('Esc', 'Close the composer (the draft is kept)'),
     ('E / Del / P / S', 'Archive / Delete / Pin / Later for the selected row'),
   ];
+}
+
+/// Copies what is highlighted in a designed email. It steps aside when
+/// nothing is, so ordinary copying in the app is untouched.
+class _CopyWebSelectionAction extends Action<CopyWebSelectionIntent> {
+  @override
+  bool isEnabled(CopyWebSelectionIntent intent) => WebSelection.text != null;
+
+  @override
+  Object? invoke(CopyWebSelectionIntent intent) {
+    WebSelection.copy();
+    return null;
+  }
 }
 
 /// Global focus node for the search field so the shortcut can reach it.
@@ -77,6 +99,7 @@ class AppShortcutScope extends ConsumerWidget {
             onCompose?.call();
             return null;
           }),
+          CopyWebSelectionIntent: _CopyWebSelectionAction(),
           FocusSearchIntent: CallbackAction<FocusSearchIntent>(onInvoke: (_) {
             // Feed and Noise have the same search bar; anywhere else goes to Chats.
             if (!ref.read(destinationProvider).isList) ref.read(destinationProvider.notifier).select(Destination.chats);

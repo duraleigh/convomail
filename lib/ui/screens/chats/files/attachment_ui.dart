@@ -63,9 +63,9 @@ Future<void> openAttachment(BuildContext context, WidgetRef ref, Attachment a) a
       await service.openWithSystem(a.id);
     }
   } on MailTransportException catch (e) {
-    messenger?.showSnackBar(SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating, width: 420));
+    messenger?.showSnackBar(SnackBar(persist: false, content: Text(e.message), behavior: SnackBarBehavior.floating, width: 420));
   } catch (e) {
-    messenger?.showSnackBar(SnackBar(content: Text('Could not open ${a.fileName}: $e'), behavior: SnackBarBehavior.floating, width: 420));
+    messenger?.showSnackBar(SnackBar(persist: false, content: Text('Could not open ${a.fileName}: $e'), behavior: SnackBarBehavior.floating, width: 420));
   }
 }
 
@@ -73,9 +73,9 @@ Future<void> saveAttachmentAs(BuildContext context, WidgetRef ref, Attachment a)
   final messenger = ScaffoldMessenger.maybeOf(context);
   try {
     final path = await ref.read(attachmentServiceProvider).saveAs(a.id);
-    if (path != null) messenger?.showSnackBar(SnackBar(content: Text('Saved ${a.fileName}'), behavior: SnackBarBehavior.floating, width: 360));
+    if (path != null) messenger?.showSnackBar(SnackBar(persist: false, content: Text('Saved ${a.fileName}'), behavior: SnackBarBehavior.floating, width: 360));
   } on MailTransportException catch (e) {
-    messenger?.showSnackBar(SnackBar(content: Text(e.message), behavior: SnackBarBehavior.floating, width: 420));
+    messenger?.showSnackBar(SnackBar(persist: false, content: Text(e.message), behavior: SnackBarBehavior.floating, width: 420));
   }
 }
 

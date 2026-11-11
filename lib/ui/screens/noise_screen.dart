@@ -238,7 +238,7 @@ Future<void> _archive(BuildContext context, WidgetRef ref, List<MailItem> items,
   }
   if (pending.isEmpty) return;
   messenger.hideCurrentSnackBar();
-  messenger.showSnackBar(SnackBar(
+  messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 6), 
     content: Text('Archived ${items.length} email${items.length == 1 ? '' : 's'}'),
     behavior: SnackBarBehavior.floating,
     width: 420,

@@ -34,7 +34,7 @@ class ThreadMenuButton extends ConsumerWidget {
             final rowKey = (await (db.select(db.messageRowAssignments)..where((r) => r.messageId.equals(newest.id))..limit(1)).getSingleOrNull())?.rowKey;
             if (!context.mounted) return;
             final id = await showReminderDialog(context, ref, title: subject, messageId: newest.id, threadKey: threadKey, rowKey: rowKey);
-            if (id != null) messenger.showSnackBar(const SnackBar(content: Text('Reminder set'), behavior: SnackBarBehavior.floating, width: 300));
+            if (id != null) messenger.showSnackBar(const SnackBar(persist: false, content: Text('Reminder set'), behavior: SnackBarBehavior.floating, width: 300));
         }
       },
       itemBuilder: (_) => [

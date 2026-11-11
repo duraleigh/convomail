@@ -302,7 +302,7 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       if (!mounted) return;
       _draftId = null;
       _progress.clear(_token);
-      messenger?.showSnackBar(SnackBar(content: Text('Sent to $recipientsLabel'), behavior: SnackBarBehavior.floating, width: 360));
+      messenger?.showSnackBar(SnackBar(persist: false, content: Text('Sent to $recipientsLabel'), behavior: SnackBarBehavior.floating, width: 360));
       widget.onClose();
     } on MailTransportException catch (e) {
       if (!mounted) return;

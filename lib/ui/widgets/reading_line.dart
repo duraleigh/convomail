@@ -118,7 +118,7 @@ Future<void> moveSenderOf(BuildContext context, WidgetRef ref, MailItem item, {F
   }
   final where = pile == null ? 'Chats' : (pile == FeedsPile.feed ? 'Feed' : 'Noise');
   messenger.hideCurrentSnackBar();
-  messenger.showSnackBar(SnackBar(
+  messenger.showSnackBar(SnackBar(persist: false, duration: const Duration(seconds: 8), 
     content: Text('${item.senderName} moved to $where. It stays there until you change it.'),
     behavior: SnackBarBehavior.floating,
     width: 480,
@@ -171,7 +171,7 @@ class WhyDialog extends ConsumerWidget {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(said)));
+        ..showSnackBar(SnackBar(persist: false, content: Text(said)));
     }
 
     return AlertDialog(
