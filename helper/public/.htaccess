@@ -1,0 +1,17 @@
+# Précis helper: every address goes to index.php. Nothing else is served.
+Options -Indexes
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteOptions None
+RewriteCond %{HTTPS} !=on
+RewriteCond %{HTTP:X-Forwarded-Proto} !=https
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+RewriteRule ^index\.php$ - [L]
+RewriteRule ^ index.php [L]
+</IfModule>
+<IfModule LiteSpeed>
+CacheDisable public /
+</IfModule>
+<FilesMatch "^\.">
+Require all denied
+</FilesMatch>

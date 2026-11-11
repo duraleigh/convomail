@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# The helper: its private folder never goes into the saved copy
+helper/data/
