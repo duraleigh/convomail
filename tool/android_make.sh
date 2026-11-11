@@ -1,0 +1,42 @@
+#!/bin/bash
+# Makes the Android app. Runs inside Ubuntu (WSL), where the Android tools live.
+#
+#   From Windows:  wsl.exe -d Ubuntu -- bash -lc 'bash /mnt/c/Users/clay/Projects/convomail/tool/android_make.sh [debug|release] [icons]'
+#
+# The Windows working copy is the one true copy. This script copies it into
+# ~/projects/convomail-make (Flutter's own notes differ between Windows and
+# Ubuntu, so the two cannot share a folder), makes the app there, and puts
+# the finished file back in the Windows copy under build/android/.
+set -u
+MODE="${1:-release}"
+WIN=/mnt/c/Users/clay/Projects/convomail
+WORK="$HOME/projects/convomail-make"
+LOG="$HOME/projects/convomail-make.log"
+source "$HOME/opt/android-env.sh"
+export PATH="$HOME/opt/flutter/bin:$PATH"
+exec > "$LOG" 2>&1
+echo "started $(date) mode=$MODE"
+mkdir -p "$WORK"
+rsync -a --delete \
+  --exclude .git --exclude build --exclude .dart_tool --exclude .idea \
+  --exclude 'windows/flutter/ephemeral' --exclude 'helper/vendor' --exclude 'helper/data' \
+  --exclude 'android/local.properties' --exclude 'android/.gradle' --exclude 'android/.kotlin' \
+  --exclude '.flutter-plugins-dependencies' --exclude 'android/app/src/main/java/io/flutter/plugins' \
+  "$WIN/" "$WORK/" || { echo "COPY FAILED"; echo MAKE-DONE; exit 1; }
+cd "$WORK" || exit 1
+flutter pub get --enforce-lockfile 2>&1 | tail -4
+if [ "${2:-}" = "icons" ]; then
+  dart run flutter_launcher_icons 2>&1 | tail -6
+  rsync -a android/app/src/main/res/ "$WIN/android/app/src/main/res/"
+fi
+echo "=== make starts $(date)"
+flutter build apk "--$MODE" 2>&1 | grep -v '^\s*$' | tail -80
+echo "=== make exit: ${PIPESTATUS[0]} at $(date)"
+OUT="build/app/outputs/flutter-apk/app-$MODE.apk"
+if [ -f "$OUT" ]; then
+  mkdir -p "$WIN/build/android"
+  cp "$OUT" "$WIN/build/android/Precis-$MODE.apk"
+  ls -la "$WIN/build/android/"
+  echo "MADE"
+fi
+echo MAKE-DONE

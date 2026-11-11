@@ -6,6 +6,8 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:win32/win32.dart';
 
+import 'android_bridge.dart';
+
 /// Secret storage for account passwords and tokens (spec 4.1).
 ///
 /// On Windows this is the Credential Manager (generic credentials), so
@@ -117,7 +119,7 @@ class InMemoryCredentialStore implements CredentialStore {
 
 final credentialStoreProvider = Provider<CredentialStore>((ref) {
   if (Platform.isWindows) return WindowsCredentialStore();
-  // Android (Phase 2) gets a Keystore-backed implementation; until then an
-  // in-memory store keeps other platforms running for development.
+  // A phone keeps its secrets locked with a key in Android's own key store.
+  if (Platform.isAndroid) return AndroidCredentialStore(ref.read(androidBridgeProvider));
   return InMemoryCredentialStore();
 });

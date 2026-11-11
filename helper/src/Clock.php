@@ -11,7 +11,7 @@ namespace Precis;
  */
 final class Clock
 {
-    public function __construct(private readonly Store $store, private readonly Reader $reader, private readonly ?Readings $readings = null)
+    public function __construct(private readonly Store $store, private readonly Reader $reader, private readonly ?Readings $readings = null, private readonly ?Alerts $alerts = null)
     {
     }
 
@@ -39,7 +39,7 @@ final class Clock
     public function run(int $seconds = 48): array
     {
         $started = microtime(true);
-        $out = ['new' => 0, 'older' => 0, 'reminders' => 0, 'back' => 0, 'queued' => 0, 'read' => 0, 'day' => 0];
+        $out = ['new' => 0, 'older' => 0, 'reminders' => 0, 'back' => 0, 'queued' => 0, 'read' => 0, 'day' => 0, 'alerts' => 0];
         foreach ($this->reader->accounts() as $a) {
             $id = (int) $a['id'];
             $this->reader->renewWatch($id);
@@ -60,6 +60,10 @@ final class Clock
             $left = $seconds - (microtime(true) - $started);
             if ($left > 5) {
                 $out['read'] = $this->readings->work($left - 4);
+            }
+            // What newly needs the owner rings their phones; what is finished stops showing there.
+            if ($this->alerts !== null) {
+                $out['alerts'] = $this->alerts->sweep();
             }
             // The sentence at the top of Today, when the page under it has changed.
             if ($seconds - (microtime(true) - $started) > 6) {

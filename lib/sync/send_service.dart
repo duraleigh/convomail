@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/html_sanitizer.dart';
+import '../helper/helper_pass.dart';
 import '../mail/mail_sender.dart';
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
@@ -131,6 +132,10 @@ class SendService {
         }
         server = ownServer;
         credentials = MailCredentials(username: identity.smtpUsername ?? identity.email, password: password);
+      } else if (account.authMethod == kHelperAuth) {
+        // A device that joined by code sends with the helper's pass.
+        server = ServerConfig(host: account.smtpHost, port: account.smtpPort, security: ConnectionSecurityName.parse(account.smtpSecurity));
+        credentials = await _ref.read(helperPassProvider).credentials(account.email);
       } else {
         final password = await store.read(CredentialStore.passwordKey(account.id));
         if (password == null) throw const MailTransportException('No saved password for this account.', isAuthFailure: true);

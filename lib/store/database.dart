@@ -43,7 +43,9 @@ class Accounts extends Table {
   IntColumn get smtpPort => integer()();
   TextColumn get smtpSecurity => text()();
   TextColumn get username => text()();
-  /// 'password' | 'oauth2'
+  /// 'password': this device holds the mailbox password itself.
+  /// 'helper': this device joined by code and holds no password; the helper
+  /// hands it a pass to the mailbox that lasts about an hour.
   TextColumn get authMethod => text().withDefault(const Constant('password'))();
   TextColumn get providerId => text().withDefault(const Constant('custom'))();
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
@@ -592,8 +594,30 @@ class HelperSenders extends Table {
   TextColumn get cat => text().nullable()();
   TextColumn get reasons => text().withDefault(const Constant(''))();
 
+  /// What the user set on this sender on any device. Kept here too because
+  /// it can arrive before this device has seen any mail from the sender.
+  TextColumn get pile => text().nullable()();
+  BoolColumn get counts => boolean().nullable()();
+  TextColumn get label => text().nullable()();
+  TextColumn get subtitle => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {key};
+}
+
+/// What the user set on one email on any device (done, put off, Focus or
+/// not, Feed or Noise), by its Message-ID. Kept because it can arrive
+/// before the email itself does: the email takes these on the moment it
+/// lands here.
+class HelperMarks extends Table {
+  TextColumn get messageId => text()();
+  DateTimeColumn get doneAt => dateTime().nullable()();
+  DateTimeColumn get laterUntil => dateTime().nullable()();
+  TextColumn get focusFix => text().nullable()();
+  TextColumn get pileFix => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {messageId};
 }
 
 /// What the helper decided about one email, by its Message-ID. It can
@@ -676,7 +700,7 @@ class HelperState extends Table {
   Cards,
   CardTags,
   Reminders,
-  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState, HelperReadings])
+  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState, HelperReadings, HelperMarks])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
 
@@ -693,7 +717,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 23;
+  int get schemaVersion => 24;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -705,6 +729,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
           await _seedFeedsCategories();
           await _seedBoardColumns();
           await _createHelperTriggers();
+          await _createHeldTriggers();
         },
         onUpgrade: (m, from, to) async {
           if (from < 2) {
@@ -865,6 +890,18 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             // of sent mail; an older version of the app let those go by.
             if (from >= 20) await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
           }
+          if (from < 24) {
+            await m.createTable(helperMarks);
+            if (from >= 20) {
+              await m.addColumn(helperSenders, helperSenders.pile);
+              await m.addColumn(helperSenders, helperSenders.counts);
+              await m.addColumn(helperSenders, helperSenders.label);
+              await m.addColumn(helperSenders, helperSenders.subtitle);
+              // What was set on other devices is taken in again, now that it is kept.
+              await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
+            }
+            await _createHeldTriggers();
+          }
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -974,6 +1011,62 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
     for (final e in triggers.entries) {
       await customStatement('CREATE TRIGGER IF NOT EXISTS ${e.key} ${e.value}');
     }
+  }
+
+  /// Empties every table and gives the space back, leaving a database as
+  /// new. Used when a device that joined by code is signed out.
+  Future<void> wipeEverything() async {
+    await customStatement('PRAGMA foreign_keys = OFF');
+    try {
+      await transaction(() async {
+        await customStatement('UPDATE helper_state SET connected = 0, applying = 0');
+        // Twice: emptying one table can leave notes in another.
+        for (var pass = 0; pass < 2; pass++) {
+          for (final t in allTables) {
+            await delete(t).go();
+          }
+        }
+        await customStatement('DELETE FROM message_fts');
+        await _seedFeedsCategories();
+        await _seedBoardColumns();
+        await customStatement('INSERT OR IGNORE INTO helper_state (id, connected, applying) VALUES (1, 0, 0)');
+      });
+    } finally {
+      await customStatement('PRAGMA foreign_keys = ON');
+    }
+    try {
+      await customStatement('VACUUM');
+    } catch (_) {
+      // Busy right now: the space is given back the next time.
+    }
+  }
+
+  /// An email or a sender that lands here after its marks did takes them on
+  /// at once. (The helper's word can travel faster than the mail itself:
+  /// "done" pressed on the PC a minute ago, mail fetched on the phone now.)
+  Future<void> _createHeldTriggers() async {
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_held_msg AFTER INSERT ON messages
+      WHEN NEW.message_id IS NOT NULL AND NEW.message_id <> '' AND EXISTS (SELECT 1 FROM helper_marks WHERE message_id = NEW.message_id)
+      BEGIN
+        UPDATE messages SET
+          done_at = (SELECT done_at FROM helper_marks WHERE message_id = NEW.message_id),
+          later_until = (SELECT later_until FROM helper_marks WHERE message_id = NEW.message_id),
+          focus_fix = (SELECT focus_fix FROM helper_marks WHERE message_id = NEW.message_id),
+          pile_fix = (SELECT pile_fix FROM helper_marks WHERE message_id = NEW.message_id)
+        WHERE id = NEW.id;
+      END''');
+    await customStatement('''
+      CREATE TRIGGER IF NOT EXISTS trg_held_contact AFTER INSERT ON contacts
+      WHEN NEW.is_me = 0 AND EXISTS (SELECT 1 FROM helper_senders WHERE key = NEW.key)
+      BEGIN
+        UPDATE contacts SET
+          feeds_pile = COALESCE((SELECT pile FROM helper_senders WHERE key = NEW.key), feeds_pile),
+          counts_toward_unread = COALESCE((SELECT counts FROM helper_senders WHERE key = NEW.key), counts_toward_unread),
+          user_label = COALESCE((SELECT label FROM helper_senders WHERE key = NEW.key), user_label),
+          user_subtitle = COALESCE((SELECT subtitle FROM helper_senders WHERE key = NEW.key), user_subtitle)
+        WHERE key = NEW.key;
+      END''');
   }
 
   Future<void> _createTriggers() async {

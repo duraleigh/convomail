@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/account_scope.dart';
 import '../../app/compose_state.dart';
 import '../../app/destinations.dart';
+import '../../app/layout.dart';
 import '../../app/mail_state.dart';
 import '../../app/onboarding.dart';
 import '../../app/people_state.dart';
@@ -24,6 +25,7 @@ import '../screens/settings_screen.dart';
 import '../screens/today_screen.dart';
 import '../theme/tokens.dart';
 import '../widgets/tonal_avatar.dart';
+import 'compact_shell.dart';
 import 'top_search_bar.dart';
 
 /// The single-window desktop shell: navigation rail on the left, destination
@@ -116,6 +118,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     if (ref.watch(showOnboardingProvider) && !settings.onboardingDone && accounts != null && accounts.isEmpty) {
       return const OnboardingScreen();
     }
+
+    if (isCompactLayout(context, ref)) return CompactShell(content: _content, searchBar: const TopSearchBar());
 
     return AppShortcutScope(
       onCompose: () {

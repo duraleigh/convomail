@@ -31,8 +31,11 @@ final class Sync
      *
      * @return array{applied: int, seq: int}
      */
-    public function push(int $device, array $entries): array
+    public function push(int $device, array $entries, bool $echo = false): array
     {
+        // A change made from an alert on a phone, with the app closed, is
+        // written as nobody's, so that phone's own app hears it back too.
+        $origin = $echo ? null : $device;
         if (count($entries) > self::MAX_ITEMS) {
             throw new InvalidArgumentException('Too many changes in one go.');
         }
@@ -54,7 +57,7 @@ final class Sync
             }
             $old = $this->store->item($kind, $k);
             if (!empty($e['deleted'])) {
-                $changed = $this->store->remove($kind, $k, $device);
+                $changed = $this->store->remove($kind, $k, $origin);
                 $data = null;
             } else {
                 $data = $e['data'] ?? null;
@@ -67,7 +70,7 @@ final class Sync
                     // A fix to the tag and a fix to the place are kept side by side.
                     $data += $old;
                 }
-                $changed = $this->store->put($kind, $k, $data, $device);
+                $changed = $this->store->put($kind, $k, $data, $origin);
             }
             if (!$changed) {
                 continue;
@@ -199,6 +202,11 @@ final class Sync
                 return $this->renameTag($device, (string) ($e['from'] ?? ''), (string) ($e['to'] ?? ''));
             case 'delete-tag':
                 return $this->renameTag($device, (string) ($e['name'] ?? ''), null);
+            case 'reminder-done':
+                // "Done" pressed on a reminder's alert: every device hears it, the phone's own app too.
+                $uid = (string) ($e['uid'] ?? '');
+                $old = $uid === '' ? null : $this->store->item('reminder', $uid);
+                return $old === null ? 0 : (int) $this->store->put('reminder', $uid, ['done' => true] + $old, null);
             default:
                 throw new InvalidArgumentException('That action is not known.');
         }

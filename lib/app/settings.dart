@@ -106,19 +106,27 @@ class SettingsNotifier extends Notifier<AppSettings> {
   SettingsStore get _db => ref.read(settingsStoreProvider);
 
   Future<void> _load() async {
-    final theme = await _db.getSetting(_kTheme);
-    final dynamic = await _db.getSetting(_kDynamic);
-    final pane = await _db.getSetting(_kPane);
-    final block = await _db.getSetting(_kBlockImages);
-    final feeds = await _db.getSetting(_kIncludeFeeds);
-    final notify = await _db.getSetting(_kNotify);
-    final badgeFeeds = await _db.getSetting(_kBadgeFeeds);
-    final muted = await _db.getSetting(_kMuted);
-    final tray = await _db.getSetting(_kCloseToTray);
-    final login = await _db.getSetting(_kLaunchAtLogin);
-    final badge = await _db.getSetting(_kShowBadge);
-    final feed = await _db.getSetting(_kUpdateFeed);
-    final onboarded = await _db.getSetting(_kOnboardingDone);
+    // Read once, before any wait: the app may be closing by the time a wait ends.
+    final SettingsStore db;
+    try {
+      db = _db;
+    } catch (_) {
+      return;
+    }
+    final theme = await db.getSetting(_kTheme);
+    final dynamic = await db.getSetting(_kDynamic);
+    final pane = await db.getSetting(_kPane);
+    final block = await db.getSetting(_kBlockImages);
+    final feeds = await db.getSetting(_kIncludeFeeds);
+    final notify = await db.getSetting(_kNotify);
+    final badgeFeeds = await db.getSetting(_kBadgeFeeds);
+    final muted = await db.getSetting(_kMuted);
+    final tray = await db.getSetting(_kCloseToTray);
+    final login = await db.getSetting(_kLaunchAtLogin);
+    final badge = await db.getSetting(_kShowBadge);
+    final feed = await db.getSetting(_kUpdateFeed);
+    final onboarded = await db.getSetting(_kOnboardingDone);
+    if (!ref.mounted) return;
     state = AppSettings(
       themeMode: ThemeMode.values.firstWhere((m) => m.name == theme, orElse: () => ThemeMode.system),
       dynamicColor: dynamic == 'true',

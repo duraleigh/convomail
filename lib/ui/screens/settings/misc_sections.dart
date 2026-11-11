@@ -14,6 +14,7 @@ import '../../../sync/notification_center.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/grouped_list.dart';
 import 'accounts_section.dart' show accountsStreamProvider;
+import 'alerts_section.dart';
 
 /// Settings → Notifications (spec 4.17, 4.18): the global switch, badge
 /// scope (People only by default), and per-account mute. Toast delivery
@@ -29,8 +30,11 @@ class NotificationsDetail extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final n = ref.read(settingsProvider.notifier);
+    final pc = !Platform.isAndroid;
     return ListView(
       children: [
+        const AlertsSettings(),
+        if (pc)
         GroupedList(
           children: [
             SwitchListTile(
@@ -51,7 +55,7 @@ class NotificationsDetail extends ConsumerWidget {
             ),
           ],
         ),
-        if (accounts.isNotEmpty) ...[
+        if (pc && accounts.isNotEmpty) ...[
           const SizedBox(height: AppSpace.xl),
           Text('Per account', style: text.labelSmall!.copyWith(letterSpacing: 1)),
           const SizedBox(height: AppSpace.sm),
@@ -68,6 +72,7 @@ class NotificationsDetail extends ConsumerWidget {
             ],
           ),
         ],
+        if (pc) ...[
         const SizedBox(height: AppSpace.xl),
         Text('Windows', style: text.labelSmall!.copyWith(letterSpacing: 1)),
         const SizedBox(height: AppSpace.sm),
@@ -104,7 +109,8 @@ class NotificationsDetail extends ConsumerWidget {
             ),
           ],
         ),
-        if (ref.watch(windowsIntegrationProvider) == null) ...[
+        ],
+        if (pc && ref.watch(windowsIntegrationProvider) == null) ...[
           const SizedBox(height: AppSpace.sm),
           Text('Tray, badge, and toasts are active in the Windows build.', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
         ],

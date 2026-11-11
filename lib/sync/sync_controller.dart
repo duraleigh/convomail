@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../helper/helper_pass.dart';
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../mail/transport_factory.dart';
@@ -44,6 +45,7 @@ class SyncController {
   final Map<int, AccountSyncer> _syncers = {};
   final Map<int, Future<void>> _runs = {};
   StreamSubscription<List<Account>>? _sub;
+  Timer? _retry;
 
   AppDatabase get _db => _ref.read(databaseProvider);
 
@@ -51,6 +53,10 @@ class SyncController {
   /// messages that predate the threading model (schema v5 migration).
   void start() {
     _sub ??= _db.watchAccounts().listen(_reconcile);
+    // A joined device whose pass was refused (Google not allowed yet, or the
+    // helper out of reach at the wrong moment) tries again by itself: there
+    // is no password for the user to fix.
+    _retry ??= Timer.periodic(const Duration(minutes: 2), (_) => unawaited(_retryJoined()));
     // Senders not yet classified (first launch after the Feeds milestone,
     // or an interrupted backfill) are worked through in batches.
     unawaited(() async {
@@ -101,6 +107,16 @@ class SyncController {
     }
   }
 
+  Future<void> _retryJoined() async {
+    final statuses = _ref.read(syncStatusProvider);
+    for (final id in _syncers.keys.toList()) {
+      final account = _syncers[id]!.account;
+      if (account.authMethod != kHelperAuth || statuses[id]?.phase != SyncPhase.error) continue;
+      _ref.read(helperPassProvider).forget();
+      await restartAccount(id);
+    }
+  }
+
   void _startAccount(Account account) {
     final store = _ref.read(credentialStoreProvider);
     final syncer = AccountSyncer(
@@ -109,6 +125,8 @@ class SyncController {
       onDemandTransport: _ref.read(transportFactoryProvider)(),
       account: account,
       credentials: () async {
+        // A device that joined by code has no password: the helper hands it a pass.
+        if (account.authMethod == kHelperAuth) return _ref.read(helperPassProvider).credentials(account.email);
         // Brief grace period: the credential write and the accounts stream
         // can race by a few milliseconds on a fresh account.
         String? pw;
@@ -152,6 +170,7 @@ class SyncController {
   }
 
   Future<void> dispose() async {
+    _retry?.cancel();
     await _sub?.cancel();
     for (final id in _syncers.keys.toList()) {
       await _stopAccount(id, updateStatus: false);

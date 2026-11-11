@@ -53,15 +53,44 @@ class GoogleAuthException implements Exception {
   String toString() => message;
 }
 
+/// Google by way of the helper, on a device that joined by code: it has no
+/// Google sign-in of its own, and uses the helper's pass for the calendar
+/// and contacts too.
+abstract interface class GoogleViaHelper {
+  /// Whether this device joined by code.
+  Future<bool> joined();
+
+  /// A pass that Google honors for about an hour.
+  Future<String> access();
+
+  /// What Google allows the helper.
+  Future<({bool calendar, bool contacts})> grants();
+}
+
 /// Google sign-in for contacts (spec 4.2) and the calendar. The user
 /// supplies their own OAuth client as a downloaded file, the browser does the
 /// signing in, and the app only ever holds tokens, in Windows Credential
 /// Manager. It asks for read-only contacts access and for the calendar
 /// (shown on Today; only ever read).
 class GoogleOAuth {
-  GoogleOAuth({required this.store, GoogleHttp? http, required this.openBrowser, DateTime Function()? clock})
+  GoogleOAuth({required this.store, GoogleHttp? http, required this.openBrowser, DateTime Function()? clock, this.viaHelper})
       : http = http ?? defaultGoogleHttp,
         _clock = clock ?? DateTime.now;
+
+  /// Set on every device; used only by one that joined by code and has no
+  /// Google sign-in of its own.
+  final GoogleViaHelper? viaHelper;
+
+  /// Whether Google is reached with the helper's pass on this device.
+  Future<bool> get usesHelper async {
+    final h = viaHelper;
+    if (h == null || await store.read(refreshKey) != null) return false;
+    try {
+      return await h.joined();
+    } catch (_) {
+      return false;
+    }
+  }
 
   final CredentialStore store;
   final GoogleHttp http;
@@ -83,11 +112,18 @@ class GoogleOAuth {
   DateTime? _accessUntil;
 
   Future<bool> get hasClient async => await store.read(clientKey) != null;
-  Future<bool> get isConnected async => await store.read(refreshKey) != null;
+  Future<bool> get isConnected async => await store.read(refreshKey) != null || await usesHelper;
 
   /// Whether the saved permission covers the calendar. A connection made
   /// before calendar access was asked for does not; signing in again adds it.
   Future<bool> get hasCalendar async {
+    if (await usesHelper) {
+      try {
+        return (await viaHelper!.grants()).calendar;
+      } catch (_) {
+        return false;
+      }
+    }
     if (!await isConnected) return false;
     var granted = await store.read(grantedKey);
     if (granted == null) {
@@ -195,6 +231,15 @@ class GoogleOAuth {
 
   /// A current access token, renewed when needed.
   Future<String> accessToken() async {
+    if (await usesHelper) {
+      try {
+        return await viaHelper!.access();
+      } on GoogleAuthException {
+        rethrow;
+      } catch (e) {
+        throw GoogleAuthException('The helper gave no pass to Google ($e).');
+      }
+    }
     final until = _accessUntil;
     if (_access != null && until != null && _clock().isBefore(until)) return _access!;
     final refresh = await store.read(refreshKey);

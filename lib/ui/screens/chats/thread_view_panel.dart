@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/conversation_state.dart';
+import '../../../app/layout.dart';
 import '../../../store/database.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/tonal_avatar.dart';
@@ -35,9 +36,16 @@ class _ThreadViewPanelState extends ConsumerState<ThreadViewPanel> with SingleTi
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // On a phone the email fills the screen, and Back closes it.
+    final compact = isCompactLayout(context, ref);
 
     return Positioned.fill(
-      child: Stack(
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _close();
+        },
+        child: Stack(
         children: [
           GestureDetector(onTap: _close, child: FadeTransition(opacity: _anim, child: Container(color: scheme.scrim.withValues(alpha: 0.32)))),
           SlideTransition(
@@ -45,11 +53,11 @@ class _ThreadViewPanelState extends ConsumerState<ThreadViewPanel> with SingleTi
             child: Align(
               alignment: Alignment.centerRight,
               child: FractionallySizedBox(
-                widthFactor: 0.88,
+                widthFactor: compact ? 1 : 0.88,
                 child: Material(
                   color: scheme.surface,
                   elevation: 3,
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(AppShapes.xl)),
+                  borderRadius: compact ? BorderRadius.zero : const BorderRadius.horizontal(left: Radius.circular(AppShapes.xl)),
                   clipBehavior: Clip.antiAlias,
                   child: ThreadView(threadKey: widget.threadKey, onClose: _close),
                 ),
@@ -57,6 +65,7 @@ class _ThreadViewPanelState extends ConsumerState<ThreadViewPanel> with SingleTi
             ),
           ),
         ],
+        ),
       ),
     );
   }

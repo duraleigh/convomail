@@ -723,7 +723,9 @@ class Account extends DataClass implements Insertable<Account> {
   final String smtpSecurity;
   final String username;
 
-  /// 'password' | 'oauth2'
+  /// 'password': this device holds the mailbox password itself.
+  /// 'helper': this device joined by code and holds no password; the helper
+  /// hands it a pass to the mailbox that lasts about an hour.
   final String authMethod;
   final String providerId;
   final bool enabled;
@@ -16502,8 +16504,59 @@ class $HelperSendersTable extends HelperSenders
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _pileMeta = const VerificationMeta('pile');
   @override
-  List<GeneratedColumn> get $columns => [key, cls, src, cat, reasons];
+  late final GeneratedColumn<String> pile = GeneratedColumn<String>(
+    'pile',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _countsMeta = const VerificationMeta('counts');
+  @override
+  late final GeneratedColumn<bool> counts = GeneratedColumn<bool>(
+    'counts',
+    aliasedName,
+    true,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("counts" IN (0, 1))',
+    ),
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _subtitleMeta = const VerificationMeta(
+    'subtitle',
+  );
+  @override
+  late final GeneratedColumn<String> subtitle = GeneratedColumn<String>(
+    'subtitle',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    key,
+    cls,
+    src,
+    cat,
+    reasons,
+    pile,
+    counts,
+    label,
+    subtitle,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -16550,6 +16603,30 @@ class $HelperSendersTable extends HelperSenders
         reasons.isAcceptableOrUnknown(data['reasons']!, _reasonsMeta),
       );
     }
+    if (data.containsKey('pile')) {
+      context.handle(
+        _pileMeta,
+        pile.isAcceptableOrUnknown(data['pile']!, _pileMeta),
+      );
+    }
+    if (data.containsKey('counts')) {
+      context.handle(
+        _countsMeta,
+        counts.isAcceptableOrUnknown(data['counts']!, _countsMeta),
+      );
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    }
+    if (data.containsKey('subtitle')) {
+      context.handle(
+        _subtitleMeta,
+        subtitle.isAcceptableOrUnknown(data['subtitle']!, _subtitleMeta),
+      );
+    }
     return context;
   }
 
@@ -16579,6 +16656,22 @@ class $HelperSendersTable extends HelperSenders
         DriftSqlType.string,
         data['${effectivePrefix}reasons'],
       )!,
+      pile: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pile'],
+      ),
+      counts: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}counts'],
+      ),
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      ),
+      subtitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}subtitle'],
+      ),
     );
   }
 
@@ -16594,12 +16687,23 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
   final String src;
   final String? cat;
   final String reasons;
+
+  /// What the user set on this sender on any device. Kept here too because
+  /// it can arrive before this device has seen any mail from the sender.
+  final String? pile;
+  final bool? counts;
+  final String? label;
+  final String? subtitle;
   const HelperSender({
     required this.key,
     required this.cls,
     required this.src,
     this.cat,
     required this.reasons,
+    this.pile,
+    this.counts,
+    this.label,
+    this.subtitle,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -16611,6 +16715,18 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
       map['cat'] = Variable<String>(cat);
     }
     map['reasons'] = Variable<String>(reasons);
+    if (!nullToAbsent || pile != null) {
+      map['pile'] = Variable<String>(pile);
+    }
+    if (!nullToAbsent || counts != null) {
+      map['counts'] = Variable<bool>(counts);
+    }
+    if (!nullToAbsent || label != null) {
+      map['label'] = Variable<String>(label);
+    }
+    if (!nullToAbsent || subtitle != null) {
+      map['subtitle'] = Variable<String>(subtitle);
+    }
     return map;
   }
 
@@ -16621,6 +16737,16 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
       src: Value(src),
       cat: cat == null && nullToAbsent ? const Value.absent() : Value(cat),
       reasons: Value(reasons),
+      pile: pile == null && nullToAbsent ? const Value.absent() : Value(pile),
+      counts: counts == null && nullToAbsent
+          ? const Value.absent()
+          : Value(counts),
+      label: label == null && nullToAbsent
+          ? const Value.absent()
+          : Value(label),
+      subtitle: subtitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(subtitle),
     );
   }
 
@@ -16635,6 +16761,10 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
       src: serializer.fromJson<String>(json['src']),
       cat: serializer.fromJson<String?>(json['cat']),
       reasons: serializer.fromJson<String>(json['reasons']),
+      pile: serializer.fromJson<String?>(json['pile']),
+      counts: serializer.fromJson<bool?>(json['counts']),
+      label: serializer.fromJson<String?>(json['label']),
+      subtitle: serializer.fromJson<String?>(json['subtitle']),
     );
   }
   @override
@@ -16646,6 +16776,10 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
       'src': serializer.toJson<String>(src),
       'cat': serializer.toJson<String?>(cat),
       'reasons': serializer.toJson<String>(reasons),
+      'pile': serializer.toJson<String?>(pile),
+      'counts': serializer.toJson<bool?>(counts),
+      'label': serializer.toJson<String?>(label),
+      'subtitle': serializer.toJson<String?>(subtitle),
     };
   }
 
@@ -16655,12 +16789,20 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
     String? src,
     Value<String?> cat = const Value.absent(),
     String? reasons,
+    Value<String?> pile = const Value.absent(),
+    Value<bool?> counts = const Value.absent(),
+    Value<String?> label = const Value.absent(),
+    Value<String?> subtitle = const Value.absent(),
   }) => HelperSender(
     key: key ?? this.key,
     cls: cls ?? this.cls,
     src: src ?? this.src,
     cat: cat.present ? cat.value : this.cat,
     reasons: reasons ?? this.reasons,
+    pile: pile.present ? pile.value : this.pile,
+    counts: counts.present ? counts.value : this.counts,
+    label: label.present ? label.value : this.label,
+    subtitle: subtitle.present ? subtitle.value : this.subtitle,
   );
   HelperSender copyWithCompanion(HelperSendersCompanion data) {
     return HelperSender(
@@ -16669,6 +16811,10 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
       src: data.src.present ? data.src.value : this.src,
       cat: data.cat.present ? data.cat.value : this.cat,
       reasons: data.reasons.present ? data.reasons.value : this.reasons,
+      pile: data.pile.present ? data.pile.value : this.pile,
+      counts: data.counts.present ? data.counts.value : this.counts,
+      label: data.label.present ? data.label.value : this.label,
+      subtitle: data.subtitle.present ? data.subtitle.value : this.subtitle,
     );
   }
 
@@ -16679,13 +16825,18 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
           ..write('cls: $cls, ')
           ..write('src: $src, ')
           ..write('cat: $cat, ')
-          ..write('reasons: $reasons')
+          ..write('reasons: $reasons, ')
+          ..write('pile: $pile, ')
+          ..write('counts: $counts, ')
+          ..write('label: $label, ')
+          ..write('subtitle: $subtitle')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(key, cls, src, cat, reasons);
+  int get hashCode =>
+      Object.hash(key, cls, src, cat, reasons, pile, counts, label, subtitle);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -16694,7 +16845,11 @@ class HelperSender extends DataClass implements Insertable<HelperSender> {
           other.cls == this.cls &&
           other.src == this.src &&
           other.cat == this.cat &&
-          other.reasons == this.reasons);
+          other.reasons == this.reasons &&
+          other.pile == this.pile &&
+          other.counts == this.counts &&
+          other.label == this.label &&
+          other.subtitle == this.subtitle);
 }
 
 class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
@@ -16703,6 +16858,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
   final Value<String> src;
   final Value<String?> cat;
   final Value<String> reasons;
+  final Value<String?> pile;
+  final Value<bool?> counts;
+  final Value<String?> label;
+  final Value<String?> subtitle;
   final Value<int> rowid;
   const HelperSendersCompanion({
     this.key = const Value.absent(),
@@ -16710,6 +16869,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
     this.src = const Value.absent(),
     this.cat = const Value.absent(),
     this.reasons = const Value.absent(),
+    this.pile = const Value.absent(),
+    this.counts = const Value.absent(),
+    this.label = const Value.absent(),
+    this.subtitle = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HelperSendersCompanion.insert({
@@ -16718,6 +16881,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
     this.src = const Value.absent(),
     this.cat = const Value.absent(),
     this.reasons = const Value.absent(),
+    this.pile = const Value.absent(),
+    this.counts = const Value.absent(),
+    this.label = const Value.absent(),
+    this.subtitle = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : key = Value(key),
        cls = Value(cls);
@@ -16727,6 +16894,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
     Expression<String>? src,
     Expression<String>? cat,
     Expression<String>? reasons,
+    Expression<String>? pile,
+    Expression<bool>? counts,
+    Expression<String>? label,
+    Expression<String>? subtitle,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -16735,6 +16906,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
       if (src != null) 'src': src,
       if (cat != null) 'cat': cat,
       if (reasons != null) 'reasons': reasons,
+      if (pile != null) 'pile': pile,
+      if (counts != null) 'counts': counts,
+      if (label != null) 'label': label,
+      if (subtitle != null) 'subtitle': subtitle,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -16745,6 +16920,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
     Value<String>? src,
     Value<String?>? cat,
     Value<String>? reasons,
+    Value<String?>? pile,
+    Value<bool?>? counts,
+    Value<String?>? label,
+    Value<String?>? subtitle,
     Value<int>? rowid,
   }) {
     return HelperSendersCompanion(
@@ -16753,6 +16932,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
       src: src ?? this.src,
       cat: cat ?? this.cat,
       reasons: reasons ?? this.reasons,
+      pile: pile ?? this.pile,
+      counts: counts ?? this.counts,
+      label: label ?? this.label,
+      subtitle: subtitle ?? this.subtitle,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -16775,6 +16958,18 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
     if (reasons.present) {
       map['reasons'] = Variable<String>(reasons.value);
     }
+    if (pile.present) {
+      map['pile'] = Variable<String>(pile.value);
+    }
+    if (counts.present) {
+      map['counts'] = Variable<bool>(counts.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (subtitle.present) {
+      map['subtitle'] = Variable<String>(subtitle.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -16789,6 +16984,10 @@ class HelperSendersCompanion extends UpdateCompanion<HelperSender> {
           ..write('src: $src, ')
           ..write('cat: $cat, ')
           ..write('reasons: $reasons, ')
+          ..write('pile: $pile, ')
+          ..write('counts: $counts, ')
+          ..write('label: $label, ')
+          ..write('subtitle: $subtitle, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -17959,6 +18158,378 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
   }
 }
 
+class $HelperMarksTable extends HelperMarks
+    with TableInfo<$HelperMarksTable, HelperMark> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperMarksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _doneAtMeta = const VerificationMeta('doneAt');
+  @override
+  late final GeneratedColumn<DateTime> doneAt = GeneratedColumn<DateTime>(
+    'done_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _laterUntilMeta = const VerificationMeta(
+    'laterUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> laterUntil = GeneratedColumn<DateTime>(
+    'later_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _focusFixMeta = const VerificationMeta(
+    'focusFix',
+  );
+  @override
+  late final GeneratedColumn<String> focusFix = GeneratedColumn<String>(
+    'focus_fix',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _pileFixMeta = const VerificationMeta(
+    'pileFix',
+  );
+  @override
+  late final GeneratedColumn<String> pileFix = GeneratedColumn<String>(
+    'pile_fix',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    messageId,
+    doneAt,
+    laterUntil,
+    focusFix,
+    pileFix,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_marks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperMark> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('done_at')) {
+      context.handle(
+        _doneAtMeta,
+        doneAt.isAcceptableOrUnknown(data['done_at']!, _doneAtMeta),
+      );
+    }
+    if (data.containsKey('later_until')) {
+      context.handle(
+        _laterUntilMeta,
+        laterUntil.isAcceptableOrUnknown(data['later_until']!, _laterUntilMeta),
+      );
+    }
+    if (data.containsKey('focus_fix')) {
+      context.handle(
+        _focusFixMeta,
+        focusFix.isAcceptableOrUnknown(data['focus_fix']!, _focusFixMeta),
+      );
+    }
+    if (data.containsKey('pile_fix')) {
+      context.handle(
+        _pileFixMeta,
+        pileFix.isAcceptableOrUnknown(data['pile_fix']!, _pileFixMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId};
+  @override
+  HelperMark map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperMark(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      doneAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}done_at'],
+      ),
+      laterUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}later_until'],
+      ),
+      focusFix: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}focus_fix'],
+      ),
+      pileFix: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pile_fix'],
+      ),
+    );
+  }
+
+  @override
+  $HelperMarksTable createAlias(String alias) {
+    return $HelperMarksTable(attachedDatabase, alias);
+  }
+}
+
+class HelperMark extends DataClass implements Insertable<HelperMark> {
+  final String messageId;
+  final DateTime? doneAt;
+  final DateTime? laterUntil;
+  final String? focusFix;
+  final String? pileFix;
+  const HelperMark({
+    required this.messageId,
+    this.doneAt,
+    this.laterUntil,
+    this.focusFix,
+    this.pileFix,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    if (!nullToAbsent || doneAt != null) {
+      map['done_at'] = Variable<DateTime>(doneAt);
+    }
+    if (!nullToAbsent || laterUntil != null) {
+      map['later_until'] = Variable<DateTime>(laterUntil);
+    }
+    if (!nullToAbsent || focusFix != null) {
+      map['focus_fix'] = Variable<String>(focusFix);
+    }
+    if (!nullToAbsent || pileFix != null) {
+      map['pile_fix'] = Variable<String>(pileFix);
+    }
+    return map;
+  }
+
+  HelperMarksCompanion toCompanion(bool nullToAbsent) {
+    return HelperMarksCompanion(
+      messageId: Value(messageId),
+      doneAt: doneAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(doneAt),
+      laterUntil: laterUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(laterUntil),
+      focusFix: focusFix == null && nullToAbsent
+          ? const Value.absent()
+          : Value(focusFix),
+      pileFix: pileFix == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pileFix),
+    );
+  }
+
+  factory HelperMark.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperMark(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      doneAt: serializer.fromJson<DateTime?>(json['doneAt']),
+      laterUntil: serializer.fromJson<DateTime?>(json['laterUntil']),
+      focusFix: serializer.fromJson<String?>(json['focusFix']),
+      pileFix: serializer.fromJson<String?>(json['pileFix']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'doneAt': serializer.toJson<DateTime?>(doneAt),
+      'laterUntil': serializer.toJson<DateTime?>(laterUntil),
+      'focusFix': serializer.toJson<String?>(focusFix),
+      'pileFix': serializer.toJson<String?>(pileFix),
+    };
+  }
+
+  HelperMark copyWith({
+    String? messageId,
+    Value<DateTime?> doneAt = const Value.absent(),
+    Value<DateTime?> laterUntil = const Value.absent(),
+    Value<String?> focusFix = const Value.absent(),
+    Value<String?> pileFix = const Value.absent(),
+  }) => HelperMark(
+    messageId: messageId ?? this.messageId,
+    doneAt: doneAt.present ? doneAt.value : this.doneAt,
+    laterUntil: laterUntil.present ? laterUntil.value : this.laterUntil,
+    focusFix: focusFix.present ? focusFix.value : this.focusFix,
+    pileFix: pileFix.present ? pileFix.value : this.pileFix,
+  );
+  HelperMark copyWithCompanion(HelperMarksCompanion data) {
+    return HelperMark(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      doneAt: data.doneAt.present ? data.doneAt.value : this.doneAt,
+      laterUntil: data.laterUntil.present
+          ? data.laterUntil.value
+          : this.laterUntil,
+      focusFix: data.focusFix.present ? data.focusFix.value : this.focusFix,
+      pileFix: data.pileFix.present ? data.pileFix.value : this.pileFix,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperMark(')
+          ..write('messageId: $messageId, ')
+          ..write('doneAt: $doneAt, ')
+          ..write('laterUntil: $laterUntil, ')
+          ..write('focusFix: $focusFix, ')
+          ..write('pileFix: $pileFix')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(messageId, doneAt, laterUntil, focusFix, pileFix);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperMark &&
+          other.messageId == this.messageId &&
+          other.doneAt == this.doneAt &&
+          other.laterUntil == this.laterUntil &&
+          other.focusFix == this.focusFix &&
+          other.pileFix == this.pileFix);
+}
+
+class HelperMarksCompanion extends UpdateCompanion<HelperMark> {
+  final Value<String> messageId;
+  final Value<DateTime?> doneAt;
+  final Value<DateTime?> laterUntil;
+  final Value<String?> focusFix;
+  final Value<String?> pileFix;
+  final Value<int> rowid;
+  const HelperMarksCompanion({
+    this.messageId = const Value.absent(),
+    this.doneAt = const Value.absent(),
+    this.laterUntil = const Value.absent(),
+    this.focusFix = const Value.absent(),
+    this.pileFix = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HelperMarksCompanion.insert({
+    required String messageId,
+    this.doneAt = const Value.absent(),
+    this.laterUntil = const Value.absent(),
+    this.focusFix = const Value.absent(),
+    this.pileFix = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId);
+  static Insertable<HelperMark> custom({
+    Expression<String>? messageId,
+    Expression<DateTime>? doneAt,
+    Expression<DateTime>? laterUntil,
+    Expression<String>? focusFix,
+    Expression<String>? pileFix,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (doneAt != null) 'done_at': doneAt,
+      if (laterUntil != null) 'later_until': laterUntil,
+      if (focusFix != null) 'focus_fix': focusFix,
+      if (pileFix != null) 'pile_fix': pileFix,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HelperMarksCompanion copyWith({
+    Value<String>? messageId,
+    Value<DateTime?>? doneAt,
+    Value<DateTime?>? laterUntil,
+    Value<String?>? focusFix,
+    Value<String?>? pileFix,
+    Value<int>? rowid,
+  }) {
+    return HelperMarksCompanion(
+      messageId: messageId ?? this.messageId,
+      doneAt: doneAt ?? this.doneAt,
+      laterUntil: laterUntil ?? this.laterUntil,
+      focusFix: focusFix ?? this.focusFix,
+      pileFix: pileFix ?? this.pileFix,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (doneAt.present) {
+      map['done_at'] = Variable<DateTime>(doneAt.value);
+    }
+    if (laterUntil.present) {
+      map['later_until'] = Variable<DateTime>(laterUntil.value);
+    }
+    if (focusFix.present) {
+      map['focus_fix'] = Variable<String>(focusFix.value);
+    }
+    if (pileFix.present) {
+      map['pile_fix'] = Variable<String>(pileFix.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperMarksCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('doneAt: $doneAt, ')
+          ..write('laterUntil: $laterUntil, ')
+          ..write('focusFix: $focusFix, ')
+          ..write('pileFix: $pileFix, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -18003,6 +18574,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HelperVerdictsTable helperVerdicts = $HelperVerdictsTable(this);
   late final $HelperStateTable helperState = $HelperStateTable(this);
   late final $HelperReadingsTable helperReadings = $HelperReadingsTable(this);
+  late final $HelperMarksTable helperMarks = $HelperMarksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -18041,6 +18613,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     helperVerdicts,
     helperState,
     helperReadings,
+    helperMarks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -29519,6 +30092,10 @@ typedef $$HelperSendersTableCreateCompanionBuilder =
       Value<String> src,
       Value<String?> cat,
       Value<String> reasons,
+      Value<String?> pile,
+      Value<bool?> counts,
+      Value<String?> label,
+      Value<String?> subtitle,
       Value<int> rowid,
     });
 typedef $$HelperSendersTableUpdateCompanionBuilder =
@@ -29528,6 +30105,10 @@ typedef $$HelperSendersTableUpdateCompanionBuilder =
       Value<String> src,
       Value<String?> cat,
       Value<String> reasons,
+      Value<String?> pile,
+      Value<bool?> counts,
+      Value<String?> label,
+      Value<String?> subtitle,
       Value<int> rowid,
     });
 
@@ -29562,6 +30143,26 @@ class $$HelperSendersTableFilterComposer
 
   ColumnFilters<String> get reasons => $composableBuilder(
     column: $table.reasons,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pile => $composableBuilder(
+    column: $table.pile,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get counts => $composableBuilder(
+    column: $table.counts,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get subtitle => $composableBuilder(
+    column: $table.subtitle,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -29599,6 +30200,26 @@ class $$HelperSendersTableOrderingComposer
     column: $table.reasons,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get pile => $composableBuilder(
+    column: $table.pile,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get counts => $composableBuilder(
+    column: $table.counts,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get subtitle => $composableBuilder(
+    column: $table.subtitle,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HelperSendersTableAnnotationComposer
@@ -29624,6 +30245,18 @@ class $$HelperSendersTableAnnotationComposer
 
   GeneratedColumn<String> get reasons =>
       $composableBuilder(column: $table.reasons, builder: (column) => column);
+
+  GeneratedColumn<String> get pile =>
+      $composableBuilder(column: $table.pile, builder: (column) => column);
+
+  GeneratedColumn<bool> get counts =>
+      $composableBuilder(column: $table.counts, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<String> get subtitle =>
+      $composableBuilder(column: $table.subtitle, builder: (column) => column);
 }
 
 class $$HelperSendersTableTableManager
@@ -29662,6 +30295,10 @@ class $$HelperSendersTableTableManager
                 Value<String> src = const Value.absent(),
                 Value<String?> cat = const Value.absent(),
                 Value<String> reasons = const Value.absent(),
+                Value<String?> pile = const Value.absent(),
+                Value<bool?> counts = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<String?> subtitle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperSendersCompanion(
                 key: key,
@@ -29669,6 +30306,10 @@ class $$HelperSendersTableTableManager
                 src: src,
                 cat: cat,
                 reasons: reasons,
+                pile: pile,
+                counts: counts,
+                label: label,
+                subtitle: subtitle,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -29678,6 +30319,10 @@ class $$HelperSendersTableTableManager
                 Value<String> src = const Value.absent(),
                 Value<String?> cat = const Value.absent(),
                 Value<String> reasons = const Value.absent(),
+                Value<String?> pile = const Value.absent(),
+                Value<bool?> counts = const Value.absent(),
+                Value<String?> label = const Value.absent(),
+                Value<String?> subtitle = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperSendersCompanion.insert(
                 key: key,
@@ -29685,6 +30330,10 @@ class $$HelperSendersTableTableManager
                 src: src,
                 cat: cat,
                 reasons: reasons,
+                pile: pile,
+                counts: counts,
+                label: label,
+                subtitle: subtitle,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -30384,6 +31033,217 @@ typedef $$HelperReadingsTableProcessedTableManager =
       HelperReading,
       PrefetchHooks Function()
     >;
+typedef $$HelperMarksTableCreateCompanionBuilder =
+    HelperMarksCompanion Function({
+      required String messageId,
+      Value<DateTime?> doneAt,
+      Value<DateTime?> laterUntil,
+      Value<String?> focusFix,
+      Value<String?> pileFix,
+      Value<int> rowid,
+    });
+typedef $$HelperMarksTableUpdateCompanionBuilder =
+    HelperMarksCompanion Function({
+      Value<String> messageId,
+      Value<DateTime?> doneAt,
+      Value<DateTime?> laterUntil,
+      Value<String?> focusFix,
+      Value<String?> pileFix,
+      Value<int> rowid,
+    });
+
+class $$HelperMarksTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperMarksTable> {
+  $$HelperMarksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get doneAt => $composableBuilder(
+    column: $table.doneAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get focusFix => $composableBuilder(
+    column: $table.focusFix,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pileFix => $composableBuilder(
+    column: $table.pileFix,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperMarksTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperMarksTable> {
+  $$HelperMarksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get doneAt => $composableBuilder(
+    column: $table.doneAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get focusFix => $composableBuilder(
+    column: $table.focusFix,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get pileFix => $composableBuilder(
+    column: $table.pileFix,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperMarksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperMarksTable> {
+  $$HelperMarksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get doneAt =>
+      $composableBuilder(column: $table.doneAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get focusFix =>
+      $composableBuilder(column: $table.focusFix, builder: (column) => column);
+
+  GeneratedColumn<String> get pileFix =>
+      $composableBuilder(column: $table.pileFix, builder: (column) => column);
+}
+
+class $$HelperMarksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperMarksTable,
+          HelperMark,
+          $$HelperMarksTableFilterComposer,
+          $$HelperMarksTableOrderingComposer,
+          $$HelperMarksTableAnnotationComposer,
+          $$HelperMarksTableCreateCompanionBuilder,
+          $$HelperMarksTableUpdateCompanionBuilder,
+          (
+            HelperMark,
+            BaseReferences<_$AppDatabase, $HelperMarksTable, HelperMark>,
+          ),
+          HelperMark,
+          PrefetchHooks Function()
+        > {
+  $$HelperMarksTableTableManager(_$AppDatabase db, $HelperMarksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperMarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperMarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperMarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<DateTime?> doneAt = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
+                Value<String?> focusFix = const Value.absent(),
+                Value<String?> pileFix = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperMarksCompanion(
+                messageId: messageId,
+                doneAt: doneAt,
+                laterUntil: laterUntil,
+                focusFix: focusFix,
+                pileFix: pileFix,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                Value<DateTime?> doneAt = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
+                Value<String?> focusFix = const Value.absent(),
+                Value<String?> pileFix = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperMarksCompanion.insert(
+                messageId: messageId,
+                doneAt: doneAt,
+                laterUntil: laterUntil,
+                focusFix: focusFix,
+                pileFix: pileFix,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperMarksTable, HelperMark>(table),
+                  BaseReferences<_$AppDatabase, $HelperMarksTable, HelperMark>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperMarksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperMarksTable,
+      HelperMark,
+      $$HelperMarksTableFilterComposer,
+      $$HelperMarksTableOrderingComposer,
+      $$HelperMarksTableAnnotationComposer,
+      $$HelperMarksTableCreateCompanionBuilder,
+      $$HelperMarksTableUpdateCompanionBuilder,
+      (
+        HelperMark,
+        BaseReferences<_$AppDatabase, $HelperMarksTable, HelperMark>,
+      ),
+      HelperMark,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -30453,4 +31313,6 @@ class $AppDatabaseManager {
       $$HelperStateTableTableManager(_db, _db.helperState);
   $$HelperReadingsTableTableManager get helperReadings =>
       $$HelperReadingsTableTableManager(_db, _db.helperReadings);
+  $$HelperMarksTableTableManager get helperMarks =>
+      $$HelperMarksTableTableManager(_db, _db.helperMarks);
 }

@@ -131,10 +131,34 @@ final class Pages
                 continue;
             }
             $kind = ['windows' => 'Windows PC', 'android' => 'Android phone'][(string) $d['kind']] ?? 'Device';
-            $rows .= '<tr><td>' . $e((string) $d['name']) . '</td><td>' . $kind . '</td><td>' . $ago((int) $d['last_seen'], $now) . '</td><td>'
+            $rows .= '<tr><td>' . $e((string) $d['name']) . '</td><td>' . $kind . ((string) $d['kind'] === 'android' ? ((int) ($d['alerts'] ?? 0) === 1 ? ((int) ($d['ring'] ?? 1) === 1 ? ' · rings' : ' · silent') : ' · no alerts yet') : '') . '</td><td>' . $ago((int) $d['last_seen'], $now) . '</td><td>'
                 . '<form method="post" action="/devices/signout" class="inline">' . $csrf . '<input type="hidden" name="id" value="' . (int) $d['id'] . '"><button class="bad" type="submit" style="margin:0;padding:4px 12px">Sign out</button></form></td></tr>';
         }
         $devices = $rows === '' ? '<p>No device has joined yet.</p>' : '<table><tr><th>Name</th><th>Kind</th><th>Last seen</th><th></th></tr>' . $rows . '</table>';
+
+        // ---- what Google allows, and alerts to phones
+        $g = $s['grants'];
+        $allowed = $g['mail'] && $g['calendar'] && $g['contacts']
+            ? '<p class="note"><span class="ok">Google allows everything devices need:</span> mail in full, calendar (read only), contacts (read only).</p>'
+            : ($s['accounts'] === [] ? '' : '<p class="note"><span class="bad">One more Allow is needed.</span> A phone or second PC that joins by code needs the helper to hold full mail access, your calendar (read only) and your contacts (read only). Press <b>Connect Google again</b> below and leave every box ticked. Today Google allows: mail in full ' . ($g['mail'] ? 'yes' : 'no') . ' · calendar ' . ($g['calendar'] ? 'yes' : 'no') . ' · contacts ' . ($g['contacts'] ? 'yes' : 'no') . '.</p>');
+        $p = $s['push'];
+        $push = $p['hasKey']
+            ? '<p><span class="ok">Set up.</span> Project ' . $e((string) $p['project']) . '. The file is kept locked and is never shown again.</p>'
+                . '<form method="post" action="/push/test" class="inline">' . $csrf . '<button type="submit">Send a test alert</button></form> '
+                . '<form method="post" action="/push/forget" class="inline">' . $csrf . '<button class="quiet" type="submit">Turn alerts off</button></form>'
+            : '<p class="note">Android only lets an app be told something while it is closed through Google’s alert service (Firebase). Paste the whole contents of the service account file from your Firebase project here. It is checked with Google and kept locked.</p>';
+        $push .= '<p>' . ($p['hasApp'] ? '<span class="ok">The phone app’s settings file is saved.</span>' : '<span class="bad">The phone app’s settings file is not saved yet.</span> Paste the whole contents of google-services.json below.') . '</p>'
+            . '<form method="post" action="/push/app" autocomplete="off">' . $csrf
+            . '<label for="papp">App settings file, google-services.json (paste all of it)</label><textarea id="papp" name="app" rows="4" autocomplete="off" spellcheck="false" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit"></textarea>'
+            . '<button type="submit">' . ($p['hasApp'] ? 'Replace the app settings file' : 'Save the app settings file') . '</button></form>';
+        $sd = $s['sending'];
+        $sending = $sd['count'] === 0
+            ? '<p class="note">Nothing kept yet. Précis on a PC that already sends mail hands them over by itself the next time it is open.</p>'
+            : '<p><span class="ok">' . $sd['count'] . ' address' . ($sd['count'] === 1 ? '' : 'es') . ' kept</span>, ' . $sd['passwords'] . ' with the password for a mail server of its own. They are kept locked and are never shown here. Every device that joins gets them, so it can send from the same addresses.</p>'
+                . '<form method="post" action="/sending/forget" class="inline">' . $csrf . '<button class="quiet" type="submit">Forget them</button></form>';
+        $push .= '<form method="post" action="/push/key" autocomplete="off">' . $csrf
+            . '<label for="pacc">Service account file (paste all of it)</label><textarea id="pacc" name="account" rows="4" autocomplete="off" spellcheck="false" style="width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit;font:inherit"></textarea>'
+            . '<button type="submit">' . ($p['hasKey'] ? 'Replace the file' : 'Save the file') . '</button></form>';
 
         // ---- the assistant
         $a = $s['assistant'];
@@ -187,7 +211,7 @@ final class Pages
             <h1>Précis helper</h1>
             <p class="sub">Reads your mail around the clock, sorts it, and keeps your devices in step. Version {$e($s['version'])}.</p>
             $flash$code
-            <div class="card"><h2>Google</h2>$google $connect
+            <div class="card"><h2>Google</h2>$google $allowed $connect
             <p class="note" style="margin-top:14px">Emails the helper holds facts for: {$counts['emails']} · in Chats: {$counts['people']} · not from a person: {$counts['feeds']} · senders: {$counts['senders']}</p></div>
 
             <div class="card"><h2>Sign-in client</h2>
@@ -206,6 +230,10 @@ final class Pages
             <button type="submit">Save</button></form></div>
 
             <div class="card"><h2>The assistant</h2>$assistant</div>
+
+            <div class="card"><h2>Alerts to phones</h2>$push</div>
+
+            <div class="card"><h2>Addresses you send from</h2>$sending</div>
 
             <div class="card"><h2>Your devices</h2>$devices
             <form method="post" action="/devices/code">$csrf<button type="submit">Add a device</button></form></div>

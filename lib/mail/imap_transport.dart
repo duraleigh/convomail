@@ -44,15 +44,20 @@ class ImapTransport implements MailTransport {
       if (server.security == ConnectionSecurity.starttls) {
         await client.startTls();
       }
-      final caps = await client.login(credentials.username, credentials.password);
+      // A device that joined by code signs in with the helper's pass (XOAUTH2); the PC that set Précis up, with its password.
+      final caps = credentials.pass ? await client.authenticateWithOAuth2(credentials.username, credentials.password) : await client.login(credentials.username, credentials.password);
       _condStore = caps.any((c) => c.name.toUpperCase() == 'CONDSTORE');
       _capabilities = [for (final c in caps) c.name.toUpperCase()];
       _client = client;
     } on ImapException catch (e) {
       final msg = e.message ?? e.toString();
       final upper = msg.toUpperCase();
-      final auth = upper.contains('AUTHENTICATIONFAILED') || upper.contains('LOGIN') || upper.contains('INVALID CREDENTIALS');
-      throw MailTransportException(auth ? 'The server rejected the username or password.' : 'IMAP error: $msg', isAuthFailure: auth, cause: e);
+      final auth = upper.contains('AUTHENTICATIONFAILED') || upper.contains('LOGIN') || upper.contains('INVALID CREDENTIALS') || (credentials.pass && upper.contains('AUTHENTICATE'));
+      throw MailTransportException(
+        auth ? (credentials.pass ? 'Google did not accept the pass from the helper.' : 'The server rejected the username or password.') : 'IMAP error: $msg',
+        isAuthFailure: auth,
+        cause: e,
+      );
     } on MailTransportException {
       rethrow;
     } catch (e) {

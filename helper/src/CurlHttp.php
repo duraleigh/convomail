@@ -9,7 +9,7 @@ use RuntimeException;
 final class CurlHttp implements Http
 {
     /** Hosts the helper may call. Nothing else is ever contacted. */
-    public const ALLOWED_HOSTS = ['accounts.google.com', 'oauth2.googleapis.com', 'gmail.googleapis.com', 'www.googleapis.com'];
+    public const ALLOWED_HOSTS = ['accounts.google.com', 'oauth2.googleapis.com', 'gmail.googleapis.com', 'www.googleapis.com', 'fcm.googleapis.com'];
 
     public function __construct(private readonly int $timeout = 25, private readonly int $parallel = 8)
     {

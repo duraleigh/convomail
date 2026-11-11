@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../app/app_log.dart';
 import '../domain/identity.dart';
+import '../helper/helper_pass.dart';
 import '../mail/google_oauth.dart';
 import '../platform/credential_store.dart';
 import '../store/address_book_queries.dart';
@@ -18,6 +19,8 @@ import 'classification_service.dart';
 /// Google sign-in, opening the system browser.
 final googleOAuthProvider = Provider<GoogleOAuth>((ref) => GoogleOAuth(
       store: ref.read(credentialStoreProvider),
+      // A device that joined by code reaches Google with the helper's pass.
+      viaHelper: ref.read(helperPassProvider),
       openBrowser: (uri) async {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
       },

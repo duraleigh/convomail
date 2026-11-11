@@ -24,9 +24,19 @@ class ServerConfig {
 }
 
 class MailCredentials {
-  const MailCredentials({required this.username, required this.password});
+  const MailCredentials({required this.username, required this.password, this.pass = false});
+
+  /// Signing in with a pass from the helper instead of a password: the
+  /// device joined by code and holds no password of its own.
+  const MailCredentials.withPass({required this.username, required String pass})
+      : password = pass,
+        pass = true;
+
   final String username;
+
+  /// The password, or, when [pass] is set, a pass that lasts about an hour.
   final String password;
+  final bool pass;
 
   @override
   String toString() => 'MailCredentials($username, ****)';

@@ -6,7 +6,13 @@ import '../domain/classifier.dart';
 import '../domain/identity.dart';
 import 'classification_queries.dart';
 import 'database.dart' hide ClassificationRule;
+import 'group_queries.dart';
+import 'merge_queries.dart';
 import 'people_queries.dart';
+
+/// The setting that holds quiet hours for alerts on phones, the same on
+/// every device: `{"on": bool, "from": "22:00", "to": "07:00"}`.
+const kQuietHours = 'alerts.quiet';
 
 /// One change as it goes up to the helper: set ([data]) or gone ([deleted]),
 /// or an action ([op]).
@@ -59,6 +65,7 @@ extension HelperQueries on AppDatabase {
         if (!on) {
           await delete(helperOutbox).go();
           await delete(helperSenders).go();
+          await delete(helperMarks).go();
           await delete(helperVerdicts).go();
         }
       });
@@ -284,6 +291,38 @@ extension HelperQueries on AppDatabase {
     await into(helperVerdicts).insertOnConflictUpdate(HelperVerdictsCompanion.insert(messageId: messageId, cls: bucket.name, cat: Value(bucket == Bucket.feeds ? category : null)));
   }
 
+  Future<void> _keepMark(String messageId, HelperMarksCompanion mark) async {
+    final n = await (update(helperMarks)..where((m) => m.messageId.equals(messageId))).write(mark);
+    if (n == 0) await into(helperMarks).insert(mark.copyWith(messageId: Value(messageId)), mode: InsertMode.insertOrIgnore);
+  }
+
+  /// Files [address] under the person [key], as another device did; with
+  /// [key] null (or the address itself), takes it back out as its own
+  /// contact. Works whether or not any mail from the address is here yet:
+  /// mail that arrives later is filed by the same mapping.
+  Future<void> _applyAddress(String address, String? key) async {
+    final mapping = await (select(contactAddresses)..where((a) => a.address.equals(address))).getSingleOrNull();
+    if (key == null || key.isEmpty || key == address) {
+      if (mapping != null && mapping.contactKey != address) await separateAddress(address);
+      return;
+    }
+    if (mapping?.contactKey == key) return;
+    await into(contacts).insert(ContactsCompanion.insert(key: key), mode: InsertMode.insertOrIgnore);
+    await into(contactAddresses).insert(ContactAddressesCompanion.insert(address: key, contactKey: key), mode: InsertMode.insertOrIgnore);
+    if (mapping == null) {
+      await into(contactAddresses).insert(ContactAddressesCompanion.insert(address: address, contactKey: key, source: const Value('user')), mode: InsertMode.insertOrIgnore);
+      return;
+    }
+    final standalone = mapping.contactKey == address && await (select(contacts)..where((c) => c.key.equals(address))).getSingleOrNull() != null;
+    if (standalone) {
+      await mergeContacts(key, [address]);
+      return;
+    }
+    await (update(contactAddresses)..where((a) => a.address.equals(address))).write(ContactAddressesCompanion(contactKey: Value(key), source: const Value('user')));
+    await refileCandidates({mapping.contactKey, key});
+    filingGeneration++;
+  }
+
   /// Writes one change from the helper. Returns the sender keys whose mail
   /// should be filed again. Call inside [applyingFromHelper].
   Future<Set<String>> applyHelperItem(String kind, String k, Map<String, Object?> data, {required bool deleted}) async {
@@ -295,7 +334,17 @@ extension HelperQueries on AppDatabase {
         }
         final cls = data['cls'] == 'feeds' ? 'feeds' : 'people';
         final src = (data['src'] as String?) ?? 'auto';
-        await into(helperSenders).insertOnConflictUpdate(HelperSendersCompanion.insert(key: k, cls: cls, src: Value(src), cat: Value(data['cat'] as String?), reasons: Value((data['reasons'] as String?) ?? '')));
+        await into(helperSenders).insertOnConflictUpdate(HelperSendersCompanion.insert(
+          key: k,
+          cls: cls,
+          src: Value(src),
+          cat: Value(data['cat'] as String?),
+          reasons: Value((data['reasons'] as String?) ?? ''),
+          pile: data.containsKey('pile') ? Value(data['pile'] as String?) : const Value.absent(),
+          counts: data.containsKey('counts') ? Value(data['counts'] == true) : const Value.absent(),
+          label: data.containsKey('label') ? Value(data['label'] as String?) : const Value.absent(),
+          subtitle: data.containsKey('subtitle') ? Value(data['subtitle'] as String?) : const Value.absent(),
+        ));
         await (update(contacts)..where((c) => c.key.equals(k) & c.isMe.equals(false))).write(ContactsCompanion(
           classification: Value(cls),
           classificationSource: Value(src),
@@ -380,18 +429,29 @@ extension HelperQueries on AppDatabase {
         if (n == 0) await into(reminders).insert(row.copyWith(firedAt: Value(_time(data['fired']))));
         return const {};
       case 'done':
-        await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(doneAt: Value(deleted ? null : (_time(data['at']) ?? DateTime.now()))));
+        final doneAt = deleted ? null : (_time(data['at']) ?? DateTime.now());
+        // Kept as well as applied: the email itself may not have landed here yet.
+        await _keepMark(k, HelperMarksCompanion(doneAt: Value(doneAt)));
+        await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(doneAt: Value(doneAt)));
+        return const {};
+      case 'addr':
+        // People joined into one on another device (or taken apart again).
+        await _applyAddress(k, deleted ? null : data['key'] as String?);
+        return const {};
+      case 'pref':
+        // A setting that holds on every device: quiet hours.
+        if (k == 'quiet') await putSetting(kQuietHours, deleted ? '' : jsonEncode({'on': data['on'] == true, 'from': data['from'], 'to': data['to']}));
         return const {};
       case 'msgfix':
         // What the user set on one email on another device: Focus or not,
         // put off until later, Feed or Noise. (Its place among Chats and Feed arrives as 'sort'.)
         if (deleted) return const {};
         if (data.containsKey('focus') || data.containsKey('pile') || data.containsKey('later')) {
-          await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(
-            laterUntil: data.containsKey('later') ? Value(_time(data['later'])) : const Value.absent(),
-            focusFix: data.containsKey('focus') ? Value(data['focus'] == true ? 'yes' : (data['focus'] == false ? 'no' : null)) : const Value.absent(),
-            pileFix: data.containsKey('pile') ? Value(data['pile'] == 'feed' || data['pile'] == 'noise' ? data['pile'] as String : null) : const Value.absent(),
-          ));
+          final later = data.containsKey('later') ? Value(_time(data['later'])) : const Value<DateTime?>.absent();
+          final focus = data.containsKey('focus') ? Value(data['focus'] == true ? 'yes' : (data['focus'] == false ? 'no' : null)) : const Value<String?>.absent();
+          final pile = data.containsKey('pile') ? Value(data['pile'] == 'feed' || data['pile'] == 'noise' ? data['pile'] as String : null) : const Value<String?>.absent();
+          await _keepMark(k, HelperMarksCompanion(laterUntil: later, focusFix: focus, pileFix: pile));
+          await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(laterUntil: later, focusFix: focus, pileFix: pile));
         }
         return const {};
       case 'read':

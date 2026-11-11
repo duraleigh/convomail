@@ -63,11 +63,11 @@ final class Site
     }
 
     /** Joins a device and returns its token. */
-    public function join(string $name = 'Clay PC'): string
+    public function join(string $name = 'Clay PC', string $kind = 'windows'): string
     {
         $this->owner('/devices/code');
         $code = (string) $this->session->get('code');
-        $r = $this->api('POST', '/api/pair', ['code' => $code, 'name' => $name, 'kind' => 'windows']);
+        $r = $this->api('POST', '/api/pair', ['code' => $code, 'name' => $name, 'kind' => $kind]);
         same(200, $r->status, $r->body);
         return (string) $r->data()['token'];
     }

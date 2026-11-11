@@ -50,13 +50,13 @@ Future<DateTime?> showSnoozePicker(BuildContext context, {DateTime? currentlySno
             final picked = await pickDateTime(ctx, initial: now.add(const Duration(days: 1)));
             if (ctx.mounted) Navigator.pop(ctx, picked);
           },
-          child: const Row(children: [Icon(Icons.calendar_month_outlined, size: 20), SizedBox(width: 12), Text('Pick a date and time…')]),
+          child: const Row(children: [Icon(Icons.calendar_month_outlined, size: 20), SizedBox(width: 12), Expanded(child: Text('Pick a date and time…'))]),
         ),
         if (currentlySnoozedUntil != null)
           SimpleDialogOption(
             key: const ValueKey('snooze-clear'),
             onPressed: () => Navigator.pop(ctx, SnoozeChoice.unsnooze),
-            child: const Row(children: [Icon(Icons.undo_rounded, size: 20), SizedBox(width: 12), Text('Bring it back now')]),
+            child: const Row(children: [Icon(Icons.undo_rounded, size: 20), SizedBox(width: 12), Expanded(child: Text('Bring it back now'))]),
           ),
       ],
     ),

@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../ui/screens/join_screen.dart';
 import '../ui/theme/tokens.dart';
 import 'destinations.dart';
+import 'layout.dart';
 import 'settings.dart';
 import 'settings_navigation.dart';
 
@@ -11,14 +13,54 @@ import 'settings_navigation.dart';
 final showOnboardingProvider = Provider<bool>((ref) => false);
 
 /// Welcome screen shown while there are no accounts and onboarding has not
-/// been dismissed. Two exits: add an account, or explore the empty shell.
-class OnboardingScreen extends ConsumerWidget {
+/// been dismissed. On a PC: add an account, join with a code from a PC
+/// that already runs Précis, or explore the empty shell. On a phone: join
+/// with a code (a phone has no Gmail sign-in of its own).
+class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  bool _joining = false;
+
+  @override
+  Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    final phone = ref.watch(isTouchDeviceProvider);
+    if (phone || _joining) {
+      return Scaffold(
+        backgroundColor: scheme.surface,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 560),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpace.xl),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Image.asset('assets/logo.png', key: const ValueKey('app-logo'), width: 56, height: 56, filterQuality: FilterQuality.medium),
+                      const SizedBox(height: AppSpace.lg),
+                      if (phone) ...[
+                        Text('Welcome to Précis', style: text.displaySmall),
+                        const SizedBox(height: AppSpace.lg),
+                      ],
+                      JoinDeviceForm(onCancel: phone ? null : () => setState(() => _joining = false)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: scheme.surface,
       body: Center(
@@ -32,7 +74,14 @@ class OnboardingScreen extends ConsumerWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Image.asset('assets/logo.png', key: const ValueKey('app-logo'), width: 64, height: 64, filterQuality: FilterQuality.medium),
+                  Row(
+                    children: [
+                      Image.asset('assets/logo.png', key: const ValueKey('app-logo'), width: 64, height: 64, filterQuality: FilterQuality.medium),
+                      const Spacer(),
+                      // A second PC: no Gmail sign-in here, the helper hands it everything.
+                      OutlinedButton.icon(key: const ValueKey('onboarding-join'), onPressed: () => setState(() => _joining = true), icon: const Icon(Icons.link_rounded), label: const Text('Join with a code')),
+                    ],
+                  ),
                   const SizedBox(height: AppSpace.xl),
                   Text('Welcome to Précis', style: text.displaySmall),
                   const SizedBox(height: AppSpace.sm),

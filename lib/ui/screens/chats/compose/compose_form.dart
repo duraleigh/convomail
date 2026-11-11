@@ -23,6 +23,7 @@ import '../../../../store/compose_queries.dart';
 import '../../../../store/database.dart';
 import '../../../../store/sync_queries.dart';
 import '../../../../sync/send_service.dart';
+import '../../../../sync/waiting_sends.dart';
 import '../../../theme/tokens.dart';
 import '../../../widgets/wavy_progress.dart';
 import '../../settings/sending_setup_dialog.dart';
@@ -305,6 +306,22 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       messenger?.showSnackBar(SnackBar(persist: false, content: Text('Sent to $recipientsLabel'), behavior: SnackBarBehavior.floating, width: 360));
       widget.onClose();
     } on MailTransportException catch (e) {
+      if (e.offline) {
+        // No signal: the message waits, and goes out by itself when the
+        // signal returns. Nothing more to press.
+        await ref.read(waitingSendsProvider).keep(submission);
+        if (!mounted) return;
+        _draftId = null;
+        _progress.clear(_token);
+        messenger?.showSnackBar(SnackBar(
+          persist: false,
+          duration: const Duration(seconds: 8),
+          content: Text('No signal. Your message to $recipientsLabel is waiting, and will be sent when the signal returns.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+        widget.onClose();
+        return;
+      }
       if (!mounted) return;
       setState(() {
         _sending = false;

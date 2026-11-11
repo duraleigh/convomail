@@ -18,13 +18,17 @@ import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
 import 'app/version.dart';
+import 'helper/device_join.dart';
 import 'helper/helper_sync.dart';
+import 'helper/sending_sync.dart';
 import 'platform/mailto_registration.dart';
+import 'platform/phone_alerts.dart';
 import 'platform/single_instance.dart';
 import 'platform/windows_integration.dart';
 import 'sync/notification_center.dart';
 import 'sync/schedule_service.dart';
 import 'sync/sync_controller.dart';
+import 'sync/waiting_sends.dart';
 import 'ui/shell/app_shell.dart';
 import 'ui/shell/window_bar.dart';
 import 'ui/theme/app_theme.dart';
@@ -190,6 +194,12 @@ Future<void> main(List<String> args) async {
     if (Platform.isWindows) notificationSinkProvider.overrideWith((ref) => WindowsNotificationSink(ref)),
     if (log != null) appLogProvider.overrideWith((ref) => log),
     showOnboardingProvider.overrideWith((ref) => true),
+    // A device that joined by code wipes its copy when it is signed out.
+    signedOutHandlerProvider.overrideWith((ref) => () async {
+          final wiped = await ref.read(deviceJoinProvider).signedOut();
+          if (wiped) await ref.read(phoneAlertsProvider).forget();
+          return wiped;
+        }),
   ]);
   _container = container;
   if (instance != null) {
@@ -240,7 +250,13 @@ class _PrecisAppState extends ConsumerState<PrecisApp> {
       ref.read(syncControllerProvider).start();
       ref.read(scheduleServiceProvider).start();
       // Keeping in step with the helper, when this device follows one.
-      unawaited(ref.read(helperProvider.notifier).start());
+      unawaited(ref.read(helperProvider.notifier).start().then((_) => ref.read(deviceJoinProvider).start()));
+      // The addresses you send from, the same on every device.
+      ref.read(sendingSyncProvider).start();
+      // On a phone: alerts for what needs you.
+      ref.read(phoneAlertsProvider).start();
+      // Messages written with no signal go out when it returns.
+      ref.read(waitingSendsProvider).start();
     }
   }
 

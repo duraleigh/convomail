@@ -1,0 +1,278 @@
+import 'package:convomail/app/destinations.dart';
+import 'package:convomail/app/layout.dart';
+import 'package:convomail/app/mail_state.dart';
+import 'package:convomail/app/people_state.dart';
+import 'package:convomail/helper/helper_sync.dart';
+import 'package:convomail/mail/models.dart';
+import 'package:convomail/mail/transport_factory.dart';
+import 'package:convomail/main.dart';
+import 'package:convomail/platform/credential_store.dart';
+import 'package:convomail/store/database.dart' hide ClassificationRule;
+import 'package:convomail/store/helper_queries.dart';
+import 'package:convomail/store/people_queries.dart';
+import 'package:convomail/store/settings_store.dart';
+import 'package:convomail/sync/sync_engine.dart';
+import 'package:convomail/ui/screens/chats/html_body_view.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'support/fake_helper.dart';
+import 'support/fake_mail_transport.dart';
+import 'support/test_db.dart';
+
+/// Step 5 of the Précis plan: the phone's layout. One screen at a time, a
+/// bar along the bottom, Back to return, swipes on Focus rows. The same
+/// screens as the PC, laid out for a phone.
+void main() {
+  const me = RemoteAddress('me@example.com');
+  const brief = BulkSignals(listUnsubscribe: true, listId: true, listIdValue: 'brief.dailybrief.com');
+  late AppDatabase db;
+  late FakeMailTransport imap;
+  late Account account;
+  late InMemorySettingsStore settings;
+  late FakeHelper helper;
+
+  DateTime ago({int days = 0, int hours = 0}) => DateTime.now().subtract(Duration(days: days, hours: hours));
+
+  void got(String address, String name, String subject, {required String id, BulkSignals signals = BulkSignals.none, DateTime? at}) =>
+      imap.folder('INBOX').add(RemoteMessageHeader(uid: 0, from: RemoteAddress(address, name), to: const [me], subject: subject, messageId: id, date: at ?? ago(hours: 3), signals: signals));
+
+  Future<void> says(String kind, String messageId, Map<String, Object?> data) => db.applyingFromHelper(() => db.applyHelperItem(kind, messageId, data, deleted: false));
+  Future<Message> message(String messageId) async => (await (db.select(db.messages)..where((m) => m.messageId.equals(messageId))).get()).first;
+
+  ProviderContainer scope(Destination opensOn, {bool phone = true}) => ProviderContainer(
+        overrides: [
+          settingsStoreProvider.overrideWith((ref) => settings),
+          databaseProvider.overrideWith((ref) => db),
+          credentialStoreProvider.overrideWith((ref) => InMemoryCredentialStore()),
+          transportFactoryProvider.overrideWith((ref) => () => imap),
+          helperHttpProvider.overrideWith((ref) => helper.call),
+          htmlRendererProvider.overrideWith((ref) => (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html)),
+          destinationProvider.overrideWith(() => DestinationNotifier(initial: opensOn)),
+          forceCompactProvider.overrideWith((ref) => phone ? true : null),
+          isTouchDeviceProvider.overrideWith((ref) => phone),
+        ],
+      );
+
+  /// Shows the app at a phone's size. With [joined], the device has joined
+  /// the stand-in helper first, as a phone does when it is set up.
+  Future<ProviderContainer> pump(WidgetTester tester, Destination opensOn, {Size size = const Size(412, 915), bool phone = true, bool joined = false}) async {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final c = scope(opensOn, phone: phone);
+    addTearDown(c.dispose);
+    if (joined) {
+      await tester.runAsync(() async {
+        await c.read(helperProvider.notifier).connect('localhost', 'good-code', name: 'My phone', fresh: true);
+        await c.read(helperProvider.notifier).idle();
+      });
+    }
+    await tester.pumpWidget(UncontrolledProviderScope(container: c, child: const PrecisApp(startSync: false)));
+    await tester.pumpAndSettle();
+    return c;
+  }
+
+  Future<void> teardown(WidgetTester tester) async {
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+
+  /// The phone's own Back button.
+  Future<void> back(WidgetTester tester) async {
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+  }
+
+  setUp(() async {
+    db = testDatabase();
+    imap = FakeMailTransport();
+    settings = InMemorySettingsStore();
+    helper = FakeHelper();
+    account = await insertTestAccount(db);
+    await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'me@example.com', name: const Value('Clay Example'), isDefault: const Value(true)));
+    imap.folder('INBOX', role: FolderRole.inbox);
+    imap.folder('Sent', role: FolderRole.sent);
+    imap.folder('Sent').add(RemoteMessageHeader(uid: 0, from: me, to: const [RemoteAddress('renee@booking.example')], subject: 'Spring dates', messageId: '<mine@example.com>', date: ago(days: 3)));
+    got('renee@booking.example', 'Renee Calloway', 'Re: Spring dates', id: '<renee@x>', at: ago(hours: 2));
+    got('alerts@bank.example', 'First Citizens Bank', 'Your automatic payment did not go through', id: '<bank@x>', at: ago(days: 2));
+    got('news@pollstar.example', 'Pollstar Daily', 'Daily #1', id: '<daily-1@x>', signals: brief, at: ago(hours: 4));
+    got('deals@flash.example', 'FlashDeals', '70% off, today only', id: '<flash-1@x>', signals: brief, at: ago(hours: 5));
+    final syncer = AccountSyncer(db: db, transport: imap, account: account, credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'));
+    await syncer.syncOnce();
+    await db.refreshDirtyRows();
+    // This device follows a helper whose assistant is on, and it has read the mail.
+    await db.setHelperConnected(true);
+    await db.putSetting('helper.assistantOn', '1');
+    await says('sort', '<daily-1@x>', {'cls': 'feeds', 'cat': 'Newsletter', 'pile': 'feed'});
+    await says('sort', '<flash-1@x>', {'cls': 'feeds', 'cat': 'Promotion', 'pile': 'noise'});
+    await says('read', '<renee@x>', {'line': 'Renee needs your yes or no on Charlotte.', 'focus': true, 'ask': 'Say yes or no to Charlotte.', 'due': null, 'why': ['It asks you for a yes or no.'], 'answered': false, 'at': 1});
+    await says('read', '<bank@x>', {'line': 'A payment failed.', 'focus': true, 'ask': 'Update the card on file.', 'due': null, 'why': ['A payment failed.'], 'answered': false, 'at': 1});
+    await db.refreshDirtyRows();
+  });
+
+  tearDown(() async => db.close());
+
+  testWidgets('a phone shows one screen at a time, with Today, Focus, Chats, Feed and More along the bottom', (tester) async {
+    await pump(tester, Destination.today);
+    final bar = find.byKey(const ValueKey('compact-bar'));
+    expect(bar, findsOneWidget);
+    for (final label in ['Today', 'Focus', 'Chats', 'Feed', 'More']) {
+      expect(find.descendant(of: bar, matching: find.text(label)), findsOneWidget, reason: label);
+    }
+    expect(find.descendant(of: bar, matching: find.text('Noise')), findsNothing);
+    expect(find.byType(NavigationRail), findsNothing, reason: 'no side rail on a phone');
+    // The one number on the bar: how many emails need you.
+    expect(find.descendant(of: find.byKey(const ValueKey('focus-badge')), matching: find.text('2')), findsWidgets);
+    expect(find.byKey(const ValueKey('compact-compose')), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'Today fits a phone without running off the edge');
+    await teardown(tester);
+  });
+
+  testWidgets('Focus: the list fills the phone; an email opened fills it instead, and Back returns to the list', (tester) async {
+    final renee = await tester.runAsync(() => message('<renee@x>'));
+    final c = await pump(tester, Destination.focus);
+    expect(find.textContaining('2 emails need you'), findsOneWidget);
+    expect(find.text('Pick an email on the left to read it here.'), findsNothing, reason: 'no second pane on a phone');
+    await tester.tap(find.byKey(ValueKey('mail-row-${renee!.id}')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(ValueKey('reading-${renee.id}')), findsOneWidget);
+    expect(find.textContaining('2 emails need you'), findsNothing, reason: 'the open email has the whole screen');
+    expect(find.byKey(const ValueKey('compact-bar')), findsNothing, reason: 'the bar steps aside for what is open');
+    expect(find.byKey(const ValueKey('compact-compose')), findsNothing);
+    expect(tester.takeException(), isNull);
+    // The arrow goes back.
+    await tester.tap(find.byKey(const ValueKey('compact-back')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 emails need you'), findsOneWidget);
+    expect(c.read(openMailProvider('focus')), isNull);
+    // So does the phone's own Back button.
+    await tester.tap(find.byKey(ValueKey('mail-row-${renee.id}')));
+    await tester.pumpAndSettle();
+    await back(tester);
+    expect(find.textContaining('2 emails need you'), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget);
+    await teardown(tester);
+  });
+
+  testWidgets('Focus rows on a phone: swipe right is Done, swipe left asks until when (Later); a long press opens the menu', (tester) async {
+    final renee = await tester.runAsync(() => message('<renee@x>'));
+    final bank = await tester.runAsync(() => message('<bank@x>'));
+    await pump(tester, Destination.focus);
+    // Left: Later. The row stays until a time is picked.
+    await tester.drag(find.byKey(ValueKey('mail-row-${bank!.id}')), const Offset(-320, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Later today'), findsWidgets, reason: 'swiping left asks until when');
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Update the card on file.'), findsOneWidget, reason: 'nothing was picked, so nothing changed');
+    expect((await tester.runAsync(() => message('<bank@x>')))!.focusFix, isNull, reason: 'left is not "Not Focus" on a phone');
+    // Right: Done.
+    await tester.drag(find.byKey(ValueKey('mail-row-${renee!.id}')), const Offset(320, 0));
+    await tester.pumpAndSettle();
+    expect((await tester.runAsync(() => message('<renee@x>')))!.doneAt, isNotNull);
+    expect(find.textContaining('1 email needs you'), findsOneWidget);
+    // A long press is the phone's right click.
+    await tester.longPress(find.byKey(ValueKey('mail-row-${bank.id}')));
+    await tester.pumpAndSettle();
+    expect(find.text('Done'), findsWidgets);
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await teardown(tester);
+  });
+
+  testWidgets('Chats: the list of people, then one conversation with a way back', (tester) async {
+    final c = await pump(tester, Destination.chats);
+    expect(find.text('Renee Calloway'), findsOneWidget);
+    expect(find.text('Pick a person'), findsNothing, reason: 'no empty second pane on a phone');
+    await tester.tap(find.text('Renee Calloway'));
+    await tester.pumpAndSettle();
+    expect(c.read(selectedRowProvider), 'c:renee@booking.example');
+    expect(find.byKey(const ValueKey('compact-back')), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact-bar')), findsNothing);
+    expect(tester.takeException(), isNull, reason: 'a conversation fits a phone');
+    await back(tester);
+    expect(c.read(selectedRowProvider), isNull);
+    expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget);
+    // The compose button opens a new message, full screen; Back closes it.
+    await tester.tap(find.byKey(const ValueKey('compact-compose')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compact-back')), findsOneWidget);
+    expect(tester.takeException(), isNull, reason: 'writing a message fits a phone');
+    await tester.tap(find.byKey(const ValueKey('compact-back')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compact-bar')), findsOneWidget);
+    await teardown(tester);
+  });
+
+  testWidgets('More holds Noise, Done, Sent and Settings; Back steps out the way you came in', (tester) async {
+    final c = await pump(tester, Destination.today, joined: true);
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    for (final key in ['noise', 'done', 'sent', 'settings']) {
+      expect(find.byKey(ValueKey('more-$key')), findsOneWidget, reason: key);
+    }
+    // Noise.
+    await tester.tap(find.byKey(const ValueKey('more-noise')));
+    await tester.pumpAndSettle();
+    expect(c.read(destinationProvider), Destination.noise);
+    expect(find.text('FlashDeals'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await back(tester);
+    expect(find.byKey(const ValueKey('more-noise')), findsOneWidget, reason: 'Back from Noise returns to More');
+    // Done.
+    await tester.tap(find.byKey(const ValueKey('more-done')));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing marked done yet today.'), findsOneWidget);
+    await back(tester);
+    expect(find.byKey(const ValueKey('more-done')), findsOneWidget);
+    // Sent: Chats, showing the people you wrote to.
+    await tester.tap(find.byKey(const ValueKey('more-sent')));
+    await tester.pumpAndSettle();
+    expect(c.read(destinationProvider), Destination.chats);
+    expect(c.read(peopleFilterProvider), PeopleFilter.sent);
+    // Settings: its list first, then one page, then back to the list, then to More.
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('More')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('more-settings')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings-row-devices')), findsOneWidget);
+    expect(find.byKey(const ValueKey('settings-row-keyboard')), findsNothing, reason: 'a phone has no keyboard shortcuts page');
+    expect(find.byKey(const ValueKey('settings-row-defaultApp')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('settings-row-notifications')));
+    await tester.pumpAndSettle();
+    expect(find.text('Alerts on your phones'), findsOneWidget);
+    expect(find.byKey(const ValueKey('alerts-quiet')), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact-bar')), findsNothing);
+    expect(tester.takeException(), isNull);
+    await back(tester);
+    expect(find.byKey(const ValueKey('settings-row-devices')), findsOneWidget);
+    await back(tester);
+    expect(find.byKey(const ValueKey('more-settings')), findsOneWidget);
+    await teardown(tester);
+  });
+
+  testWidgets('quiet hours set here are kept, and noted for every device', (tester) async {
+    await pump(tester, Destination.settings, joined: true);
+    await tester.tap(find.byKey(const ValueKey('settings-row-notifications')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('alerts-quiet')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('alerts-quiet-from')), findsOneWidget);
+    final kept = await tester.runAsync(() => db.getSetting(kQuietHours));
+    expect(kept, contains('"on":true'));
+    final noted = await tester.runAsync(() => db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'pref' AND k = 'quiet'").get());
+    expect(noted!.single.read<String>('data'), contains('"from":"22:00"'));
+    await teardown(tester);
+  });
+
+  testWidgets('a tablet turned sideways, and every PC, get the side-by-side layout', (tester) async {
+    await pump(tester, Destination.focus, size: const Size(1400, 900), phone: false);
+    expect(find.byType(NavigationRail), findsOneWidget);
+    expect(find.byKey(const ValueKey('compact-bar')), findsNothing);
+    expect(find.text('Pick an email on the left to read it here.'), findsOneWidget);
+    await teardown(tester);
+  });
+}

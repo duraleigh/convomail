@@ -18,6 +18,7 @@ import '../../store/done_queries.dart';
 import '../../store/mail_queries.dart';
 import '../../store/planner_queries.dart';
 import '../../sync/calendar_sync.dart';
+import '../../sync/waiting_sends.dart';
 import '../theme/tokens.dart';
 import '../widgets/reading_line.dart';
 import '../widgets/tonal_avatar.dart';
@@ -127,6 +128,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                             ],
                           ),
                         ),
+                        const _WaitingToSend(),
                         const _UpToDate(),
                       ],
                     ),
@@ -227,6 +229,39 @@ class _Section extends StatelessWidget {
                   child: Text(empty!, style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
                 ),
               for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)), children[i]],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// "1 message waiting to send": written with no signal, sent by itself when
+/// the signal returns. Shown only while something is waiting.
+class _WaitingToSend extends ConsumerWidget {
+  const _WaitingToSend();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(waitingSendCountProvider).value ?? 0;
+    if (n == 0) return const SizedBox.shrink();
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(
+        message: 'Written with no signal. Précis sends ${n == 1 ? 'it' : 'them'} by itself when the signal returns.',
+        child: Container(
+          key: const ValueKey('today-waiting-to-send'),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.schedule_send_outlined, size: 14, color: scheme.onTertiaryContainer),
+              const SizedBox(width: 6),
+              Text('$n waiting to send', style: text.labelMedium!.copyWith(color: scheme.onTertiaryContainer)),
             ],
           ),
         ),
@@ -738,6 +773,15 @@ class _Later extends ConsumerWidget {
       ],
     );
   }
+}
+
+/// What was marked done today, as its own card (the phone shows it on a
+/// page of its own, under More).
+class DoneTodayList extends StatelessWidget {
+  const DoneTodayList({super.key});
+
+  @override
+  Widget build(BuildContext context) => const _Done();
 }
 
 class _Done extends ConsumerWidget {

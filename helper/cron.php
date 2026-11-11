@@ -25,7 +25,7 @@ if (!$app->isSetUp()) {
     exit(0);
 }
 try {
-    $out = (new Clock($app->store(), $app->reader(), $app->readings()))->tick(PRECIS_HOME . DIRECTORY_SEPARATOR . 'clock.lock');
+    $out = (new Clock($app->store(), $app->reader(), $app->readings(), $app->alerts()))->tick(PRECIS_HOME . DIRECTORY_SEPARATOR . 'clock.lock');
     if (in_array('-v', $argv, true)) {
         echo json_encode($out), "\n";
     }

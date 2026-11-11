@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
+import '../../../app/layout.dart';
 import '../../../app/people_state.dart';
 import '../../../app/settings.dart';
 import '../../../domain/piles.dart';
@@ -57,12 +58,20 @@ List<MailGroup> groupByDay(List<MailItem> items, {DateTime? now}) {
 /// The frame every one of the three lists shares: the list in the middle
 /// pane (at the width the user dragged to) and the open email on the right.
 class MailSplit extends ConsumerWidget {
-  const MailSplit({super.key, required this.left, required this.right});
+  const MailSplit({super.key, required this.left, required this.right, this.detailOpen = false, this.onCloseDetail});
   final Widget left;
   final Widget right;
 
+  /// On a phone: whether something is open (it then fills the screen), and
+  /// how to go back to the list.
+  final bool detailOpen;
+  final VoidCallback? onCloseDetail;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) => SplitPane(
+        compact: isCompactLayout(context, ref),
+        detailOpen: detailOpen,
+        onCloseDetail: onCloseDetail,
         initialLeftWidth: ref.watch(settingsProvider.select((s) => s.middlePaneWidth)),
         onLeftWidthChanged: (w) => ref.read(settingsProvider.notifier).setMiddlePaneWidth(w),
         minLeft: AppLayout.middlePaneMin,
@@ -204,6 +213,13 @@ class MailRowTile extends StatelessWidget {
             key: ValueKey('mail-row-${item.id}'),
             onTap: onTap,
             onSecondaryTapUp: onMenu == null ? null : (d) => onMenu!(d.globalPosition),
+            // A long press is the phone's right click.
+            onLongPress: onMenu == null
+                ? null
+                : () {
+                    final box = context.findRenderObject() as RenderBox?;
+                    onMenu!(box == null ? Offset.zero : box.localToGlobal(box.size.center(Offset.zero)));
+                  },
             child: Padding(
               padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
               child: Row(
@@ -292,8 +308,12 @@ class MailRowTile extends StatelessWidget {
 /// the row shows two buttons at its right end, Done and Not Focus; swiping
 /// it right is Done, swiping it left is Not Focus.
 class QuickActions extends StatefulWidget {
-  const QuickActions({super.key, required this.id, required this.child, required this.onDone, required this.onIgnore, this.onLater});
+  const QuickActions({super.key, required this.id, required this.child, required this.onDone, required this.onIgnore, this.onLater, this.touch = false});
   final int id;
+
+  /// A phone: swiping left is Later (on a PC it is Not Focus, and Later is
+  /// one of the buttons that show under the pointer).
+  final bool touch;
   final Widget child;
   final VoidCallback onDone;
 
@@ -329,7 +349,17 @@ class _QuickActionsState extends State<QuickActions> {
     return Dismissible(
       key: ValueKey('swipe-${widget.id}'),
       background: behind(Alignment.centerLeft, Icons.check_rounded, 'Done', scheme.primaryContainer, scheme.onPrimaryContainer),
-      secondaryBackground: behind(Alignment.centerRight, Icons.do_not_disturb_on_outlined, 'Not Focus', scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+      secondaryBackground: widget.touch && widget.onLater != null
+          ? behind(Alignment.centerRight, Icons.snooze_rounded, 'Later', scheme.tertiaryContainer, scheme.onTertiaryContainer)
+          : behind(Alignment.centerRight, Icons.do_not_disturb_on_outlined, 'Not Focus', scheme.surfaceContainerHighest, scheme.onSurfaceVariant),
+      // Later asks until when first, so the row stays put until that is answered.
+      confirmDismiss: (direction) async {
+        if (direction == DismissDirection.endToStart && widget.touch && widget.onLater != null) {
+          widget.onLater!();
+          return false;
+        }
+        return true;
+      },
       onDismissed: (direction) => direction == DismissDirection.startToEnd ? widget.onDone() : widget.onIgnore(),
       child: MouseRegion(
         onEnter: (_) => setState(() => _hover = true),

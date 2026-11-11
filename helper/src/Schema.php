@@ -17,7 +17,7 @@ namespace Precis;
  */
 final class Schema
 {
-    public const VERSION = 3;
+    public const VERSION = 4;
 
     public static function migrate(Db $db): void
     {
@@ -48,6 +48,17 @@ final class Schema
             // sent mail already passed over is looked at again.
             $db->exec('ALTER TABLE {readings} ADD COLUMN asks INT NOT NULL DEFAULT 0');
             $db->run('UPDATE {emails} SET read_state = 0 WHERE is_from_me = 1');
+        }
+        if ($have < 4) {
+            // Phones: where to send a phone its alerts, whether it may ring,
+            // and when a PC last had Précis open in front of the owner.
+            $db->exec('ALTER TABLE {devices} ADD COLUMN push_token VARCHAR(400) NULL');
+            $db->exec('ALTER TABLE {devices} ADD COLUMN ring INT NOT NULL DEFAULT 1');
+            $db->exec('ALTER TABLE {devices} ADD COLUMN front_at BIGINT NOT NULL DEFAULT 0');
+            // What has already been alerted, so nothing rings twice.
+            $db->exec('CREATE TABLE {alerts} (k VARCHAR(420) NOT NULL PRIMARY KEY, at BIGINT NOT NULL, cleared INT NOT NULL DEFAULT 0)' . $tail);
+            // The addresses the owner sends from, each kept locked, for every device.
+            $db->exec('CREATE TABLE {vault} (k VARCHAR(320) NOT NULL PRIMARY KEY, v ' . ($db->driver === 'mysql' ? 'MEDIUMTEXT' : 'TEXT') . ' NOT NULL, at BIGINT NOT NULL)' . $tail);
         }
         $db->upsert('meta', ['k' => 'schema'], ['v' => (string) self::VERSION]);
     }

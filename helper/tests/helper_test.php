@@ -237,8 +237,10 @@ return [
         throws(fn () => $w->google->finishSignIn('bad-code', 'https://helper.example/google/callback'));
         same(0, (int) $w->store->db->val('SELECT COUNT(*) FROM {accounts}'));
         $url = $w->google->signInUrl('https://helper.example/google/callback', 'st8');
-        check(str_contains($url, 'gmail.readonly') && str_contains($url, 'gmail.send') && str_contains($url, 'access_type=offline') && str_contains($url, 'state=st8'));
-        check(!str_contains($url, 'gmail.modify') && !str_contains($url, 'mail.google.com'), 'asks for more than reading and sending');
+        // Mail in full (so a joined phone or second PC can do all the first PC does), calendar and contacts to read.
+        check(str_contains($url, rawurlencode('https://mail.google.com/')) || str_contains($url, urlencode('https://mail.google.com/')), 'does not ask for mail');
+        check(str_contains($url, 'calendar.readonly') && str_contains($url, 'contacts.readonly') && str_contains($url, 'access_type=offline') && str_contains($url, 'state=st8'));
+        check(!str_contains($url, 'auth%2Fcalendar+') && !str_contains($url, 'auth%2Fcontacts+') && !str_contains($url, 'drive'), 'asks for more than it says');
     },
 
     'the instant notice is asked for when a topic is set, and asked again before it lapses' => function () use ($person): void {

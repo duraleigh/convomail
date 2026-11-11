@@ -27,6 +27,17 @@ final class FakeGoogle implements \Precis\Http
     /** @var list<array{email: string, name: string}> */
     public array $sendAs = [];
 
+    /** What Google says was allowed at sign-in; null means everything asked for. */
+    public ?string $scope = null;
+
+    /** @var list<array{token: string, data: array<string, string>}> alerts sent to phones */
+    public array $pushed = [];
+
+    /** @var list<string> phones that no longer have the app */
+    public array $gonePhones = [];
+    public bool $refuseServiceAccount = false;
+    public int $serviceTokens = 0;
+
     /** @var list<string> every address called, for checks that count calls */
     public array $calls = [];
     private int $next = 1;
@@ -84,8 +95,26 @@ final class FakeGoogle implements \Precis\Http
         $path = (string) parse_url($url, PHP_URL_PATH);
         parse_str((string) parse_url($url, PHP_URL_QUERY), $q);
         $json = static fn (array $d, int $s = 200): array => ['status' => $s, 'body' => (string) json_encode($d)];
+        if (str_contains($url, 'fcm.googleapis.com/v1/projects/')) {
+            if (!str_starts_with($headers['Authorization'] ?? '', 'Bearer fcm-')) {
+                return $json(['error' => ['status' => 'UNAUTHENTICATED']], 401);
+            }
+            $m = json_decode((string) $body, true)['message'] ?? [];
+            if (in_array((string) ($m['token'] ?? ''), $this->gonePhones, true)) {
+                return $json(['error' => ['status' => 'NOT_FOUND', 'details' => [['errorCode' => 'UNREGISTERED']]]], 404);
+            }
+            $this->pushed[] = ['token' => (string) ($m['token'] ?? ''), 'data' => (array) ($m['data'] ?? [])];
+            return $json(['name' => 'projects/x/messages/1']);
+        }
         if (str_contains($url, 'oauth2.googleapis.com/token')) {
             parse_str((string) $body, $f);
+            if (($f['grant_type'] ?? '') === 'urn:ietf:params:oauth:grant-type:jwt-bearer') {
+                // A service account proving itself with a signed note.
+                if ($this->refuseServiceAccount || substr_count((string) ($f['assertion'] ?? ''), '.') !== 2) {
+                    return $json(['error' => 'invalid_grant'], 400);
+                }
+                return $json(['access_token' => 'fcm-' . (++$this->serviceTokens), 'expires_in' => 3600]);
+            }
             if (($f['client_secret'] ?? '') !== 'the-secret') {
                 return $json(['error' => 'invalid_client'], 401);
             }
@@ -98,7 +127,7 @@ final class FakeGoogle implements \Precis\Http
             if (($f['code'] ?? '') !== 'good-code') {
                 return $json(['error' => 'invalid_grant'], 400);
             }
-            return $json(['access_token' => 'access-' . (++$this->tokensGiven), 'expires_in' => 3600, 'refresh_token' => 'refresh-1', 'scope' => implode(' ', \Precis\Google::SCOPES)]);
+            return $json(['access_token' => 'access-' . (++$this->tokensGiven), 'expires_in' => 3600, 'refresh_token' => 'refresh-1', 'scope' => $this->scope ?? implode(' ', \Precis\Google::SCOPES)]);
         }
         if (str_contains($url, 'oauth2.googleapis.com/revoke')) {
             return $json([]);

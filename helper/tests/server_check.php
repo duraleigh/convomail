@@ -33,7 +33,7 @@ if (!is_file($configFile)) {
 $config = require $configFile;
 $config['prefix'] = 'pxcheck_';
 $db = Db::connect($config);
-$tables = ['meta', 'counters', 'accounts', 'emails', 'rcpts', 'items', 'sender_facts', 'my_ids', 'devices', 'pair_codes', 'throttle', 'log', 'readings', 'spend', 'trial'];
+$tables = ['meta', 'counters', 'accounts', 'emails', 'rcpts', 'items', 'sender_facts', 'my_ids', 'devices', 'pair_codes', 'throttle', 'log', 'readings', 'spend', 'trial', 'alerts', 'vault'];
 $drop = static function () use ($db, $tables): void {
     foreach ($tables as $t) {
         $db->exec('DROP TABLE IF EXISTS {' . $t . '}');
@@ -151,6 +151,68 @@ try {
     $ok(($store->item('sender', 'hello@dailybrief.com')['cat'] ?? '') === 'Reading' && $store->item('tag', 'Newsletter') === null, 'a tag is renamed everywhere');
     $seeded = $sync->seed(1, [['k' => 'seeded@x.com', 'item' => ['cls' => 'people', 'src' => 'auto'], 'facts' => ['address' => 'seeded@x.com', 'messagesReceived' => 4]]], time(), ['<old@x>', '<old@x>']);
     $ok($seeded['senders'] === 1 && $sorter->facts('seeded@x.com')['messagesReceived'] === 4 && (int) $db->val('SELECT COUNT(*) FROM {my_ids}') === 1, 'the first sending-up is kept');
+
+    // Step 5. The upgrade from the storage as it stands today (version 3):
+    // put the scratch tables back to that, and let the helper upgrade them.
+    $db->exec('ALTER TABLE {devices} DROP COLUMN push_token');
+    $db->exec('ALTER TABLE {devices} DROP COLUMN ring');
+    $db->exec('ALTER TABLE {devices} DROP COLUMN front_at');
+    $db->exec('DROP TABLE {alerts}');
+    $db->exec('DROP TABLE {vault}');
+    $db->run("UPDATE {meta} SET v = '3' WHERE k = 'schema'");
+    Schema::migrate($db);
+    $ok((int) $db->val("SELECT v FROM {meta} WHERE k = 'schema'") === Schema::VERSION, 'the storage upgrades from version 3');
+
+    // Phones: where to reach one, whether it rings, and a PC saying it is in front.
+    $devices = new Devices($store);
+    $phone = $devices->join($devices->newCode(), 'Téléphone 📱', 'android')['id'];
+    $pc = $devices->join($devices->newCode(), 'PC', 'windows')['id'];
+    $devices->setPush($phone, str_repeat('t', 300), null);
+    $devices->inFront($pc);
+    $row = $db->one('SELECT push_token, ring, front_at FROM {devices} WHERE id = ?', [$phone]);
+    $ok(strlen((string) $row['push_token']) === 300 && (int) $row['ring'] === 1 && (int) $row['front_at'] === 0, 'a phone says where to reach it');
+    $ok((int) $db->val('SELECT front_at FROM {devices} WHERE id = ?', [$pc]) > 0, 'a PC says it is open in front of the owner');
+
+    // Alerts, with a stand-in for Google's alert service: nothing is sent anywhere.
+    $standIn = new class implements \Precis\Http {
+        public array $sent = [];
+
+        public function request(string $method, string $url, array $headers = [], ?string $body = null): array
+        {
+            if (str_contains($url, 'oauth2.googleapis.com/token')) {
+                return ['status' => 200, 'body' => '{"access_token":"stand-in","expires_in":3600}'];
+            }
+            $this->sent[] = json_decode((string) $body, true)['message'] ?? [];
+            return ['status' => 200, 'body' => '{}'];
+        }
+
+        public function getMany(array $urls, array $headers = []): array
+        {
+            return [];
+        }
+    };
+    $push = new \Precis\Push($store, $standIn);
+    $made = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+    openssl_pkey_export($made, $pem);
+    $ok($push->setKey((string) json_encode(['type' => 'service_account', 'project_id' => 'check', 'client_email' => 'a@check.iam.gserviceaccount.com', 'private_key' => $pem])) === null && $push->hasKey(), 'the alert service file is kept');
+    $ok(!str_contains((string) $store->get('push.account'), 'PRIVATE KEY'), 'and kept locked');
+    $alerts = new \Precis\Alerts($store, $readings, $push);
+    $store->put('reminder', 'chk-1', ['title' => 'Appeler José ☎', 'due' => time(), 'done' => false, 'fired' => time() + 1]);
+    $ok($alerts->sweep() === 1 && ($standIn->sent[0]['data']['ask'] ?? '') === 'Appeler José ☎' && ($standIn->sent[0]['token'] ?? '') === str_repeat('t', 300), 'a reminder rings the phone once, accents and all');
+    $ok($alerts->sweep() === 0 && (int) $db->val('SELECT COUNT(*) FROM {alerts}') === 1, 'and never twice');
+    $sync->push($phone, [['op' => 'reminder-done', 'uid' => 'chk-1']]);
+    $ok($alerts->sweep() === 1 && ($standIn->sent[1]['data']['t'] ?? '') === 'clear' && (int) $db->val('SELECT cleared FROM {alerts}') === 1, 'done takes the alert away');
+    $push->forgetKey();
+    $ok(!$push->hasKey() && $alerts->sweep() === 0, 'with alerts off, nothing is sent');
+
+    // The addresses the owner sends from, kept locked, pictures included.
+    $sending = new \Precis\Sending($store);
+    $picture = base64_encode(random_bytes(900000));
+    $ok($sending->put([['email' => 'CA@Example.com', 'name' => 'José', 'host' => 'smtp.example.com', 'port' => 465, 'password' => 'p@ss wörd', 'pics' => ['a.png' => $picture]]]) === 1 && $sending->rev() === 1, 'an address is kept');
+    $got = $sending->all();
+    $ok(count($got) === 1 && $got[0]['email'] === 'ca@example.com' && $got[0]['password'] === 'p@ss wörd' && $got[0]['pics']['a.png'] === $picture, 'and comes back whole, a large picture included');
+    $ok(!str_contains((string) $db->val('SELECT v FROM {vault}'), 'smtp.example.com'), 'and is kept locked');
+    $ok($sending->put([['email' => 'ca@example.com', 'deleted' => true]]) === 1 && $sending->count() === 0, 'and can be forgotten');
 
     // Many writes in a row keep their order.
     $before = $store->seq();

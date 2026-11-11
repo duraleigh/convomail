@@ -56,13 +56,18 @@ class HelperException implements Exception {
 
 /// The few calls a device makes to the helper.
 class HelperClient {
-  HelperClient(String base, {this.token, HelperHttp? http})
+  HelperClient(String base, {this.token, HelperHttp? http, this.inFront})
       : base = normalizeBase(base),
         _http = http ?? defaultHelperHttp;
 
   final Uri base;
   final String? token;
   final HelperHttp _http;
+
+  /// Whether Précis is open and in front of the user on this PC right now.
+  /// The helper is told, so a phone does not ring for what is already on
+  /// screen here.
+  final bool Function()? inFront;
 
   /// `precis.example.com`, with or without `https://`, becomes a web
   /// address. Only https is allowed, except to this same computer.
@@ -77,7 +82,7 @@ class HelperClient {
     return Uri(scheme: uri.scheme, host: uri.host, port: uri.hasPort ? uri.port : null);
   }
 
-  HelperClient withToken(String token) => HelperClient(base.toString(), token: token, http: _http);
+  HelperClient withToken(String token) => HelperClient(base.toString(), token: token, http: _http, inFront: inFront);
 
   Future<Map<String, Object?>> _call(String method, String path, {Map<String, Object?>? body, Map<String, String>? query}) async {
     final HelperResponse r;
@@ -86,7 +91,12 @@ class HelperClient {
       r = await _http(
         method,
         base.replace(path: path, queryParameters: query),
-        headers: {'X-Precis-Token': ?token, 'Accept': 'application/json', 'X-Precis-Zone': '${DateTime.now().timeZoneOffset.inMinutes}'},
+        headers: {
+          'X-Precis-Token': ?token,
+          'Accept': 'application/json',
+          'X-Precis-Zone': '${DateTime.now().timeZoneOffset.inMinutes}',
+          if (inFront?.call() ?? false) 'X-Precis-Front': '1',
+        },
         body: body == null ? null : jsonEncode(body),
       );
     } on SocketException {
@@ -122,15 +132,56 @@ class HelperClient {
     return (device: (r['device'] as num?)?.toInt() ?? 0, token: token);
   }
 
-  Future<({List<Map<String, Object?>> items, int next, bool more, bool? assistant})> changes(int since) async {
+  Future<({List<Map<String, Object?>> items, int next, bool more, bool? assistant, int? sending, bool? alerts})> changes(int since) async {
     final r = await _call('GET', '/api/changes', query: {'since': '$since'});
     return (
       items: [for (final i in (r['items'] as List?) ?? const []) (i as Map).cast<String, Object?>()],
       next: (r['next'] as num?)?.toInt() ?? since,
       more: r['more'] == true,
       assistant: r['assistant'] is bool ? r['assistant'] as bool : null,
+      sending: (r['sending'] as num?)?.toInt(),
+      alerts: r['alerts'] is bool ? r['alerts'] as bool : null,
     );
   }
+
+  /// Whose mailbox the helper holds, and what Google allows it.
+  Future<({String email, String name, bool mail, bool calendar, bool contacts})> account() async {
+    final r = await _call('GET', '/api/account');
+    final g = r['grants'] is Map ? (r['grants'] as Map) : const <Object?, Object?>{};
+    return (email: '${r['email'] ?? ''}', name: '${r['name'] ?? ''}', mail: g['mail'] == true, calendar: g['calendar'] == true, contacts: g['contacts'] == true);
+  }
+
+  /// A pass to the mailbox, good for about an hour. The lasting sign-in
+  /// never leaves the helper.
+  Future<({String email, String access, DateTime until})> googlePass() async {
+    final r = await _call('GET', '/api/google/token');
+    final access = r['access'];
+    if (access is! String || access.isEmpty) throw const HelperException('The helper gave no pass to the mailbox.');
+    final now = (r['now'] as num?)?.toInt() ?? 0;
+    final expires = (r['expires'] as num?)?.toInt() ?? 0;
+    // By this device's own clock: however long the helper says is left.
+    final left = Duration(seconds: expires > now ? expires - now : 600);
+    return (email: '${r['email'] ?? ''}', access: access, until: DateTime.now().add(left));
+  }
+
+  /// The addresses the user sends from, with what each needs to send.
+  Future<({List<Map<String, Object?>> addresses, int rev})> sending() async {
+    final r = await _call('GET', '/api/sending');
+    return (addresses: [for (final a in (r['addresses'] as List?) ?? const []) (a as Map).cast<String, Object?>()], rev: (r['rev'] as num?)?.toInt() ?? 0);
+  }
+
+  Future<int> putSending(List<Map<String, Object?>> addresses) async => ((await _call('POST', '/api/sending', body: {'addresses': addresses}))['rev'] as num?)?.toInt() ?? 0;
+
+  /// What a phone needs to sign up with Google's alert service; null until
+  /// alerts are set up on the helper's page.
+  Future<Map<String, String>?> alerts() async {
+    final r = await _call('GET', '/api/alerts');
+    final app = r['app'];
+    return r['ready'] == true && app is Map ? {for (final e in app.entries) '${e.key}': '${e.value}'} : null;
+  }
+
+  /// Tells the helper where to send this phone its alerts, and whether it may ring.
+  Future<void> setPush({String? token, bool? ring}) => _call('POST', '/api/devices/push', body: {'token': ?token, 'ring': ?ring});
 
   /// Turns the assistant on or off, or sets its monthly ceiling (in
   /// millionths of a dollar). Returns how the assistant is doing after.
@@ -140,7 +191,9 @@ class HelperClient {
     return a is Map ? a.cast<String, Object?>() : const {};
   }
 
-  Future<void> push(List<Map<String, Object?>> items) => _call('POST', '/api/push', body: {'items': items});
+  /// With [echo], this device hears its own change back (used for changes
+  /// made outside the app's own notes, such as from an alert).
+  Future<void> push(List<Map<String, Object?>> items, {bool echo = false}) => _call('POST', '/api/push', body: {'items': items, if (echo) 'echo': true});
 
   Future<void> seed(List<Map<String, Object?>> senders, {required int at, List<String> myIds = const []}) => _call('POST', '/api/seed', body: {'senders': senders, 'at': at, 'myIds': myIds});
 

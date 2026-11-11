@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/conversation_state.dart';
+import '../../app/layout.dart';
 import '../../app/settings.dart';
 import '../../app/settings_navigation.dart';
 import '../../app/shortcuts.dart';
 import '../../store/database.dart';
+import '../shell/compact_shell.dart';
+import '../shell/split_pane.dart';
 import '../theme/tokens.dart';
 import '../widgets/connected_button_group.dart';
 import '../widgets/grouped_list.dart';
@@ -31,6 +34,44 @@ class SettingsScreen extends ConsumerWidget {
     final section = ref.watch(settingsSectionProvider);
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
+    if (isCompactLayout(context, ref)) {
+      final open = ref.watch(settingsDetailOpenProvider);
+      return SplitPane(
+        compact: true,
+        detailOpen: open,
+        onCloseDetail: () => ref.read(settingsDetailOpenProvider.notifier).set(false),
+        left: ListView(
+          key: const PageStorageKey('settings-list'),
+          padding: const EdgeInsets.only(bottom: AppSpace.lg),
+          children: [
+            Padding(padding: const EdgeInsets.fromLTRB(24, 14, 12, 6), child: Text('Settings', style: text.headlineMedium)),
+            for (final s in SettingsSection.values)
+              if (settingsSectionOnPhone(s))
+                ListTile(
+                  key: ValueKey('settings-row-${s.name}'),
+                  leading: Icon(s.icon),
+                  title: Text(s.label),
+                  trailing: Icon(Icons.chevron_right_rounded, color: scheme.onSurfaceVariant),
+                  onTap: () {
+                    ref.read(settingsSectionProvider.notifier).select(s);
+                    ref.read(settingsDetailOpenProvider.notifier).set(true);
+                  },
+                ),
+          ],
+        ),
+        right: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(section.label, style: text.titleLarge),
+              const SizedBox(height: AppSpace.md),
+              Expanded(child: _Detail(section)),
+            ],
+          ),
+        ),
+      );
+    }
     return DestinationFrame(
       title: 'Settings',
       padContent: false,

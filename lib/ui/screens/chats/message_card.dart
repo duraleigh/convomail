@@ -173,6 +173,11 @@ class MessageCard extends ConsumerWidget {
         Divider(color: scheme.outlineVariant),
         Row(
           children: [
+            // One line on a PC; on a phone the buttons wrap onto a second.
+            Expanded(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
             TextButton.icon(
               onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(message.id, rowKey: _rowKey)),
               icon: const Icon(Icons.reply_rounded, size: 18),
@@ -198,7 +203,9 @@ class MessageCard extends ConsumerWidget {
                 label: Text('${threadCount - inChat} more in this thread'),
               ),
             ],
-            const Spacer(),
+                ],
+              ),
+            ),
             PopupMenuButton<String>(
               tooltip: 'More',
               icon: const Icon(Icons.more_vert_rounded),

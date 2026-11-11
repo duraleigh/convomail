@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/compose_state.dart';
+import '../../app/layout.dart';
+import '../../app/people_state.dart';
 import '../../app/settings.dart';
 import '../shell/split_pane.dart';
 import '../theme/tokens.dart';
@@ -17,7 +19,18 @@ class ChatsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final compose = ref.watch(composeProvider);
+    final compact = isCompactLayout(context, ref);
     return SplitPane(
+      // On a phone: the list of people, then one conversation (or a new message).
+      compact: compact,
+      detailOpen: compose != null || (compact && ref.watch(selectedRowProvider) != null),
+      onCloseDetail: () {
+        if (ref.read(composeProvider) != null) {
+          ref.read(composeProvider.notifier).close();
+        } else {
+          ref.read(selectedRowProvider.notifier).select(null);
+        }
+      },
       // The width the user last dragged to.
       initialLeftWidth: ref.watch(settingsProvider.select((s) => s.middlePaneWidth)),
       onLeftWidthChanged: (w) => ref.read(settingsProvider.notifier).setMiddlePaneWidth(w),

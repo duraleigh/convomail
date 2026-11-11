@@ -152,6 +152,8 @@ class _PersonRowState extends ConsumerState<PersonRow> {
         onExit: (_) => setState(() => _pointerIn = false),
         child: GestureDetector(
           onSecondaryTapUp: (d) => _showMenu(d.globalPosition),
+          // A long press is the phone's right click.
+          onLongPressStart: (d) => _showMenu(d.globalPosition),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(14, 7, 10, 7),
             child: Row(

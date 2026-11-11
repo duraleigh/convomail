@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/layout.dart';
 import '../../app/mail_state.dart';
 import '../../store/database.dart';
 import '../../store/done_queries.dart';
@@ -107,6 +108,7 @@ class FocusScreen extends ConsumerWidget {
           QuickActions(
             key: ValueKey('quick-row-${i.id}'),
             id: i.id,
+            touch: ref.watch(isTouchDeviceProvider),
             onDone: () => deal(i, done: true),
             onLater: () => putOffFocusMail(context, ref, i),
             onIgnore: () => deal(i, done: false),
@@ -135,6 +137,8 @@ class FocusScreen extends ConsumerWidget {
     ];
 
     return MailSplit(
+      detailOpen: open != null,
+      onCloseDetail: () => ref.read(openMailProvider('focus').notifier).open(null),
       left: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

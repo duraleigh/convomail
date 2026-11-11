@@ -7,15 +7,27 @@ use RuntimeException;
 
 /**
  * The helper's own sign-in to the owner's Gmail, and the few Gmail calls it
- * makes. It asks Google for two things only: reading mail, and sending mail
- * (used from a later step, and only on the owner's tap).
+ * makes.
+ *
+ * It asks Google for the owner's mail (in full), their calendar (read
+ * only) and their contacts (read only). Full mail is what lets a phone or a
+ * second PC that joined by code do everything the first PC does: the helper
+ * hands such a device a pass that lasts about an hour, and the device then
+ * talks to Google with the same mail engine. The helper itself still only
+ * reads; it changes or sends nothing on its own.
  *
  * The sign-in client (id and secret) comes from the owner's own Google
  * project. The secret and the sign-in itself are kept sealed.
  */
 final class Google
 {
-    public const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly', 'https://www.googleapis.com/auth/gmail.send'];
+    public const MAIL = 'https://mail.google.com/';
+    public const CALENDAR = 'https://www.googleapis.com/auth/calendar.readonly';
+    public const CONTACTS = 'https://www.googleapis.com/auth/contacts.readonly';
+    public const SCOPES = [self::MAIL, self::CALENDAR, self::CONTACTS];
+
+    /** What an earlier sign-in asked for: reading only. Enough for the helper's own reading. */
+    private const READING = 'https://www.googleapis.com/auth/gmail.readonly';
 
     private const AUTH = 'https://accounts.google.com/o/oauth2/v2/auth';
     private const TOKEN = 'https://oauth2.googleapis.com/token';
@@ -75,8 +87,8 @@ final class Google
             throw new GoogleError('Google did not give a lasting sign-in. Remove Précis from your Google Account’s connected apps and try again.');
         }
         $granted = explode(' ', (string) ($t['scope'] ?? ''));
-        if (!in_array(self::SCOPES[0], $granted, true)) {
-            throw new GoogleError('Reading mail was not allowed on Google’s screen, so the helper cannot work. Sign in again and leave the boxes ticked.');
+        if (!in_array(self::MAIL, $granted, true) && !in_array(self::READING, $granted, true)) {
+            throw new GoogleError('Mail was not allowed on Google’s screen, so the helper cannot work. Sign in again and leave the boxes ticked.');
         }
         $tokens = ['refresh' => $t['refresh_token'], 'access' => $t['access_token'], 'exp' => $this->store->now() + (int) ($t['expires_in'] ?? 3000), 'scope' => $t['scope'] ?? ''];
         $profile = $this->call('GET', self::GMAIL . 'profile', (string) $tokens['access']);
@@ -118,8 +130,37 @@ final class Google
         $db->run('DELETE FROM {accounts} WHERE id = ?', [$accountId]);
     }
 
+    /**
+     * Whether Google has allowed the helper [$scope] for a mailbox: the
+     * owner ticked it on Google's screen at the last sign-in.
+     */
+    public function grants(int $accountId, string $scope): bool
+    {
+        $row = $this->store->db->one('SELECT tokens FROM {accounts} WHERE id = ?', [$accountId]);
+        if ($row === null) {
+            return false;
+        }
+        $tokens = Store::decode($this->store->crypto->open((string) $row['tokens']));
+        return in_array($scope, explode(' ', (string) ($tokens['scope'] ?? '')), true);
+    }
+
+    /**
+     * A pass for a device that joined by code: the same short-lived pass
+     * the helper uses, with when it runs out. Never the lasting sign-in.
+     *
+     * @return array{email: string, access: string, expires: int}
+     */
+    public function devicePass(int $accountId): array
+    {
+        // At least a quarter of an hour of use left in it, so a device is not handed one about to lapse.
+        $access = $this->accessToken($accountId, 900);
+        $row = $this->store->db->one('SELECT email, tokens FROM {accounts} WHERE id = ?', [$accountId]);
+        $tokens = Store::decode($this->store->crypto->open((string) ($row['tokens'] ?? '')));
+        return ['email' => (string) ($row['email'] ?? ''), 'access' => $access, 'expires' => (int) ($tokens['exp'] ?? 0)];
+    }
+
     /** A short-lived pass for calls, renewed from the lasting sign-in when it is about to run out. */
-    public function accessToken(int $accountId): string
+    public function accessToken(int $accountId, int $left = 90): string
     {
         $db = $this->store->db;
         $row = $db->one('SELECT tokens FROM {accounts} WHERE id = ?', [$accountId]);
@@ -127,7 +168,7 @@ final class Google
             throw new GoogleError('That mailbox is not connected.', 0, true);
         }
         $tokens = Store::decode($this->store->crypto->open((string) $row['tokens']));
-        if ((int) ($tokens['exp'] ?? 0) - 90 > $this->store->now() && ($tokens['access'] ?? '') !== '') {
+        if ((int) ($tokens['exp'] ?? 0) - $left > $this->store->now() && ($tokens['access'] ?? '') !== '') {
             return (string) $tokens['access'];
         }
         try {

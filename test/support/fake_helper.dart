@@ -32,6 +32,31 @@ class FakeHelper {
   /// The clock offset the device last sent, in minutes.
   String? zone;
 
+  /// The mailbox the helper holds, and what Google allows it. An empty
+  /// email means no mailbox is connected yet.
+  String mailbox = 'me@example.com';
+  String mailboxName = 'Clay Example';
+  bool grantsMail = true;
+  bool grantsCalendar = true;
+  bool grantsContacts = true;
+
+  /// Passes handed to devices, and how long each lasts.
+  int passes = 0;
+  int passSeconds = 3600;
+
+  /// The addresses the owner sends from, as devices handed them over.
+  final Map<String, Map<String, Object?>> sending = {};
+  int sendingRev = 0;
+  int sendingPuts = 0;
+
+  /// Alerts: what the phone app needs to sign up (null until set up), and
+  /// what each device said about where to reach it.
+  Map<String, String>? alertsApp;
+  final Map<int, Map<String, Object?>> pushAddresses = {};
+
+  /// Devices that said Précis was open in front of the user.
+  final Set<int> inFront = {};
+
   /// Kinds the helper refuses, to check one bad change cannot block others.
   final Set<String> refuse = {};
   int calls = 0;
@@ -82,6 +107,7 @@ class FakeHelper {
     zone = headers['X-Precis-Zone'] ?? zone;
     final device = tokens.entries.where((e) => e.value == token).map((e) => e.key).firstOrNull;
     if (device == null) return json({'error': 'This device is not signed in to the helper.'}, 401);
+    if (headers['X-Precis-Front'] == '1') inFront.add(device);
     switch ('$method $path') {
       case 'GET /api/changes':
         final since = int.tryParse(uri.queryParameters['since'] ?? '') ?? 0;
@@ -95,7 +121,39 @@ class FakeHelper {
           'next': page.isEmpty ? since : page.last.value.seq,
           'more': rows.length > 500,
           'assistant': assistant['on'] == true && assistant['hasKey'] == true,
+          'sending': sendingRev,
+          'alerts': alertsApp != null,
         });
+      case 'GET /api/account':
+        if (mailbox.isEmpty) return json({'error': 'No mailbox is connected to the helper yet.'}, 409);
+        return json({'email': mailbox, 'name': mailboxName, 'grants': {'mail': grantsMail, 'calendar': grantsCalendar, 'contacts': grantsContacts}, 'sending': sendingRev});
+      case 'GET /api/google/token':
+        if (mailbox.isEmpty) return json({'error': 'No mailbox is connected to the helper yet.'}, 409);
+        if (!grantsMail) return json({'error': 'Google has not allowed this yet. Open the helper’s page and press Connect Google again.'}, 409);
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        return json({'email': mailbox, 'access': 'pass-${++passes}', 'expires': now + passSeconds, 'now': now});
+      case 'GET /api/sending':
+        return json({'addresses': [for (final e in sending.entries) {'email': e.key, ...e.value}], 'rev': sendingRev});
+      case 'POST /api/sending':
+        sendingPuts++;
+        var changed = 0;
+        for (final a in (j['addresses'] as List?) ?? const []) {
+          final m = (a as Map).cast<String, Object?>();
+          final email = '${m.remove('email')}'.toLowerCase();
+          if (m['deleted'] == true) {
+            changed += sending.remove(email) == null ? 0 : 1;
+          } else if (jsonEncode(sending[email]) != jsonEncode(m)) {
+            sending[email] = m;
+            changed++;
+          }
+        }
+        if (changed > 0) sendingRev++;
+        return json({'changed': changed, 'rev': sendingRev});
+      case 'GET /api/alerts':
+        return json({'ready': alertsApp != null, 'app': alertsApp});
+      case 'POST /api/devices/push':
+        pushAddresses[device] = {...?pushAddresses[device], ...j};
+        return json({'ok': true, 'alerts': alertsApp != null});
       case 'POST /api/assistant':
         if (j['ceiling'] is int) assistant = {...assistant, 'ceiling': j['ceiling']};
         if (j['on'] is bool) {
@@ -108,13 +166,15 @@ class FakeHelper {
         for (final i in list) {
           if (refuse.contains(i['kind'] ?? i['op'])) return json({'error': 'That kind of change is not one a device may send.'}, 400);
         }
+        // With "echo", the device that made a change hears it back too.
+        final origin = j['echo'] == true ? null : device;
         for (final i in list) {
           pushed.add(i);
           if (i['op'] != null) continue;
           if (i['deleted'] == true) {
-            remove('${i['kind']}', '${i['k']}', origin: device);
+            remove('${i['kind']}', '${i['k']}', origin: origin);
           } else {
-            put('${i['kind']}', '${i['k']}', (i['data'] as Map).cast<String, Object?>(), origin: device);
+            put('${i['kind']}', '${i['k']}', (i['data'] as Map).cast<String, Object?>(), origin: origin);
           }
         }
         return json({'applied': list.length, 'seq': seq});

@@ -77,12 +77,36 @@ final class Devices
     /** @return list<array<string, mixed>> */
     public function all(): array
     {
-        return $this->store->db->all('SELECT id, name, kind, created, last_seen, revoked FROM {devices} ORDER BY id');
+        return $this->store->db->all('SELECT id, name, kind, created, last_seen, revoked, ring, (push_token IS NOT NULL) AS alerts FROM {devices} ORDER BY id');
     }
 
+    /** Signs a device out: it is cut off at once, and no more alerts go to it. */
     public function signOut(int $id): void
     {
-        $this->store->db->run('UPDATE {devices} SET revoked = 1 WHERE id = ?', [$id]);
+        $this->store->db->run('UPDATE {devices} SET revoked = 1, push_token = NULL WHERE id = ?', [$id]);
+    }
+
+    /** Where to send a phone its alerts (null forgets it), and whether it may ring. */
+    public function setPush(int $id, ?string $token, ?bool $ring): void
+    {
+        $db = $this->store->db;
+        if ($token !== null) {
+            $token = trim($token);
+            // One phone, one address: an address that moved to another device row leaves the old one.
+            if ($token !== '') {
+                $db->run('UPDATE {devices} SET push_token = NULL WHERE push_token = ? AND id <> ?', [$token, $id]);
+            }
+            $db->run('UPDATE {devices} SET push_token = ? WHERE id = ?', [$token === '' ? null : mb_substr($token, 0, 400), $id]);
+        }
+        if ($ring !== null) {
+            $db->run('UPDATE {devices} SET ring = ? WHERE id = ?', [(int) $ring, $id]);
+        }
+    }
+
+    /** A PC says Précis is open and in front of the owner right now. */
+    public function inFront(int $id): void
+    {
+        $this->store->db->run('UPDATE {devices} SET front_at = ? WHERE id = ?', [$this->store->now(), $id]);
     }
 
     public function rename(int $id, string $name): void

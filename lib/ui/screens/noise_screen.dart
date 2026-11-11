@@ -108,6 +108,15 @@ class NoiseScreen extends ConsumerWidget {
     final openItem = open?.items.where((i) => i.id == openId).firstOrNull;
 
     return MailSplit(
+      // On a phone: a sender's emails fill the screen, then one email does.
+      detailOpen: open != null,
+      onCloseDetail: () {
+        if (ref.read(openMailProvider('noise')) != null) {
+          ref.read(openMailProvider('noise').notifier).open(null);
+        } else {
+          ref.read(openNoiseGroupProvider.notifier).open(null);
+        }
+      },
       left: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

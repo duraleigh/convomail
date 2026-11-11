@@ -75,6 +75,8 @@ class FeedScreen extends ConsumerWidget {
     }
 
     return MailSplit(
+      detailOpen: open != null,
+      onCloseDetail: () => ref.read(openMailProvider('feed').notifier).open(null),
       left: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

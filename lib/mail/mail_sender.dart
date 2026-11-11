@@ -45,14 +45,20 @@ class SmtpSender implements MailSender {
   /// Connects, signs in, runs [body], and always hangs up.
   Future<void> _session(ServerConfig server, MailCredentials credentials, Future<void> Function(SmtpClient client) body) async {
     final client = SmtpClient(_ehloHost(), isLogEnabled: logEnabled);
+    // Until the server has answered, a failure means there is no signal and
+    // nothing was sent. After that, a failure is the server's own word.
+    var reached = false;
     try {
       await client.connectToServer(server.host, server.port, isSecure: server.security == ConnectionSecurity.ssl, timeout: const Duration(seconds: 20));
+      reached = true;
       await client.ehlo();
       if (server.security == ConnectionSecurity.starttls) {
         if (!client.serverInfo.supportsStartTls) throw MailTransportException('${server.host} does not offer STARTTLS.');
         await client.startTls();
       }
-      if (credentials.password.isNotEmpty) {
+      if (credentials.pass) {
+        await client.authenticate(credentials.username, credentials.password, AuthMechanism.xoauth2);
+      } else if (credentials.password.isNotEmpty) {
         final mech = client.serverInfo.supportsAuth(AuthMechanism.plain)
             ? AuthMechanism.plain
             : client.serverInfo.supportsAuth(AuthMechanism.login)
@@ -70,9 +76,9 @@ class SmtpSender implements MailSender {
     } on MailTransportException {
       rethrow;
     } on SocketException catch (e) {
-      throw MailTransportException('Could not reach ${server.host}:${server.port} (${e.osError?.message ?? e.message})', cause: e);
+      throw MailTransportException('Could not reach ${server.host}:${server.port} (${e.osError?.message ?? e.message})', cause: e, offline: !reached);
     } catch (e) {
-      throw MailTransportException('Send failed: $e', cause: e);
+      throw MailTransportException(reached ? 'Send failed: $e' : 'Could not reach ${server.host}:${server.port}.', cause: e, offline: !reached);
     } finally {
       try {
         await client.quit();

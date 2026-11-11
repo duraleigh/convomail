@@ -81,6 +81,21 @@ final class App
         return new Readings($this->store(), $this->google(), $this->sorter(), $this->assistant);
     }
 
+    public function sending(): Sending
+    {
+        return new Sending($this->store());
+    }
+
+    public function push(): Push
+    {
+        return new Push($this->store(), $this->http);
+    }
+
+    public function alerts(): Alerts
+    {
+        return new Alerts($this->store(), $this->readings(), $this->push());
+    }
+
     public function handle(Request $r): Response
     {
         try {
@@ -312,6 +327,23 @@ final class App
                     $readings->setCeiling((int) round((float) $ceiling * 1_000_000));
                 }
                 return $this->flash('Saved.');
+            case '/push/key':
+                $problem = $this->push()->setKey((string) ($r->form['account'] ?? ''));
+                return $problem === null
+                    ? $this->flash('Alerts are set up. A phone gets them once Précis is installed on it and has joined.')
+                    : $this->flash($problem, true);
+            case '/push/app':
+                $problem = $this->push()->setApp((string) ($r->form['app'] ?? ''));
+                return $problem === null ? $this->flash('Saved. A phone signs up for alerts the next time Précis opens on it.') : $this->flash($problem, true);
+            case '/sending/forget':
+                $this->sending()->forget();
+                return $this->flash('Forgotten. Each device keeps its own copy; a new device will not get them until a device sends them up again.');
+            case '/push/forget':
+                $this->push()->forgetKey();
+                return $this->flash('Alerts to phones are off. The file was removed from the helper.');
+            case '/push/test':
+                $n = $this->alerts()->test();
+                return $this->flash($n > 0 ? "A test alert went to $n phone" . ($n === 1 ? '' : 's') . '.' : 'No phone could be reached. A phone gets alerts once Précis is open on it and has joined.', $n === 0);
             case '/devices/code':
                 $this->session->set('code', $this->devices()->newCode());
                 return Response::redirect('/');
@@ -321,6 +353,22 @@ final class App
             default:
                 return Response::redirect('/');
         }
+    }
+
+    /**
+     * What Google has allowed the helper for the connected mailbox.
+     *
+     * @return array{mail: bool, calendar: bool, contacts: bool}
+     */
+    private function grants(): array
+    {
+        $a = $this->reader()->accounts()[0] ?? null;
+        $google = $this->google();
+        return [
+            'mail' => $a !== null && $google->grants((int) $a['id'], Google::MAIL),
+            'calendar' => $a !== null && $google->grants((int) $a['id'], Google::CALENDAR),
+            'contacts' => $a !== null && $google->grants((int) $a['id'], Google::CONTACTS),
+        ];
     }
 
     private function flash(string $text, bool $bad = false): Response
@@ -379,6 +427,9 @@ final class App
             'clockLast' => (int) $store->get('clock.last_run', '0'),
             'assistant' => $this->readings()->status(),
             'readers' => Prices::MODELS,
+            'push' => ['hasKey' => $this->push()->hasKey(), 'project' => $this->push()->project(), 'hasApp' => $this->push()->hasApp()],
+            'sending' => ['count' => $this->sending()->count(), 'passwords' => $this->sending()->withPassword()],
+            'grants' => $this->grants(),
             'log' => $db->all('SELECT at, level, msg FROM {log} ORDER BY id DESC LIMIT 12'),
             'counts' => [
                 'emails' => (int) $db->val('SELECT COUNT(*) FROM {emails}'),
@@ -461,6 +512,10 @@ final class App
         $id = (int) $device['id'];
         $sync = new Sync($store, $this->sorter());
         // A device says what time it is where the owner is, so "by 3:00 PM" means their 3:00 PM.
+        // A PC says when Précis is open and in front of the owner, so phones stay quiet then.
+        if (($r->headers['x-precis-front'] ?? '') === '1') {
+            $devices->inFront($id);
+        }
         $zone = $r->headers['x-precis-zone'] ?? null;
         if ($zone !== null && preg_match('~^-?\d{1,3}$~', $zone) === 1) {
             $this->readings()->setZone((int) $zone);
@@ -470,13 +525,13 @@ final class App
                 // With each pull a device also hears whether the assistant is
                 // on, so its readings show or hide without a second call.
                 $readings = $this->readings();
-                return Response::json($store->since(max(0, (int) ($r->query['since'] ?? 0)), $id, min(1000, max(1, (int) ($r->query['limit'] ?? 500)))) + ['assistant' => $readings->on() && $readings->hasKey()]);
+                return Response::json($store->since(max(0, (int) ($r->query['since'] ?? 0)), $id, min(1000, max(1, (int) ($r->query['limit'] ?? 500)))) + ['assistant' => $readings->on() && $readings->hasKey(), 'sending' => $this->sending()->rev(), 'alerts' => $this->push()->hasKey() && $this->push()->hasApp()]);
             case 'POST /api/push':
                 $items = $r->json()['items'] ?? null;
                 if (!is_array($items)) {
                     return Response::error('Nothing to apply.', 400);
                 }
-                $out = $sync->push($id, $items);
+                $out = $sync->push($id, $items, ($r->json()['echo'] ?? false) === true);
                 // "Not Focus" on one email changes its reading for every device.
                 foreach ($items as $item) {
                     if (is_array($item) && ($item['kind'] ?? '') === 'msgfix' && is_string($item['k'] ?? null)) {
@@ -508,6 +563,8 @@ final class App
                     'timer' => (int) $store->get('clock.last_run', '0'),
                     'emails' => (int) $store->db->val('SELECT COUNT(*) FROM {emails}'),
                     'assistant' => $this->readings()->status(),
+                    'alerts' => $this->push()->hasKey(),
+                    'grants' => $this->grants(),
                 ]);
             case 'POST /api/assistant':
                 // A device may turn the assistant off or on and set the ceiling.
@@ -524,6 +581,56 @@ final class App
                     $readings->turn($j['on']);
                 }
                 return Response::json(['assistant' => $readings->status()]);
+            case 'GET /api/account':
+                // What a device that joined by code needs to set up the mailbox: whose it is.
+                $a = $this->reader()->accounts()[0] ?? null;
+                if ($a === null) {
+                    return Response::error('No mailbox is connected to the helper yet.', 409);
+                }
+                $name = '';
+                foreach ($store->itemsOf('me') as $address => $d) {
+                    if ((string) $address === (string) $a['email'] || $name === '') {
+                        $name = (string) ($d['name'] ?? $name);
+                    }
+                }
+                return Response::json(['email' => (string) $a['email'], 'name' => $name, 'grants' => $this->grants(), 'sending' => $this->sending()->rev()]);
+            case 'GET /api/sending':
+                // The addresses the owner sends from, with what each needs to send.
+                return Response::json(['addresses' => $this->sending()->all(), 'rev' => $this->sending()->rev()]);
+            case 'POST /api/sending':
+                $list = ($r->json() ?? [])['addresses'] ?? null;
+                if (!is_array($list)) {
+                    return Response::error('Nothing to keep.', 400);
+                }
+                try {
+                    $n = $this->sending()->put(array_values($list));
+                } catch (\InvalidArgumentException $e) {
+                    return Response::error($e->getMessage(), 400);
+                }
+                return Response::json(['changed' => $n, 'rev' => $this->sending()->rev()]);
+            case 'GET /api/alerts':
+                // What a phone needs to sign up with Google's alert service, once the owner has set alerts up.
+                $app = $this->push()->hasKey() ? $this->push()->app() : null;
+                return Response::json(['ready' => $app !== null, 'app' => $app]);
+            case 'GET /api/google/token':
+                // A pass to the mailbox, good for about an hour, for a device that
+                // joined by code. Never the lasting sign-in, which stays here.
+                $a = $this->reader()->accounts()[0] ?? null;
+                if ($a === null) {
+                    return Response::error('No mailbox is connected to the helper yet.', 409);
+                }
+                if (!$this->google()->grants((int) $a['id'], Google::MAIL)) {
+                    return Response::error('Google has not allowed this yet. Open the helper’s page and press Connect Google again.', 409);
+                }
+                try {
+                    return Response::json($this->google()->devicePass((int) $a['id']) + ['now' => $this->now()]);
+                } catch (GoogleError $e) {
+                    return Response::error($e->getMessage(), 409);
+                }
+            case 'POST /api/devices/push':
+                $j = $r->json() ?? [];
+                $devices->setPush($id, array_key_exists('token', $j) ? (string) ($j['token'] ?? '') : null, is_bool($j['ring'] ?? null) ? $j['ring'] : null);
+                return Response::json(['ok' => true, 'alerts' => $this->push()->hasKey()]);
             case 'GET /api/devices':
                 return Response::json(['devices' => array_values(array_filter($devices->all(), static fn (array $d): bool => (int) $d['revoked'] === 0)), 'me' => $id]);
             case 'POST /api/devices/code':

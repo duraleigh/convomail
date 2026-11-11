@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/widgets.dart' show AppLifecycleState, WidgetsBinding;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/app_log.dart';
@@ -13,6 +14,22 @@ import 'helper_client.dart';
 
 /// The web call the helper client uses; tests put a stand-in here.
 final helperHttpProvider = Provider<HelperHttp>((ref) => defaultHelperHttp);
+
+/// Whether Précis is open and in front of the user on this PC. Phones
+/// never say so: only a PC's screen silences a phone.
+final appInFrontProvider = Provider<bool Function()>((ref) => () {
+      if (!Platform.isWindows) return false;
+      try {
+        return WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      } catch (_) {
+        return false;
+      }
+    });
+
+/// Called when the helper says this device was signed out. A device that
+/// joined by code wipes its own copy (see device_join.dart); returns true
+/// when it did.
+final signedOutHandlerProvider = Provider<Future<bool> Function()>((ref) => () async => false);
 
 /// How this device stands with the helper.
 class HelperLink {
@@ -29,6 +46,8 @@ class HelperLink {
     this.sendingTotal = 0,
     this.status,
     this.devices = const [],
+    this.sendingRev,
+    this.alertsReady = false,
   });
 
   final bool loaded;
@@ -56,6 +75,13 @@ class HelperLink {
   final Map<String, Object?>? status;
   final List<Map<String, Object?>> devices;
 
+  /// The helper's count of changes to the addresses the user sends from;
+  /// when it moves, this device fetches them again.
+  final int? sendingRev;
+
+  /// Alerts to phones are set up on the helper's page.
+  final bool alertsReady;
+
   bool get connected => address != null;
 
   HelperLink copyWith({
@@ -71,6 +97,8 @@ class HelperLink {
     int? sendingTotal,
     Map<String, Object?>? Function()? status,
     List<Map<String, Object?>>? devices,
+    int? sendingRev,
+    bool? alertsReady,
   }) =>
       HelperLink(
         loaded: loaded ?? this.loaded,
@@ -85,6 +113,8 @@ class HelperLink {
         sendingTotal: sendingTotal ?? this.sendingTotal,
         status: status == null ? this.status : status(),
         devices: devices ?? this.devices,
+        sendingRev: sendingRev ?? this.sendingRev,
+        alertsReady: alertsReady ?? this.alertsReady,
       );
 }
 
@@ -142,8 +172,16 @@ class HelperSync extends Notifier<HelperLink> {
     if (url == null || url.isEmpty) return null;
     final token = await _vault.read(tokenKey);
     if (token == null || token.isEmpty) return null;
-    return HelperClient(url, token: token, http: ref.read(helperHttpProvider));
+    return HelperClient(url, token: token, http: ref.read(helperHttpProvider), inFront: ref.read(appInFrontProvider));
   }
+
+  /// The link to the helper for other parts of the app (the mailbox pass,
+  /// the sending addresses, alerts); null when this device follows none.
+  Future<HelperClient?> client() => _client();
+
+  /// The helper's address as kept in this device's notes, for parts that
+  /// work outside the app (a phone's alerts).
+  static const urlKey = _kUrl;
 
   /// Reads how things stand from this device's own notes.
   Future<void> load() async {
@@ -199,7 +237,8 @@ class HelperSync extends Notifier<HelperLink> {
   }
 
   /// Joins the helper at [address] with a joining [code] from its page.
-  Future<void> connect(String address, String code, {String? name}) async {
+  /// A [fresh] device has nothing of its own to send up: it only takes in.
+  Future<void> connect(String address, String code, {String? name, bool fresh = false}) async {
     if (state.connected) throw const HelperException('This PC already follows a helper. Disconnect it first.');
     final http = ref.read(helperHttpProvider);
     state = state.copyWith(busy: true, error: () => null);
@@ -213,11 +252,11 @@ class HelperSync extends Notifier<HelperLink> {
       await _db.putSetting(_kDevice, '${joined.device}');
       await _db.putSetting(_kName, deviceName);
       await _db.putSetting(_kCursor, '0');
-      await _db.putSetting(_kSentUp, '');
+      await _db.putSetting(_kSentUp, fresh ? '${DateTime.now().millisecondsSinceEpoch ~/ 1000}' : '');
       await _db.putSetting(_kSeedAt, '');
       await _db.putSetting(_kSeedIndex, '0');
       await _db.setHelperConnected(true);
-      state = state.copyWith(address: () => open.base.toString(), deviceId: joined.device, deviceName: deviceName, sentUp: false, sendingDone: 0, sendingTotal: 0);
+      state = state.copyWith(address: () => open.base.toString(), deviceId: joined.device, deviceName: deviceName, sentUp: fresh, sendingDone: 0, sendingTotal: 0);
     } on HelperException catch (e) {
       state = state.copyWith(busy: false, error: () => e.message);
       rethrow;
@@ -313,9 +352,17 @@ class HelperSync extends Notifier<HelperLink> {
   Future<void> _problem(HelperException e) async {
     if (_stopped) return;
     if (e.signedOut) {
-      // Signed out from another device: stop following, keep everything here.
+      // A device that joined by code has nothing without the helper: it
+      // wipes its own copy. The PC that set Précis up keeps everything and
+      // carries on by itself.
+      final wiped = await ref.read(signedOutHandlerProvider)();
       await _forget();
-      state = const HelperLink(loaded: true, error: 'This PC was signed out of the helper. Précis carries on by itself. Join again with a new code to follow the helper.');
+      state = HelperLink(
+        loaded: true,
+        error: wiped
+            ? 'This device was signed out. Its copy of your mail was removed. Join again with a new code.'
+            : 'This PC was signed out of the helper. Précis carries on by itself. Join again with a new code to follow the helper.',
+      );
       return;
     }
     state = state.copyWith(busy: _sending, error: () => e.unreachable ? '${e.message} Précis carries on by itself and tries again.' : e.message);
@@ -365,6 +412,9 @@ class HelperSync extends Notifier<HelperLink> {
       if (page.next != cursor) {
         cursor = page.next;
         await _db.putSetting(_kCursor, '$cursor');
+      }
+      if (!_stopped && (page.sending != null && page.sending != state.sendingRev || page.alerts != null && page.alerts != state.alertsReady)) {
+        state = state.copyWith(sendingRev: page.sending, alertsReady: page.alerts);
       }
       // Whether the assistant is on: its readings show only while it is.
       final assistant = page.assistant;

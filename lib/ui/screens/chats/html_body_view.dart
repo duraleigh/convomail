@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:webview_windows/webview_windows.dart';
 
 import '../../../app/web_selection.dart';
+import 'html_body_android.dart';
 
 /// Builds the widget that shows a sanitized HTML document. The default is
 /// WebView2 on Windows; tests override it with a plain text renderer.
@@ -20,6 +21,7 @@ final htmlRendererProvider = Provider<HtmlRendererBuilder>((ref) {
     WebViewPool.instance.warm();
     return (context, html, {maxHeight = 1200}) => WebView2Body(html: html, maxHeight: maxHeight);
   }
+  if (Platform.isAndroid) return (context, html, {maxHeight = 1200}) => AndroidHtmlBody(html: html, maxHeight: maxHeight);
   return (context, html, {maxHeight = 1200}) => PlainHtmlFallback(html: html);
 });
 

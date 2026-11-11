@@ -4,10 +4,14 @@ import 'models.dart';
 
 /// Exception raised by a [MailTransport] with a user-presentable message.
 class MailTransportException implements Exception {
-  const MailTransportException(this.message, {this.isAuthFailure = false, this.cause});
+  const MailTransportException(this.message, {this.isAuthFailure = false, this.cause, this.offline = false});
   final String message;
   final bool isAuthFailure;
   final Object? cause;
+
+  /// The server was never reached (no signal): nothing was sent, and
+  /// trying again later is safe.
+  final bool offline;
 
   @override
   String toString() => 'MailTransportException: $message';

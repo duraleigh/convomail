@@ -13,7 +13,18 @@ class SplitPane extends StatefulWidget {
     this.maxLeft = 480,
     this.minRight = 420,
     this.onLeftWidthChanged,
+    this.compact = false,
+    this.detailOpen = false,
+    this.onCloseDetail,
   });
+
+  /// The phone layout: the left pane fills the screen until something is
+  /// open ([detailOpen]); then the right pane does, with a way back.
+  final bool compact;
+  final bool detailOpen;
+
+  /// Back, on a phone: close what is open and return to the list.
+  final VoidCallback? onCloseDetail;
 
   final Widget left;
   final Widget right;
@@ -42,6 +53,29 @@ class _SplitPaneState extends State<SplitPane> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    if (widget.compact) {
+      if (!widget.detailOpen) return widget.left;
+      return PopScope(
+        // The phone's own back button, or a swipe from the edge, returns to the list.
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) widget.onCloseDetail?.call();
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(4, 2, 4, 0),
+                child: IconButton(key: const ValueKey('compact-back'), tooltip: 'Back', icon: const Icon(Icons.arrow_back_rounded), onPressed: widget.onCloseDetail),
+              ),
+            ),
+            Expanded(child: widget.right),
+          ],
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final maxLeft = (constraints.maxWidth - widget.minRight).clamp(widget.minLeft, widget.maxLeft);

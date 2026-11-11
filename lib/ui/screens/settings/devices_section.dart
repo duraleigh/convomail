@@ -1,11 +1,14 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../helper/device_join.dart';
 import '../../../helper/helper_client.dart';
 import '../../../helper/helper_sync.dart';
+import '../../../platform/phone_alerts.dart';
 import '../../widgets/grouped_list.dart';
 
 /// The helper's address offered when nothing is typed yet.
@@ -28,6 +31,12 @@ class _DevicesDetailState extends ConsumerState<DevicesDetail> {
   String? _newCode;
   Timer? _tick;
 
+  /// This device joined by code: it has no mail of its own without the helper.
+  bool _joined = false;
+
+  /// "PC" or "phone", for the words on this page.
+  static final _device = Platform.isAndroid ? 'phone' : 'PC';
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +48,8 @@ class _DevicesDetailState extends ConsumerState<DevicesDetail> {
   }
 
   Future<void> _open() async {
+    final joined = await ref.read(deviceJoinProvider).joined;
+    if (mounted && joined != _joined) setState(() => _joined = joined);
     final helper = ref.read(helperProvider.notifier);
     if (!ref.read(helperProvider).loaded) await helper.load();
     if (ref.read(helperProvider).connected) await helper.refreshStatus();
@@ -70,6 +81,28 @@ class _DevicesDetailState extends ConsumerState<DevicesDetail> {
         _code.clear();
         await ref.read(helperProvider.notifier).refreshStatus();
       });
+
+  /// Signs a joined device out: the helper stops handing it anything, and
+  /// Précis removes its copy of the mail from this device.
+  Future<void> _signOutHere() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Sign this $_device out?'),
+        content: Text('Précis removes its copy of your mail from this $_device, and the helper stops handing it anything. Your mail itself and your other devices are not changed. You can join again with a new code.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(key: const ValueKey('devices-signout-here-confirm'), onPressed: () => Navigator.pop(ctx, true), child: const Text('Sign out')),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    await _run(() async {
+      await ref.read(helperProvider.notifier).disconnect();
+      await ref.read(phoneAlertsProvider).forget();
+      await ref.read(deviceJoinProvider).wipe();
+    });
+  }
 
   Future<void> _leave() async {
     final ok = await showDialog<bool>(
@@ -233,7 +266,7 @@ class _DevicesDetailState extends ConsumerState<DevicesDetail> {
               ListTile(
                 key: ValueKey('devices-row-${d['id']}'),
                 leading: Icon(d['kind'] == 'android' ? Icons.smartphone_rounded : Icons.computer_rounded),
-                title: Text('${d['name']}${(d['id'] as num?)?.toInt() == link.deviceId ? ' (this PC)' : ''}'),
+                title: Text('${d['name']}${(d['id'] as num?)?.toInt() == link.deviceId ? ' (this $_device)' : ''}'),
                 subtitle: Text('Last seen ${_ago((d['last_seen'] as num?)?.toInt(), now)}'),
                 trailing: (d['id'] as num?)?.toInt() == link.deviceId
                     ? null
@@ -267,16 +300,25 @@ class _DevicesDetailState extends ConsumerState<DevicesDetail> {
             ),
           ],
         ),
-        heading('THIS PC'),
+        heading('THIS ${_device.toUpperCase()}'),
         GroupedList(
           children: [
-            ListTile(
-              key: const ValueKey('devices-leave'),
-              leading: const Icon(Icons.link_off_rounded),
-              title: const Text('Stop following the helper'),
-              subtitle: const Text('This PC keeps its mail and sorts by itself again. Other devices are not changed.'),
-              trailing: TextButton(onPressed: _busy ? null : _leave, child: const Text('Stop')),
-            ),
+            if (_joined)
+              ListTile(
+                key: const ValueKey('devices-signout-here'),
+                leading: const Icon(Icons.logout_rounded),
+                title: Text('Sign this $_device out'),
+                subtitle: Text('Removes Précis’s copy of your mail from this $_device. Other devices are not changed.'),
+                trailing: TextButton(onPressed: _busy ? null : _signOutHere, child: const Text('Sign out')),
+              )
+            else
+              ListTile(
+                key: const ValueKey('devices-leave'),
+                leading: const Icon(Icons.link_off_rounded),
+                title: const Text('Stop following the helper'),
+                subtitle: const Text('This PC keeps its mail and sorts by itself again. Other devices are not changed.'),
+                trailing: TextButton(onPressed: _busy ? null : _leave, child: const Text('Stop')),
+              ),
           ],
         ),
       ],

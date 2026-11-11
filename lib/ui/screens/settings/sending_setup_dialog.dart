@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../helper/sending_sync.dart';
 import '../../../mail/mail_sender.dart';
 import '../../../mail/mail_transport.dart';
 import '../../../mail/models.dart';
@@ -88,6 +89,7 @@ class _SendingSetupDialogState extends ConsumerState<SendingSetupDialog> {
       ];
       for (final i in targets) {
         await store.write(CredentialStore.identityPasswordKey(i.id), credentials.password);
+        ref.read(sendingSyncProvider).passwordChanged();
         await db.setIdentityServer(i.id, server, username: i.id == widget.identity.id && !ownUsername ? credentials.username : null);
       }
       if (mounted) Navigator.of(context).pop(true);

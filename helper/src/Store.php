@@ -10,7 +10,7 @@ namespace Precis;
 final class Store
 {
     /** Kinds of item a device may send up. */
-    public const DEVICE_KINDS = ['sender', 'rule', 'tag', 'rowpref', 'reminder', 'done', 'msgfix', 'addr', 'me', 'book', 'names'];
+    public const DEVICE_KINDS = ['sender', 'rule', 'tag', 'rowpref', 'reminder', 'done', 'msgfix', 'addr', 'me', 'book', 'names', 'pref', 'group', 'gmember'];
 
     /** Kinds only the helper writes. */
     public const HELPER_KINDS = ['sort', 'read', 'day'];
