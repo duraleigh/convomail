@@ -20,8 +20,9 @@ enum Destination {
   /// Rail destinations, in order. Settings is pinned to the bottom of the rail.
   static const List<Destination> rail = [today, focus, chats, feed, noise];
 
-  /// Chats, Feed and Noise share one layout: a list and the open conversation.
-  bool get isList => this == chats || this == feed || this == noise;
+  /// Chats is the list of people with the open conversation. (Focus, Feed
+  /// and Noise are lists of emails, each with its own screen.)
+  bool get isList => this == chats;
 }
 
 /// Currently selected destination.

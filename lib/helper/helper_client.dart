@@ -82,7 +82,13 @@ class HelperClient {
   Future<Map<String, Object?>> _call(String method, String path, {Map<String, Object?>? body, Map<String, String>? query}) async {
     final HelperResponse r;
     try {
-      r = await _http(method, base.replace(path: path, queryParameters: query), headers: {'X-Precis-Token': ?token, 'Accept': 'application/json'}, body: body == null ? null : jsonEncode(body));
+      // The clock offset lets the helper say "by 3:00 PM" in this user's own time.
+      r = await _http(
+        method,
+        base.replace(path: path, queryParameters: query),
+        headers: {'X-Precis-Token': ?token, 'Accept': 'application/json', 'X-Precis-Zone': '${DateTime.now().timeZoneOffset.inMinutes}'},
+        body: body == null ? null : jsonEncode(body),
+      );
     } on SocketException {
       throw const HelperException('The helper could not be reached.', unreachable: true);
     } on TimeoutException {
@@ -116,13 +122,22 @@ class HelperClient {
     return (device: (r['device'] as num?)?.toInt() ?? 0, token: token);
   }
 
-  Future<({List<Map<String, Object?>> items, int next, bool more})> changes(int since) async {
+  Future<({List<Map<String, Object?>> items, int next, bool more, bool? assistant})> changes(int since) async {
     final r = await _call('GET', '/api/changes', query: {'since': '$since'});
     return (
       items: [for (final i in (r['items'] as List?) ?? const []) (i as Map).cast<String, Object?>()],
       next: (r['next'] as num?)?.toInt() ?? since,
       more: r['more'] == true,
+      assistant: r['assistant'] is bool ? r['assistant'] as bool : null,
     );
+  }
+
+  /// Turns the assistant on or off, or sets its monthly ceiling (in
+  /// millionths of a dollar). Returns how the assistant is doing after.
+  Future<Map<String, Object?>> setAssistant({bool? on, int? ceiling}) async {
+    final r = await _call('POST', '/api/assistant', body: {'on': ?on, 'ceiling': ?ceiling});
+    final a = r['assistant'];
+    return a is Map ? a.cast<String, Object?>() : const {};
   }
 
   Future<void> push(List<Map<String, Object?>> items) => _call('POST', '/api/push', body: {'items': items});

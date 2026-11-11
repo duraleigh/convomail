@@ -12,6 +12,7 @@ import '../widgets/grouped_list.dart';
 import 'chats/compose/compose_editor.dart';
 import 'destination_frame.dart';
 import 'settings/accounts_section.dart';
+import 'settings/assistant_section.dart';
 import 'settings/calendar_section.dart';
 import 'settings/contacts_section.dart';
 import 'settings/devices_section.dart';
@@ -91,6 +92,8 @@ class _Detail extends ConsumerWidget {
         return AccountsDetail(startAdding: startAdding);
       case SettingsSection.devices:
         return const DevicesDetail();
+      case SettingsSection.assistant:
+        return const AssistantDetail();
       case SettingsSection.appearance:
         return const _AppearanceDetail();
       case SettingsSection.privacy:

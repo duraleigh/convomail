@@ -3170,6 +3170,28 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _pileFixMeta = const VerificationMeta(
+    'pileFix',
+  );
+  @override
+  late final GeneratedColumn<String> pileFix = GeneratedColumn<String>(
+    'pile_fix',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _focusFixMeta = const VerificationMeta(
+    'focusFix',
+  );
+  @override
+  late final GeneratedColumn<String> focusFix = GeneratedColumn<String>(
+    'focus_fix',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -3209,6 +3231,8 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     icsText,
     extractedAt,
     doneAt,
+    pileFix,
+    focusFix,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -3492,6 +3516,18 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         doneAt.isAcceptableOrUnknown(data['done_at']!, _doneAtMeta),
       );
     }
+    if (data.containsKey('pile_fix')) {
+      context.handle(
+        _pileFixMeta,
+        pileFix.isAcceptableOrUnknown(data['pile_fix']!, _pileFixMeta),
+      );
+    }
+    if (data.containsKey('focus_fix')) {
+      context.handle(
+        _focusFixMeta,
+        focusFix.isAcceptableOrUnknown(data['focus_fix']!, _focusFixMeta),
+      );
+    }
     return context;
   }
 
@@ -3653,6 +3689,14 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}done_at'],
       ),
+      pileFix: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pile_fix'],
+      ),
+      focusFix: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}focus_fix'],
+      ),
     );
   }
 
@@ -3733,6 +3777,14 @@ class Message extends DataClass implements Insertable<Message> {
 
   /// When the user marked this email done; null while it is open.
   final DateTime? doneAt;
+
+  /// The user's own choice for this one email: 'feed' or 'noise'. It wins
+  /// over every rule and over the assistant.
+  final String? pileFix;
+
+  /// The user's own word on whether this email needs them: 'no' ("Not
+  /// Focus") or 'yes' (put in Focus by hand). Null leaves it to the assistant.
+  final String? focusFix;
   const Message({
     required this.id,
     required this.accountId,
@@ -3771,6 +3823,8 @@ class Message extends DataClass implements Insertable<Message> {
     this.icsText,
     this.extractedAt,
     this.doneAt,
+    this.pileFix,
+    this.focusFix,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -3846,6 +3900,12 @@ class Message extends DataClass implements Insertable<Message> {
     if (!nullToAbsent || doneAt != null) {
       map['done_at'] = Variable<DateTime>(doneAt);
     }
+    if (!nullToAbsent || pileFix != null) {
+      map['pile_fix'] = Variable<String>(pileFix);
+    }
+    if (!nullToAbsent || focusFix != null) {
+      map['focus_fix'] = Variable<String>(focusFix);
+    }
     return map;
   }
 
@@ -3920,6 +3980,12 @@ class Message extends DataClass implements Insertable<Message> {
       doneAt: doneAt == null && nullToAbsent
           ? const Value.absent()
           : Value(doneAt),
+      pileFix: pileFix == null && nullToAbsent
+          ? const Value.absent()
+          : Value(pileFix),
+      focusFix: focusFix == null && nullToAbsent
+          ? const Value.absent()
+          : Value(focusFix),
     );
   }
 
@@ -3966,6 +4032,8 @@ class Message extends DataClass implements Insertable<Message> {
       icsText: serializer.fromJson<String?>(json['icsText']),
       extractedAt: serializer.fromJson<DateTime?>(json['extractedAt']),
       doneAt: serializer.fromJson<DateTime?>(json['doneAt']),
+      pileFix: serializer.fromJson<String?>(json['pileFix']),
+      focusFix: serializer.fromJson<String?>(json['focusFix']),
     );
   }
   @override
@@ -4009,6 +4077,8 @@ class Message extends DataClass implements Insertable<Message> {
       'icsText': serializer.toJson<String?>(icsText),
       'extractedAt': serializer.toJson<DateTime?>(extractedAt),
       'doneAt': serializer.toJson<DateTime?>(doneAt),
+      'pileFix': serializer.toJson<String?>(pileFix),
+      'focusFix': serializer.toJson<String?>(focusFix),
     };
   }
 
@@ -4050,6 +4120,8 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> icsText = const Value.absent(),
     Value<DateTime?> extractedAt = const Value.absent(),
     Value<DateTime?> doneAt = const Value.absent(),
+    Value<String?> pileFix = const Value.absent(),
+    Value<String?> focusFix = const Value.absent(),
   }) => Message(
     id: id ?? this.id,
     accountId: accountId ?? this.accountId,
@@ -4100,6 +4172,8 @@ class Message extends DataClass implements Insertable<Message> {
     icsText: icsText.present ? icsText.value : this.icsText,
     extractedAt: extractedAt.present ? extractedAt.value : this.extractedAt,
     doneAt: doneAt.present ? doneAt.value : this.doneAt,
+    pileFix: pileFix.present ? pileFix.value : this.pileFix,
+    focusFix: focusFix.present ? focusFix.value : this.focusFix,
   );
   Message copyWithCompanion(MessagesCompanion data) {
     return Message(
@@ -4172,6 +4246,8 @@ class Message extends DataClass implements Insertable<Message> {
           ? data.extractedAt.value
           : this.extractedAt,
       doneAt: data.doneAt.present ? data.doneAt.value : this.doneAt,
+      pileFix: data.pileFix.present ? data.pileFix.value : this.pileFix,
+      focusFix: data.focusFix.present ? data.focusFix.value : this.focusFix,
     );
   }
 
@@ -4214,7 +4290,9 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('feedsCategory: $feedsCategory, ')
           ..write('icsText: $icsText, ')
           ..write('extractedAt: $extractedAt, ')
-          ..write('doneAt: $doneAt')
+          ..write('doneAt: $doneAt, ')
+          ..write('pileFix: $pileFix, ')
+          ..write('focusFix: $focusFix')
           ..write(')'))
         .toString();
   }
@@ -4258,6 +4336,8 @@ class Message extends DataClass implements Insertable<Message> {
     icsText,
     extractedAt,
     doneAt,
+    pileFix,
+    focusFix,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -4299,7 +4379,9 @@ class Message extends DataClass implements Insertable<Message> {
           other.feedsCategory == this.feedsCategory &&
           other.icsText == this.icsText &&
           other.extractedAt == this.extractedAt &&
-          other.doneAt == this.doneAt);
+          other.doneAt == this.doneAt &&
+          other.pileFix == this.pileFix &&
+          other.focusFix == this.focusFix);
 }
 
 class MessagesCompanion extends UpdateCompanion<Message> {
@@ -4340,6 +4422,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> icsText;
   final Value<DateTime?> extractedAt;
   final Value<DateTime?> doneAt;
+  final Value<String?> pileFix;
+  final Value<String?> focusFix;
   const MessagesCompanion({
     this.id = const Value.absent(),
     this.accountId = const Value.absent(),
@@ -4378,6 +4462,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.icsText = const Value.absent(),
     this.extractedAt = const Value.absent(),
     this.doneAt = const Value.absent(),
+    this.pileFix = const Value.absent(),
+    this.focusFix = const Value.absent(),
   });
   MessagesCompanion.insert({
     this.id = const Value.absent(),
@@ -4417,6 +4503,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.icsText = const Value.absent(),
     this.extractedAt = const Value.absent(),
     this.doneAt = const Value.absent(),
+    this.pileFix = const Value.absent(),
+    this.focusFix = const Value.absent(),
   }) : accountId = Value(accountId),
        folderId = Value(folderId),
        uid = Value(uid);
@@ -4458,6 +4546,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? icsText,
     Expression<DateTime>? extractedAt,
     Expression<DateTime>? doneAt,
+    Expression<String>? pileFix,
+    Expression<String>? focusFix,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -4497,6 +4587,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (icsText != null) 'ics_text': icsText,
       if (extractedAt != null) 'extracted_at': extractedAt,
       if (doneAt != null) 'done_at': doneAt,
+      if (pileFix != null) 'pile_fix': pileFix,
+      if (focusFix != null) 'focus_fix': focusFix,
     });
   }
 
@@ -4538,6 +4630,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? icsText,
     Value<DateTime?>? extractedAt,
     Value<DateTime?>? doneAt,
+    Value<String?>? pileFix,
+    Value<String?>? focusFix,
   }) {
     return MessagesCompanion(
       id: id ?? this.id,
@@ -4577,6 +4671,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       icsText: icsText ?? this.icsText,
       extractedAt: extractedAt ?? this.extractedAt,
       doneAt: doneAt ?? this.doneAt,
+      pileFix: pileFix ?? this.pileFix,
+      focusFix: focusFix ?? this.focusFix,
     );
   }
 
@@ -4694,6 +4790,12 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (doneAt.present) {
       map['done_at'] = Variable<DateTime>(doneAt.value);
     }
+    if (pileFix.present) {
+      map['pile_fix'] = Variable<String>(pileFix.value);
+    }
+    if (focusFix.present) {
+      map['focus_fix'] = Variable<String>(focusFix.value);
+    }
     return map;
   }
 
@@ -4736,7 +4838,9 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('feedsCategory: $feedsCategory, ')
           ..write('icsText: $icsText, ')
           ..write('extractedAt: $extractedAt, ')
-          ..write('doneAt: $doneAt')
+          ..write('doneAt: $doneAt, ')
+          ..write('pileFix: $pileFix, ')
+          ..write('focusFix: $focusFix')
           ..write(')'))
         .toString();
   }
@@ -16672,8 +16776,17 @@ class $HelperVerdictsTable extends HelperVerdicts
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _pileMeta = const VerificationMeta('pile');
   @override
-  List<GeneratedColumn> get $columns => [messageId, cls, cat];
+  late final GeneratedColumn<String> pile = GeneratedColumn<String>(
+    'pile',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [messageId, cls, cat, pile];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -16708,6 +16821,12 @@ class $HelperVerdictsTable extends HelperVerdicts
         cat.isAcceptableOrUnknown(data['cat']!, _catMeta),
       );
     }
+    if (data.containsKey('pile')) {
+      context.handle(
+        _pileMeta,
+        pile.isAcceptableOrUnknown(data['pile']!, _pileMeta),
+      );
+    }
     return context;
   }
 
@@ -16729,6 +16848,10 @@ class $HelperVerdictsTable extends HelperVerdicts
         DriftSqlType.string,
         data['${effectivePrefix}cat'],
       ),
+      pile: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}pile'],
+      ),
     );
   }
 
@@ -16742,7 +16865,16 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
   final String messageId;
   final String cls;
   final String? cat;
-  const HelperVerdict({required this.messageId, required this.cls, this.cat});
+
+  /// Feed or Noise for this one email ('feed' | 'noise'); null for mail
+  /// from a person, or when the helper has not said.
+  final String? pile;
+  const HelperVerdict({
+    required this.messageId,
+    required this.cls,
+    this.cat,
+    this.pile,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -16750,6 +16882,9 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
     map['cls'] = Variable<String>(cls);
     if (!nullToAbsent || cat != null) {
       map['cat'] = Variable<String>(cat);
+    }
+    if (!nullToAbsent || pile != null) {
+      map['pile'] = Variable<String>(pile);
     }
     return map;
   }
@@ -16759,6 +16894,7 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
       messageId: Value(messageId),
       cls: Value(cls),
       cat: cat == null && nullToAbsent ? const Value.absent() : Value(cat),
+      pile: pile == null && nullToAbsent ? const Value.absent() : Value(pile),
     );
   }
 
@@ -16771,6 +16907,7 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
       messageId: serializer.fromJson<String>(json['messageId']),
       cls: serializer.fromJson<String>(json['cls']),
       cat: serializer.fromJson<String?>(json['cat']),
+      pile: serializer.fromJson<String?>(json['pile']),
     );
   }
   @override
@@ -16780,6 +16917,7 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
       'messageId': serializer.toJson<String>(messageId),
       'cls': serializer.toJson<String>(cls),
       'cat': serializer.toJson<String?>(cat),
+      'pile': serializer.toJson<String?>(pile),
     };
   }
 
@@ -16787,16 +16925,19 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
     String? messageId,
     String? cls,
     Value<String?> cat = const Value.absent(),
+    Value<String?> pile = const Value.absent(),
   }) => HelperVerdict(
     messageId: messageId ?? this.messageId,
     cls: cls ?? this.cls,
     cat: cat.present ? cat.value : this.cat,
+    pile: pile.present ? pile.value : this.pile,
   );
   HelperVerdict copyWithCompanion(HelperVerdictsCompanion data) {
     return HelperVerdict(
       messageId: data.messageId.present ? data.messageId.value : this.messageId,
       cls: data.cls.present ? data.cls.value : this.cls,
       cat: data.cat.present ? data.cat.value : this.cat,
+      pile: data.pile.present ? data.pile.value : this.pile,
     );
   }
 
@@ -16805,37 +16946,42 @@ class HelperVerdict extends DataClass implements Insertable<HelperVerdict> {
     return (StringBuffer('HelperVerdict(')
           ..write('messageId: $messageId, ')
           ..write('cls: $cls, ')
-          ..write('cat: $cat')
+          ..write('cat: $cat, ')
+          ..write('pile: $pile')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(messageId, cls, cat);
+  int get hashCode => Object.hash(messageId, cls, cat, pile);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is HelperVerdict &&
           other.messageId == this.messageId &&
           other.cls == this.cls &&
-          other.cat == this.cat);
+          other.cat == this.cat &&
+          other.pile == this.pile);
 }
 
 class HelperVerdictsCompanion extends UpdateCompanion<HelperVerdict> {
   final Value<String> messageId;
   final Value<String> cls;
   final Value<String?> cat;
+  final Value<String?> pile;
   final Value<int> rowid;
   const HelperVerdictsCompanion({
     this.messageId = const Value.absent(),
     this.cls = const Value.absent(),
     this.cat = const Value.absent(),
+    this.pile = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HelperVerdictsCompanion.insert({
     required String messageId,
     required String cls,
     this.cat = const Value.absent(),
+    this.pile = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId),
        cls = Value(cls);
@@ -16843,12 +16989,14 @@ class HelperVerdictsCompanion extends UpdateCompanion<HelperVerdict> {
     Expression<String>? messageId,
     Expression<String>? cls,
     Expression<String>? cat,
+    Expression<String>? pile,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
       if (messageId != null) 'message_id': messageId,
       if (cls != null) 'cls': cls,
       if (cat != null) 'cat': cat,
+      if (pile != null) 'pile': pile,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -16857,12 +17005,14 @@ class HelperVerdictsCompanion extends UpdateCompanion<HelperVerdict> {
     Value<String>? messageId,
     Value<String>? cls,
     Value<String?>? cat,
+    Value<String?>? pile,
     Value<int>? rowid,
   }) {
     return HelperVerdictsCompanion(
       messageId: messageId ?? this.messageId,
       cls: cls ?? this.cls,
       cat: cat ?? this.cat,
+      pile: pile ?? this.pile,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -16879,6 +17029,9 @@ class HelperVerdictsCompanion extends UpdateCompanion<HelperVerdict> {
     if (cat.present) {
       map['cat'] = Variable<String>(cat.value);
     }
+    if (pile.present) {
+      map['pile'] = Variable<String>(pile.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -16891,6 +17044,7 @@ class HelperVerdictsCompanion extends UpdateCompanion<HelperVerdict> {
           ..write('messageId: $messageId, ')
           ..write('cls: $cls, ')
           ..write('cat: $cat, ')
+          ..write('pile: $pile, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -17147,6 +17301,503 @@ class HelperStateCompanion extends UpdateCompanion<HelperStateData> {
   }
 }
 
+class $HelperReadingsTable extends HelperReadings
+    with TableInfo<$HelperReadingsTable, HelperReading> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperReadingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lineMeta = const VerificationMeta('line');
+  @override
+  late final GeneratedColumn<String> line = GeneratedColumn<String>(
+    'line',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _focusMeta = const VerificationMeta('focus');
+  @override
+  late final GeneratedColumn<bool> focus = GeneratedColumn<bool>(
+    'focus',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("focus" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _askMeta = const VerificationMeta('ask');
+  @override
+  late final GeneratedColumn<String> ask = GeneratedColumn<String>(
+    'ask',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _dueMeta = const VerificationMeta('due');
+  @override
+  late final GeneratedColumn<DateTime> due = GeneratedColumn<DateTime>(
+    'due',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _whyMeta = const VerificationMeta('why');
+  @override
+  late final GeneratedColumn<String> why = GeneratedColumn<String>(
+    'why',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _answeredMeta = const VerificationMeta(
+    'answered',
+  );
+  @override
+  late final GeneratedColumn<bool> answered = GeneratedColumn<bool>(
+    'answered',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("answered" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _readAtMeta = const VerificationMeta('readAt');
+  @override
+  late final GeneratedColumn<DateTime> readAt = GeneratedColumn<DateTime>(
+    'read_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    messageId,
+    line,
+    focus,
+    ask,
+    due,
+    why,
+    answered,
+    readAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_readings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperReading> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_messageIdMeta);
+    }
+    if (data.containsKey('line')) {
+      context.handle(
+        _lineMeta,
+        line.isAcceptableOrUnknown(data['line']!, _lineMeta),
+      );
+    }
+    if (data.containsKey('focus')) {
+      context.handle(
+        _focusMeta,
+        focus.isAcceptableOrUnknown(data['focus']!, _focusMeta),
+      );
+    }
+    if (data.containsKey('ask')) {
+      context.handle(
+        _askMeta,
+        ask.isAcceptableOrUnknown(data['ask']!, _askMeta),
+      );
+    }
+    if (data.containsKey('due')) {
+      context.handle(
+        _dueMeta,
+        due.isAcceptableOrUnknown(data['due']!, _dueMeta),
+      );
+    }
+    if (data.containsKey('why')) {
+      context.handle(
+        _whyMeta,
+        why.isAcceptableOrUnknown(data['why']!, _whyMeta),
+      );
+    }
+    if (data.containsKey('answered')) {
+      context.handle(
+        _answeredMeta,
+        answered.isAcceptableOrUnknown(data['answered']!, _answeredMeta),
+      );
+    }
+    if (data.containsKey('read_at')) {
+      context.handle(
+        _readAtMeta,
+        readAt.isAcceptableOrUnknown(data['read_at']!, _readAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {messageId};
+  @override
+  HelperReading map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperReading(
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      line: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}line'],
+      )!,
+      focus: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}focus'],
+      )!,
+      ask: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}ask'],
+      )!,
+      due: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}due'],
+      ),
+      why: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}why'],
+      )!,
+      answered: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}answered'],
+      )!,
+      readAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}read_at'],
+      ),
+    );
+  }
+
+  @override
+  $HelperReadingsTable createAlias(String alias) {
+    return $HelperReadingsTable(attachedDatabase, alias);
+  }
+}
+
+class HelperReading extends DataClass implements Insertable<HelperReading> {
+  final String messageId;
+  final String line;
+  final bool focus;
+  final String ask;
+  final DateTime? due;
+
+  /// Up to three plain reasons, as a JSON list.
+  final String why;
+
+  /// The user has answered this email since.
+  final bool answered;
+  final DateTime? readAt;
+  const HelperReading({
+    required this.messageId,
+    required this.line,
+    required this.focus,
+    required this.ask,
+    this.due,
+    required this.why,
+    required this.answered,
+    this.readAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['message_id'] = Variable<String>(messageId);
+    map['line'] = Variable<String>(line);
+    map['focus'] = Variable<bool>(focus);
+    map['ask'] = Variable<String>(ask);
+    if (!nullToAbsent || due != null) {
+      map['due'] = Variable<DateTime>(due);
+    }
+    map['why'] = Variable<String>(why);
+    map['answered'] = Variable<bool>(answered);
+    if (!nullToAbsent || readAt != null) {
+      map['read_at'] = Variable<DateTime>(readAt);
+    }
+    return map;
+  }
+
+  HelperReadingsCompanion toCompanion(bool nullToAbsent) {
+    return HelperReadingsCompanion(
+      messageId: Value(messageId),
+      line: Value(line),
+      focus: Value(focus),
+      ask: Value(ask),
+      due: due == null && nullToAbsent ? const Value.absent() : Value(due),
+      why: Value(why),
+      answered: Value(answered),
+      readAt: readAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(readAt),
+    );
+  }
+
+  factory HelperReading.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperReading(
+      messageId: serializer.fromJson<String>(json['messageId']),
+      line: serializer.fromJson<String>(json['line']),
+      focus: serializer.fromJson<bool>(json['focus']),
+      ask: serializer.fromJson<String>(json['ask']),
+      due: serializer.fromJson<DateTime?>(json['due']),
+      why: serializer.fromJson<String>(json['why']),
+      answered: serializer.fromJson<bool>(json['answered']),
+      readAt: serializer.fromJson<DateTime?>(json['readAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'messageId': serializer.toJson<String>(messageId),
+      'line': serializer.toJson<String>(line),
+      'focus': serializer.toJson<bool>(focus),
+      'ask': serializer.toJson<String>(ask),
+      'due': serializer.toJson<DateTime?>(due),
+      'why': serializer.toJson<String>(why),
+      'answered': serializer.toJson<bool>(answered),
+      'readAt': serializer.toJson<DateTime?>(readAt),
+    };
+  }
+
+  HelperReading copyWith({
+    String? messageId,
+    String? line,
+    bool? focus,
+    String? ask,
+    Value<DateTime?> due = const Value.absent(),
+    String? why,
+    bool? answered,
+    Value<DateTime?> readAt = const Value.absent(),
+  }) => HelperReading(
+    messageId: messageId ?? this.messageId,
+    line: line ?? this.line,
+    focus: focus ?? this.focus,
+    ask: ask ?? this.ask,
+    due: due.present ? due.value : this.due,
+    why: why ?? this.why,
+    answered: answered ?? this.answered,
+    readAt: readAt.present ? readAt.value : this.readAt,
+  );
+  HelperReading copyWithCompanion(HelperReadingsCompanion data) {
+    return HelperReading(
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      line: data.line.present ? data.line.value : this.line,
+      focus: data.focus.present ? data.focus.value : this.focus,
+      ask: data.ask.present ? data.ask.value : this.ask,
+      due: data.due.present ? data.due.value : this.due,
+      why: data.why.present ? data.why.value : this.why,
+      answered: data.answered.present ? data.answered.value : this.answered,
+      readAt: data.readAt.present ? data.readAt.value : this.readAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperReading(')
+          ..write('messageId: $messageId, ')
+          ..write('line: $line, ')
+          ..write('focus: $focus, ')
+          ..write('ask: $ask, ')
+          ..write('due: $due, ')
+          ..write('why: $why, ')
+          ..write('answered: $answered, ')
+          ..write('readAt: $readAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(messageId, line, focus, ask, due, why, answered, readAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperReading &&
+          other.messageId == this.messageId &&
+          other.line == this.line &&
+          other.focus == this.focus &&
+          other.ask == this.ask &&
+          other.due == this.due &&
+          other.why == this.why &&
+          other.answered == this.answered &&
+          other.readAt == this.readAt);
+}
+
+class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
+  final Value<String> messageId;
+  final Value<String> line;
+  final Value<bool> focus;
+  final Value<String> ask;
+  final Value<DateTime?> due;
+  final Value<String> why;
+  final Value<bool> answered;
+  final Value<DateTime?> readAt;
+  final Value<int> rowid;
+  const HelperReadingsCompanion({
+    this.messageId = const Value.absent(),
+    this.line = const Value.absent(),
+    this.focus = const Value.absent(),
+    this.ask = const Value.absent(),
+    this.due = const Value.absent(),
+    this.why = const Value.absent(),
+    this.answered = const Value.absent(),
+    this.readAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HelperReadingsCompanion.insert({
+    required String messageId,
+    this.line = const Value.absent(),
+    this.focus = const Value.absent(),
+    this.ask = const Value.absent(),
+    this.due = const Value.absent(),
+    this.why = const Value.absent(),
+    this.answered = const Value.absent(),
+    this.readAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : messageId = Value(messageId);
+  static Insertable<HelperReading> custom({
+    Expression<String>? messageId,
+    Expression<String>? line,
+    Expression<bool>? focus,
+    Expression<String>? ask,
+    Expression<DateTime>? due,
+    Expression<String>? why,
+    Expression<bool>? answered,
+    Expression<DateTime>? readAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (messageId != null) 'message_id': messageId,
+      if (line != null) 'line': line,
+      if (focus != null) 'focus': focus,
+      if (ask != null) 'ask': ask,
+      if (due != null) 'due': due,
+      if (why != null) 'why': why,
+      if (answered != null) 'answered': answered,
+      if (readAt != null) 'read_at': readAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HelperReadingsCompanion copyWith({
+    Value<String>? messageId,
+    Value<String>? line,
+    Value<bool>? focus,
+    Value<String>? ask,
+    Value<DateTime?>? due,
+    Value<String>? why,
+    Value<bool>? answered,
+    Value<DateTime?>? readAt,
+    Value<int>? rowid,
+  }) {
+    return HelperReadingsCompanion(
+      messageId: messageId ?? this.messageId,
+      line: line ?? this.line,
+      focus: focus ?? this.focus,
+      ask: ask ?? this.ask,
+      due: due ?? this.due,
+      why: why ?? this.why,
+      answered: answered ?? this.answered,
+      readAt: readAt ?? this.readAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (line.present) {
+      map['line'] = Variable<String>(line.value);
+    }
+    if (focus.present) {
+      map['focus'] = Variable<bool>(focus.value);
+    }
+    if (ask.present) {
+      map['ask'] = Variable<String>(ask.value);
+    }
+    if (due.present) {
+      map['due'] = Variable<DateTime>(due.value);
+    }
+    if (why.present) {
+      map['why'] = Variable<String>(why.value);
+    }
+    if (answered.present) {
+      map['answered'] = Variable<bool>(answered.value);
+    }
+    if (readAt.present) {
+      map['read_at'] = Variable<DateTime>(readAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperReadingsCompanion(')
+          ..write('messageId: $messageId, ')
+          ..write('line: $line, ')
+          ..write('focus: $focus, ')
+          ..write('ask: $ask, ')
+          ..write('due: $due, ')
+          ..write('why: $why, ')
+          ..write('answered: $answered, ')
+          ..write('readAt: $readAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -17190,6 +17841,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HelperSendersTable helperSenders = $HelperSendersTable(this);
   late final $HelperVerdictsTable helperVerdicts = $HelperVerdictsTable(this);
   late final $HelperStateTable helperState = $HelperStateTable(this);
+  late final $HelperReadingsTable helperReadings = $HelperReadingsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -17227,6 +17879,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     helperSenders,
     helperVerdicts,
     helperState,
+    helperReadings,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -19365,6 +20018,8 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> icsText,
   Value<DateTime?> extractedAt,
   Value<DateTime?> doneAt,
+  Value<String?> pileFix,
+  Value<String?> focusFix,
 });
 typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<int> id,
@@ -19404,6 +20059,8 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> icsText,
   Value<DateTime?> extractedAt,
   Value<DateTime?> doneAt,
+  Value<String?> pileFix,
+  Value<String?> focusFix,
 });
 
 final class $$MessagesTableReferences
@@ -19729,6 +20386,16 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<DateTime> get doneAt => $composableBuilder(
     column: $table.doneAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pileFix => $composableBuilder(
+    column: $table.pileFix,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get focusFix => $composableBuilder(
+    column: $table.focusFix,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -20089,6 +20756,16 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get pileFix => $composableBuilder(
+    column: $table.pileFix,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get focusFix => $composableBuilder(
+    column: $table.focusFix,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$AccountsTableOrderingComposer get accountId {
     final $$AccountsTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -20281,6 +20958,12 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get doneAt =>
       $composableBuilder(column: $table.doneAt, builder: (column) => column);
+
+  GeneratedColumn<String> get pileFix =>
+      $composableBuilder(column: $table.pileFix, builder: (column) => column);
+
+  GeneratedColumn<String> get focusFix =>
+      $composableBuilder(column: $table.focusFix, builder: (column) => column);
 
   $$AccountsTableAnnotationComposer get accountId {
     final $$AccountsTableAnnotationComposer composer = $composerBuilder(
@@ -20529,6 +21212,8 @@ class $$MessagesTableTableManager
                 Value<String?> icsText = const Value.absent(),
                 Value<DateTime?> extractedAt = const Value.absent(),
                 Value<DateTime?> doneAt = const Value.absent(),
+                Value<String?> pileFix = const Value.absent(),
+                Value<String?> focusFix = const Value.absent(),
               }) => MessagesCompanion(
                 id: id,
                 accountId: accountId,
@@ -20567,6 +21252,8 @@ class $$MessagesTableTableManager
                 icsText: icsText,
                 extractedAt: extractedAt,
                 doneAt: doneAt,
+                pileFix: pileFix,
+                focusFix: focusFix,
               ),
           createCompanionCallback:
               ({
@@ -20607,6 +21294,8 @@ class $$MessagesTableTableManager
                 Value<String?> icsText = const Value.absent(),
                 Value<DateTime?> extractedAt = const Value.absent(),
                 Value<DateTime?> doneAt = const Value.absent(),
+                Value<String?> pileFix = const Value.absent(),
+                Value<String?> focusFix = const Value.absent(),
               }) => MessagesCompanion.insert(
                 id: id,
                 accountId: accountId,
@@ -20645,6 +21334,8 @@ class $$MessagesTableTableManager
                 icsText: icsText,
                 extractedAt: extractedAt,
                 doneAt: doneAt,
+                pileFix: pileFix,
+                focusFix: focusFix,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -28853,6 +29544,7 @@ typedef $$HelperVerdictsTableCreateCompanionBuilder =
       required String messageId,
       required String cls,
       Value<String?> cat,
+      Value<String?> pile,
       Value<int> rowid,
     });
 typedef $$HelperVerdictsTableUpdateCompanionBuilder =
@@ -28860,6 +29552,7 @@ typedef $$HelperVerdictsTableUpdateCompanionBuilder =
       Value<String> messageId,
       Value<String> cls,
       Value<String?> cat,
+      Value<String?> pile,
       Value<int> rowid,
     });
 
@@ -28884,6 +29577,11 @@ class $$HelperVerdictsTableFilterComposer
 
   ColumnFilters<String> get cat => $composableBuilder(
     column: $table.cat,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get pile => $composableBuilder(
+    column: $table.pile,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -28911,6 +29609,11 @@ class $$HelperVerdictsTableOrderingComposer
     column: $table.cat,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get pile => $composableBuilder(
+    column: $table.pile,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HelperVerdictsTableAnnotationComposer
@@ -28930,6 +29633,9 @@ class $$HelperVerdictsTableAnnotationComposer
 
   GeneratedColumn<String> get cat =>
       $composableBuilder(column: $table.cat, builder: (column) => column);
+
+  GeneratedColumn<String> get pile =>
+      $composableBuilder(column: $table.pile, builder: (column) => column);
 }
 
 class $$HelperVerdictsTableTableManager
@@ -28968,11 +29674,13 @@ class $$HelperVerdictsTableTableManager
                 Value<String> messageId = const Value.absent(),
                 Value<String> cls = const Value.absent(),
                 Value<String?> cat = const Value.absent(),
+                Value<String?> pile = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperVerdictsCompanion(
                 messageId: messageId,
                 cls: cls,
                 cat: cat,
+                pile: pile,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -28980,11 +29688,13 @@ class $$HelperVerdictsTableTableManager
                 required String messageId,
                 required String cls,
                 Value<String?> cat = const Value.absent(),
+                Value<String?> pile = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperVerdictsCompanion.insert(
                 messageId: messageId,
                 cls: cls,
                 cat: cat,
+                pile: pile,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -29186,6 +29896,274 @@ typedef $$HelperStateTableProcessedTableManager =
       HelperStateData,
       PrefetchHooks Function()
     >;
+typedef $$HelperReadingsTableCreateCompanionBuilder =
+    HelperReadingsCompanion Function({
+      required String messageId,
+      Value<String> line,
+      Value<bool> focus,
+      Value<String> ask,
+      Value<DateTime?> due,
+      Value<String> why,
+      Value<bool> answered,
+      Value<DateTime?> readAt,
+      Value<int> rowid,
+    });
+typedef $$HelperReadingsTableUpdateCompanionBuilder =
+    HelperReadingsCompanion Function({
+      Value<String> messageId,
+      Value<String> line,
+      Value<bool> focus,
+      Value<String> ask,
+      Value<DateTime?> due,
+      Value<String> why,
+      Value<bool> answered,
+      Value<DateTime?> readAt,
+      Value<int> rowid,
+    });
+
+class $$HelperReadingsTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperReadingsTable> {
+  $$HelperReadingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get line => $composableBuilder(
+    column: $table.line,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get focus => $composableBuilder(
+    column: $table.focus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get ask => $composableBuilder(
+    column: $table.ask,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get due => $composableBuilder(
+    column: $table.due,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get why => $composableBuilder(
+    column: $table.why,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get answered => $composableBuilder(
+    column: $table.answered,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get readAt => $composableBuilder(
+    column: $table.readAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperReadingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperReadingsTable> {
+  $$HelperReadingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get line => $composableBuilder(
+    column: $table.line,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get focus => $composableBuilder(
+    column: $table.focus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get ask => $composableBuilder(
+    column: $table.ask,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get due => $composableBuilder(
+    column: $table.due,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get why => $composableBuilder(
+    column: $table.why,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get answered => $composableBuilder(
+    column: $table.answered,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get readAt => $composableBuilder(
+    column: $table.readAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperReadingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperReadingsTable> {
+  $$HelperReadingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<String> get line =>
+      $composableBuilder(column: $table.line, builder: (column) => column);
+
+  GeneratedColumn<bool> get focus =>
+      $composableBuilder(column: $table.focus, builder: (column) => column);
+
+  GeneratedColumn<String> get ask =>
+      $composableBuilder(column: $table.ask, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get due =>
+      $composableBuilder(column: $table.due, builder: (column) => column);
+
+  GeneratedColumn<String> get why =>
+      $composableBuilder(column: $table.why, builder: (column) => column);
+
+  GeneratedColumn<bool> get answered =>
+      $composableBuilder(column: $table.answered, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get readAt =>
+      $composableBuilder(column: $table.readAt, builder: (column) => column);
+}
+
+class $$HelperReadingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperReadingsTable,
+          HelperReading,
+          $$HelperReadingsTableFilterComposer,
+          $$HelperReadingsTableOrderingComposer,
+          $$HelperReadingsTableAnnotationComposer,
+          $$HelperReadingsTableCreateCompanionBuilder,
+          $$HelperReadingsTableUpdateCompanionBuilder,
+          (
+            HelperReading,
+            BaseReferences<_$AppDatabase, $HelperReadingsTable, HelperReading>,
+          ),
+          HelperReading,
+          PrefetchHooks Function()
+        > {
+  $$HelperReadingsTableTableManager(
+    _$AppDatabase db,
+    $HelperReadingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperReadingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperReadingsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperReadingsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> messageId = const Value.absent(),
+                Value<String> line = const Value.absent(),
+                Value<bool> focus = const Value.absent(),
+                Value<String> ask = const Value.absent(),
+                Value<DateTime?> due = const Value.absent(),
+                Value<String> why = const Value.absent(),
+                Value<bool> answered = const Value.absent(),
+                Value<DateTime?> readAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperReadingsCompanion(
+                messageId: messageId,
+                line: line,
+                focus: focus,
+                ask: ask,
+                due: due,
+                why: why,
+                answered: answered,
+                readAt: readAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String messageId,
+                Value<String> line = const Value.absent(),
+                Value<bool> focus = const Value.absent(),
+                Value<String> ask = const Value.absent(),
+                Value<DateTime?> due = const Value.absent(),
+                Value<String> why = const Value.absent(),
+                Value<bool> answered = const Value.absent(),
+                Value<DateTime?> readAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperReadingsCompanion.insert(
+                messageId: messageId,
+                line: line,
+                focus: focus,
+                ask: ask,
+                due: due,
+                why: why,
+                answered: answered,
+                readAt: readAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperReadingsTable, HelperReading>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $HelperReadingsTable,
+                    HelperReading
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperReadingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperReadingsTable,
+      HelperReading,
+      $$HelperReadingsTableFilterComposer,
+      $$HelperReadingsTableOrderingComposer,
+      $$HelperReadingsTableAnnotationComposer,
+      $$HelperReadingsTableCreateCompanionBuilder,
+      $$HelperReadingsTableUpdateCompanionBuilder,
+      (
+        HelperReading,
+        BaseReferences<_$AppDatabase, $HelperReadingsTable, HelperReading>,
+      ),
+      HelperReading,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -29253,4 +30231,6 @@ class $AppDatabaseManager {
       $$HelperVerdictsTableTableManager(_db, _db.helperVerdicts);
   $$HelperStateTableTableManager get helperState =>
       $$HelperStateTableTableManager(_db, _db.helperState);
+  $$HelperReadingsTableTableManager get helperReadings =>
+      $$HelperReadingsTableTableManager(_db, _db.helperReadings);
 }

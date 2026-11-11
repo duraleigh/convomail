@@ -90,6 +90,10 @@ class HelperLink {
 
 final helperProvider = NotifierProvider<HelperSync, HelperLink>(HelperSync.new);
 
+/// The setting that remembers whether the helper's assistant is on ('1')
+/// or off ('0'), as the helper last said.
+const kAssistantOn = 'helper.assistantOn';
+
 /// Keeps this device in step with the helper: sends up what the user
 /// changes here, takes in what the helper decided and what other devices
 /// changed. If the helper cannot be reached, Précis carries on by itself and
@@ -362,6 +366,11 @@ class HelperSync extends Notifier<HelperLink> {
         cursor = page.next;
         await _db.putSetting(_kCursor, '$cursor');
       }
+      // Whether the assistant is on: its readings show only while it is.
+      final assistant = page.assistant;
+      if (assistant != null && (await _db.getSetting(kAssistantOn) ?? '') != (assistant ? '1' : '0')) {
+        await _db.putSetting(kAssistantOn, assistant ? '1' : '0');
+      }
       if (refile.isNotEmpty) {
         // Mail from senders the helper decided is filed where the helper says.
         await ref.read(classificationServiceProvider).classifySenders(refile, log: false);
@@ -382,6 +391,17 @@ class HelperSync extends Notifier<HelperLink> {
     } on HelperException catch (e) {
       await _problem(e);
     }
+  }
+
+  /// Turns the assistant on or off for every device, or sets its monthly
+  /// ceiling. Off means nothing more is sent to it and its readings hide.
+  Future<void> setAssistant({bool? on, int? ceilingMicro}) async {
+    final client = await _client();
+    if (client == null) throw const HelperException('This PC does not follow a helper.');
+    final a = await client.setAssistant(on: on, ceiling: ceilingMicro);
+    if (a['on'] is bool) await _db.putSetting(kAssistantOn, a['on'] == true && a['hasKey'] == true ? '1' : '0');
+    final status = {...?state.status, 'assistant': a};
+    state = state.copyWith(status: () => status, error: () => null);
   }
 
   /// A joining code for the next device, good for ten minutes.

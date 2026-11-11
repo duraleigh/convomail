@@ -1,7 +1,9 @@
 import 'package:convomail/app/destinations.dart';
+import 'package:convomail/app/mail_state.dart';
 import 'package:convomail/app/people_state.dart';
 import 'package:convomail/app/timely_state.dart';
 import 'package:convomail/domain/classifier.dart';
+import 'package:convomail/domain/piles.dart';
 import 'package:convomail/domain/timely_extractor.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/mail/transport_factory.dart';
@@ -9,6 +11,7 @@ import 'package:convomail/main.dart';
 import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/classification_queries.dart';
 import 'package:convomail/store/database.dart' hide ClassificationRule;
+import 'package:convomail/store/mail_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
 import 'package:convomail/store/sync_queries.dart';
@@ -544,7 +547,7 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('category pills show on Feed and Noise for the mail in that pile, filter the list, count per-message exceptions, and clear', (tester) async {
+    testWidgets('tag pills show on Feed for the mail in it, filter the list, follow a tag set on one email, and clear', (tester) async {
       final container = await pumpApp(tester);
       expect(find.byKey(const ValueKey('feeds-pill-all')), findsNothing, reason: 'not on Chats');
 
@@ -553,42 +556,40 @@ void main() {
       expect(find.byKey(const ValueKey('feeds-pill-all')), findsOneWidget);
       expect(find.byKey(const ValueKey('feeds-pill-Receipt')), findsOneWidget);
       expect(find.byKey(const ValueKey('feeds-pill-Delivery')), findsOneWidget);
-      expect(find.byKey(const ValueKey('feeds-pill-Newsletter')), findsNothing, reason: 'the newsletter nobody opens is in Noise');
-      expect(find.byKey(const ValueKey('feeds-pill-Social')), findsNothing, reason: 'no mail in that category');
-      expect(find.text('First Bank'), findsOneWidget);
-      expect(find.text('Shop Orders'), findsOneWidget);
+      expect(find.byKey(const ValueKey('feeds-pill-Newsletter')), findsNothing, reason: 'the newsletter is in Noise');
+      expect(find.byKey(const ValueKey('feeds-pill-Social')), findsNothing, reason: 'no mail with that tag');
+      expect(find.text('First Bank'), findsWidgets, reason: 'a row for each of its emails');
+      expect(find.text('Shop Orders'), findsWidgets);
       expect(find.text('The Daily Brief'), findsNothing);
 
       await tester.tap(find.byKey(const ValueKey('feeds-pill-Receipt')));
       await tester.pumpAndSettle();
-      expect(find.text('First Bank'), findsOneWidget, reason: 'its statement is a receipt');
+      expect(find.text('First Bank'), findsOneWidget, reason: 'its statement is a receipt; its code is not');
       expect(find.text('Shop Orders'), findsNothing);
 
-      // One message of the shop's filed as a receipt brings the shop in too.
+      // One email of the shop's tagged as a receipt shows under Receipts; its others do not.
       final shop = (await db.select(db.messages).get()).firstWhere((m) => m.fromAddress == 'noreply@shop.com' && m.subject.contains('shipped'));
       await ClassificationService(db).setMessageCategory(shop.id, 'Receipt');
       await tester.pumpAndSettle();
       expect(find.text('Shop Orders'), findsOneWidget);
-      expect(find.byKey(const ValueKey('category-pill-c:noreply@shop.com')), findsOneWidget);
+      expect(find.byKey(ValueKey('category-pill-${shop.id}')), findsOneWidget);
 
       await tester.tap(find.byKey(const ValueKey('feeds-pill-all')));
       await tester.pumpAndSettle();
-      expect(container.read(feedsCategoryFilterProvider), isNull);
+      expect(container.read(mailTagProvider('feed')), isNull);
 
-      // A category that empties falls back to All.
-      container.read(feedsCategoryFilterProvider.notifier).select('OTP');
+      // A tag that empties shows everything again.
+      container.read(mailTagProvider('feed').notifier).select('OTP');
       await tester.pumpAndSettle();
-      expect(container.read(feedsCategoryFilterProvider), 'OTP');
+      expect(find.text('Shop Orders'), findsNothing);
       final cats = await db.select(db.feedsCategoryRows).get();
       await db.deleteCategory(cats.firstWhere((c) => c.name == 'OTP').id);
       await tester.pumpAndSettle();
-      expect(container.read(feedsCategoryFilterProvider), isNull);
+      expect(find.text('Shop Orders'), findsWidgets);
 
-      // Noise has its own pills, for its own mail.
+      // Noise lists its own mail, by sender.
       container.read(destinationProvider.notifier).select(Destination.noise);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('feeds-pill-Newsletter')), findsOneWidget);
-      expect(find.byKey(const ValueKey('feeds-pill-Receipt')), findsNothing);
       expect(find.text('The Daily Brief'), findsOneWidget);
       expect(find.text('First Bank'), findsNothing);
       await teardown(tester);
@@ -623,7 +624,7 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('Chats, Feed and Noise each remember their open conversation; openRow lands in the right one', (tester) async {
+    testWidgets('Chats, Feed and Noise each remember what was open; openRow lands in the right one', (tester) async {
       final container = await pumpApp(tester);
       await tester.tap(find.text('Sarah Chen'));
       await tester.pumpAndSettle();
@@ -631,15 +632,16 @@ void main() {
 
       container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
-      expect(container.read(selectedRowProvider), isNull);
-      await tester.tap(find.text('First Bank'));
+      expect(container.read(openMailProvider('feed')), isNull);
+      final statement = (await db.messagesFromSender('noreply@bank.com')).firstWhere((m) => m.subject.contains('statement'));
+      await tester.tap(find.byKey(ValueKey('mail-row-${statement.id}')));
       await tester.pumpAndSettle();
-      expect(container.read(selectedRowProvider), 'c:noreply@bank.com');
+      expect(container.read(openMailProvider('feed')), statement.id);
       expect(find.text('Sarah Chen'), findsNothing);
 
       container.read(destinationProvider.notifier).select(Destination.noise);
       await tester.pumpAndSettle();
-      expect(container.read(selectedRowProvider), isNull);
+      expect(container.read(openNoiseGroupProvider), isNull);
 
       container.read(destinationProvider.notifier).select(Destination.chats);
       await tester.pumpAndSettle();
@@ -647,17 +649,20 @@ void main() {
 
       container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
-      expect(container.read(selectedRowProvider), 'c:noreply@bank.com');
+      expect(container.read(openMailProvider('feed')), statement.id);
 
+      // A sender opened from elsewhere lands in its list, on its row.
       await openRow(container.read, 'c:hello@dailybrief.com');
       await tester.pumpAndSettle();
       expect(container.read(destinationProvider), Destination.noise);
-      expect(container.read(selectedRowProvider), 'c:hello@dailybrief.com');
+      expect(container.read(openNoiseGroupProvider), 's:hello@dailybrief.com');
 
+      container.read(openMailProvider('feed').notifier).open(null);
       await openRow(container.read, 'c:noreply@bank.com');
       await tester.pumpAndSettle();
       expect(container.read(destinationProvider), Destination.feed);
-      expect(container.read(selectedRowProvider), 'c:noreply@bank.com');
+      final bankIds = {for (final m in await db.messagesFromSender('noreply@bank.com')) m.id};
+      expect(bankIds, contains(container.read(openMailProvider('feed'))), reason: 'the sender\'s newest email is opened');
 
       await openRow(container.read, 'c:sarah@x.com');
       await tester.pumpAndSettle();
@@ -691,7 +696,7 @@ void main() {
       expect(feedsBannerWeek(DateTime(2027, 1, 1)), '2026-12-28', reason: 'across a year end');
     });
 
-    testWidgets('Chats hides senders that are not people and shows the filed banner; Feed and Noise show them with their tags', (tester) async {
+    testWidgets('Chats hides senders that are not people and shows the filed banner; Feed and Noise show their mail with its tag', (tester) async {
       final container = await pumpApp(tester);
       expect(find.text('Sarah Chen'), findsOneWidget);
       expect(find.text('The Daily Brief'), findsNothing);
@@ -701,71 +706,73 @@ void main() {
 
       await tester.tap(find.byKey(const ValueKey('feeds-banner')));
       await tester.pumpAndSettle();
-      expect(container.read(inboxModeProvider), InboxMode.feed);
-      expect(find.text('First Bank'), findsOneWidget);
-      expect(find.byKey(const ValueKey('category-pill-c:noreply@bank.com')), findsOneWidget);
-      expect(find.byTooltip('Notification'), findsWidgets, reason: 'the tag is a colored dot, named on hover');
+      expect(container.read(destinationProvider), Destination.feed);
+      expect(find.text('First Bank'), findsWidgets);
+      expect(find.text('Worth knowing. Nothing here needs a reply.'), findsOneWidget);
+      expect(find.byTooltip('Receipt'), findsWidgets, reason: 'the tag is a colored dot, named on hover');
       expect(find.text('Sarah Chen'), findsNothing);
-      expect(find.text('The Daily Brief'), findsNothing, reason: 'nobody opens it, so it is Noise');
+      expect(find.text('The Daily Brief'), findsNothing, reason: 'a newsletter is Noise until something says otherwise');
 
       container.read(destinationProvider.notifier).select(Destination.noise);
       await tester.pumpAndSettle();
-      expect(find.text('The Daily Brief'), findsOneWidget);
-      expect(find.byKey(const ValueKey('category-pill-c:hello@dailybrief.com')), findsOneWidget);
+      expect(find.text('The Daily Brief'), findsOneWidget, reason: 'one row for the sender, however many emails');
+      expect(find.textContaining('3 this week'), findsOneWidget);
       expect(find.byTooltip('Newsletter'), findsOneWidget);
       expect(find.byKey(const ValueKey('noise-header')), findsOneWidget);
       expect(find.text('First Bank'), findsNothing);
       await teardown(tester);
     });
 
-    testWidgets('a newsletter that gets opened is Feed, not Noise', (tester) async {
+    testWidgets('one email moved to Feed by hand shows in Feed; the rest of that sender\'s mail stays in Noise', (tester) async {
       final container = await pumpApp(tester);
       final brief = await db.messagesFromSender('hello@dailybrief.com');
-      await (db.update(db.messages)..where((m) => m.id.equals(brief.first.id))).write(const MessagesCompanion(isSeen: Value(true)));
-      await db.refreshDirtyRows();
+      await db.setEmailPile(brief.first.id, FeedsPile.feed);
       container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
-      expect(find.text('The Daily Brief'), findsOneWidget, reason: 'one of three opened');
+      expect(find.byKey(ValueKey('mail-row-${brief.first.id}')), findsOneWidget);
+      expect(find.text('The Daily Brief'), findsOneWidget, reason: 'only the one moved');
       container.read(destinationProvider.notifier).select(Destination.noise);
       await tester.pumpAndSettle();
-      expect(find.text('The Daily Brief'), findsNothing);
-      expect(find.text('Nothing in Noise'), findsOneWidget);
+      expect(find.text('The Daily Brief'), findsOneWidget);
+      expect(find.textContaining('2 this week'), findsOneWidget, reason: 'the other two are still here');
       await teardown(tester);
     });
 
-    testWidgets('right-click moves a sender between Chats, Feed and Noise for good; Undo puts it back; Counts toward unread shows the bell', (tester) async {
+    testWidgets('a sender is moved between Chats, Feed and Noise for good; Undo puts it back; Counts toward unread shows the bell', (tester) async {
       final container = await pumpApp(tester);
       container.read(destinationProvider.notifier).select(Destination.noise);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('The Daily Brief'), buttons: kSecondaryButton);
-      await tester.pumpAndSettle();
-      expect(find.text('Move to Noise'), findsNothing, reason: 'it is there already');
-      await tester.tap(find.text('Counts toward unread'));
-      await tester.pumpAndSettle();
-      expect(find.byTooltip('Counts toward unread'), findsOneWidget);
 
       // Noise to Feed: the user's choice, kept.
-      await tester.tap(find.text('The Daily Brief'), buttons: kSecondaryButton);
+      await tester.tap(find.byKey(const ValueKey('noise-row-s:hello@dailybrief.com')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Move to Feed'));
+      expect(find.text('Why this is in Noise'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('noise-to-feed')));
       await tester.pumpAndSettle();
       expect((await contact('hello@dailybrief.com')).feedsPile, 'feed');
       expect((await contact('hello@dailybrief.com')).classification, 'feeds');
       expect(find.textContaining('moved to Feed'), findsOneWidget);
-      expect(find.text('The Daily Brief'), findsNothing, reason: 'gone from Noise');
+      expect(find.byKey(const ValueKey('noise-row-s:hello@dailybrief.com')), findsNothing, reason: 'gone from Noise');
 
       // Undo: back to where the app had it.
       await tester.tap(find.text('Undo'));
       await tester.pumpAndSettle();
       expect((await contact('hello@dailybrief.com')).feedsPile, isNull);
-      expect(find.text('The Daily Brief'), findsOneWidget);
+      expect(find.byKey(const ValueKey('noise-row-s:hello@dailybrief.com')), findsOneWidget);
 
-      // Feed to Noise.
+      // On a Feed email: its sender counts toward unread, then goes to Noise.
       container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('First Bank'), buttons: kSecondaryButton);
+      final statement = (await db.messagesFromSender('noreply@bank.com')).firstWhere((m) => m.subject.contains('statement'));
+      await tester.tap(find.byKey(ValueKey('mail-row-${statement.id}')), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Move to Noise'));
+      expect(find.text('Move this one to Noise'), findsOneWidget);
+      await tester.tap(find.text('Counts toward unread'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Counts toward unread'), findsWidgets);
+      await tester.tap(find.byKey(ValueKey('mail-row-${statement.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Always Noise for this sender'));
       await tester.pumpAndSettle();
       expect((await contact('noreply@bank.com')).feedsPile, 'noise');
       expect(find.text('First Bank'), findsNothing);
@@ -782,9 +789,9 @@ void main() {
       // Let the earlier message about the move go first.
       ScaffoldMessenger.of(tester.element(find.byType(AppShell))).clearSnackBars();
       await tester.pumpAndSettle();
-      await tester.tap(find.text('The Daily Brief'), buttons: kSecondaryButton);
+      await tester.tap(find.byKey(const ValueKey('noise-row-s:hello@dailybrief.com')));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Move to Chats'));
+      await tester.tap(find.byKey(const ValueKey('noise-person')));
       await tester.pumpAndSettle();
       expect((await contact('hello@dailybrief.com')).classificationSource, 'override');
       expect((await contact('hello@dailybrief.com')).classification, 'people');
@@ -821,7 +828,7 @@ void main() {
 
       container.read(destinationProvider.notifier).select(Destination.feed);
       await tester.pumpAndSettle();
-      expect(find.text('First Bank'), findsOneWidget, reason: 'Feed is not touched');
+      expect(find.text('First Bank'), findsWidgets, reason: 'Feed is not touched');
       expect(find.byKey(const ValueKey('noise-header')), findsNothing);
       await teardown(tester);
     });

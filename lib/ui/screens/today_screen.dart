@@ -8,18 +8,22 @@ import '../../app/calendar_state.dart';
 import '../../app/compose_state.dart';
 import '../../app/conversation_state.dart';
 import '../../app/destinations.dart';
+import '../../app/mail_state.dart';
 import '../../app/people_state.dart';
 import '../../app/settings_navigation.dart';
 import '../../app/timely_state.dart';
 import '../../store/database.dart';
 import '../../store/done_queries.dart';
+import '../../store/mail_queries.dart';
 import '../../store/planner_queries.dart';
 import '../../sync/calendar_sync.dart';
 import '../theme/tokens.dart';
+import '../widgets/reading_line.dart';
 import '../widgets/tonal_avatar.dart';
 import 'chats/later_dialogs.dart';
 import 'chats/thread_view_panel.dart';
 import 'chats/timely_strip.dart';
+import 'mail/mail_widgets.dart' show openMail;
 
 /// Today's calendar events, in the calendars the user shows.
 final todayEventsProvider = StreamProvider<List<PlannerEvent>>((ref) {
@@ -216,12 +220,75 @@ class _Section extends StatelessWidget {
   }
 }
 
-class _NeedsYou extends StatelessWidget {
+/// The emails in Focus: what to do in bold, who asked, a "by" time when
+/// there is one, and Done on the line.
+class _NeedsYou extends ConsumerWidget {
   const _NeedsYou();
 
   @override
-  Widget build(BuildContext context) =>
-      const _Section(id: 'needs-you', icon: Icons.bolt_rounded, color: Color(0xFFF48FB1), title: 'Needs you', empty: 'The assistant is not connected yet. When it is, the emails that need you are listed here.', children: []);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final shown = ref.watch(readingsShownProvider).value ?? false;
+    final items = ref.watch(focusMailProvider).value ?? const <MailItem>[];
+    return _Section(
+      id: 'needs-you',
+      icon: Icons.bolt_rounded,
+      color: focusColor,
+      title: 'Needs you',
+      count: items.length,
+      empty: shown ? 'Nothing. The assistant has read your mail and found nothing that needs you.' : 'The assistant is not on. When it is, the emails that need you are listed here.',
+      children: [
+        for (final i in items.take(8))
+          InkWell(
+            key: ValueKey('needs-${i.id}'),
+            onTap: () {
+              ref.read(openMailProvider('focus').notifier).open(i.id);
+              openMail(ref, i);
+              ref.read(destinationProvider.notifier).select(Destination.focus);
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 9),
+              child: Row(
+                children: [
+                  TonalAvatar(identityKey: i.senderKey, name: i.senderName, size: 32),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(i.ask, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700)),
+                        Text(
+                          [i.senderName, if (i.reading?.due != null) 'by ${dueLabel(i.reading!.due!)}'].join(' · '),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: ValueKey('needs-done-${i.id}'),
+                    tooltip: 'Done',
+                    icon: const Icon(Icons.check_rounded),
+                    onPressed: () => ref.read(databaseProvider).setMessagesDone([i.id], true),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (items.length > 8)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              key: const ValueKey('needs-more'),
+              onPressed: () => ref.read(destinationProvider.notifier).select(Destination.focus),
+              child: Text('${items.length - 8} more in Focus'),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _WaitingOn extends ConsumerWidget {

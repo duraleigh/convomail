@@ -467,13 +467,23 @@ final class App
         }
         switch ($r->method . ' ' . $r->path) {
             case 'GET /api/changes':
-                return Response::json($store->since(max(0, (int) ($r->query['since'] ?? 0)), $id, min(1000, max(1, (int) ($r->query['limit'] ?? 500)))));
+                // With each pull a device also hears whether the assistant is
+                // on, so its readings show or hide without a second call.
+                $readings = $this->readings();
+                return Response::json($store->since(max(0, (int) ($r->query['since'] ?? 0)), $id, min(1000, max(1, (int) ($r->query['limit'] ?? 500)))) + ['assistant' => $readings->on() && $readings->hasKey()]);
             case 'POST /api/push':
                 $items = $r->json()['items'] ?? null;
                 if (!is_array($items)) {
                     return Response::error('Nothing to apply.', 400);
                 }
-                return Response::json($sync->push($id, $items));
+                $out = $sync->push($id, $items);
+                // "Not Focus" on one email changes its reading for every device.
+                foreach ($items as $item) {
+                    if (is_array($item) && ($item['kind'] ?? '') === 'msgfix' && is_string($item['k'] ?? null)) {
+                        $this->readings()->publishFor($item['k']);
+                    }
+                }
+                return Response::json(['seq' => $store->seq()] + $out);
             case 'POST /api/seed':
                 $j = $r->json() ?? [];
                 return Response::json($sync->seed($id, is_array($j['senders'] ?? null) ? $j['senders'] : [], (int) ($j['at'] ?? $this->now()), is_array($j['myIds'] ?? null) ? $j['myIds'] : []));

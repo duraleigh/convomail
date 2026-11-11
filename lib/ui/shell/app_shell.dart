@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/account_scope.dart';
 import '../../app/compose_state.dart';
 import '../../app/destinations.dart';
+import '../../app/mail_state.dart';
 import '../../app/onboarding.dart';
 import '../../app/people_state.dart';
 import '../../app/settings.dart';
@@ -16,7 +17,9 @@ import '../../store/database.dart';
 import '../../sync/notification_center.dart';
 import '../../sync/schedule_service.dart';
 import '../screens/chats_screen.dart';
+import '../screens/feed_screen.dart';
 import '../screens/focus_screen.dart';
+import '../screens/noise_screen.dart';
 import '../screens/settings_screen.dart';
 import '../screens/today_screen.dart';
 import '../theme/tokens.dart';
@@ -154,7 +157,9 @@ class _AppShellState extends ConsumerState<AppShell> {
   Widget _content(Destination d) => switch (d) {
         Destination.today => const TodayScreen(),
         Destination.focus => const FocusScreen(),
-        Destination.chats || Destination.feed || Destination.noise => const ChatsScreen(),
+        Destination.chats => const ChatsScreen(),
+        Destination.feed => const FeedScreen(),
+        Destination.noise => const NoiseScreen(),
         Destination.settings => const SettingsScreen(),
       };
 }
@@ -188,6 +193,26 @@ class _FeedsRailIcon extends ConsumerWidget {
   }
 }
 
+/// The Focus icon, with how many emails need the user: the only number on
+/// the rail. It goes down when something is answered or marked done.
+class _FocusRailIcon extends ConsumerWidget {
+  const _FocusRailIcon({required this.icon});
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final n = ref.watch(focusMailProvider).value?.length ?? 0;
+    return Badge(
+      key: const ValueKey('focus-badge'),
+      isLabelVisible: n > 0,
+      label: Text('$n'),
+      backgroundColor: const Color(0xFFF48FB1),
+      textColor: const Color(0xFF3E0A1F),
+      child: Icon(icon),
+    );
+  }
+}
+
 class _Rail extends ConsumerWidget {
   const _Rail({required this.destination});
   final Destination destination;
@@ -212,8 +237,8 @@ class _Rail extends ConsumerWidget {
       destinations: [
         for (final d in Destination.rail)
           NavigationRailDestination(
-            icon: d == Destination.feed ? _FeedsRailIcon(icon: d.icon) : Icon(d.icon),
-            selectedIcon: d == Destination.feed ? _FeedsRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon),
+            icon: d == Destination.feed ? _FeedsRailIcon(icon: d.icon) : (d == Destination.focus ? _FocusRailIcon(icon: d.icon) : Icon(d.icon)),
+            selectedIcon: d == Destination.feed ? _FeedsRailIcon(icon: d.selectedIcon) : (d == Destination.focus ? _FocusRailIcon(icon: d.selectedIcon) : Icon(d.selectedIcon)),
             label: Text(d.label),
           ),
       ],

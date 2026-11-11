@@ -272,7 +272,7 @@ void main() {
       for (final id in ['needs-you', 'waiting-on', 'schedule', 'fyi', 'later', 'done']) {
         expect(find.byKey(ValueKey('today-$id')), findsOneWidget, reason: id);
       }
-      expect(find.textContaining('The assistant is not connected yet'), findsOneWidget);
+      expect(find.textContaining('The assistant is not on'), findsOneWidget);
       expect(find.textContaining('Nobody. Everyone you asked has answered'), findsOneWidget);
       expect(tester.getTopLeft(find.byKey(const ValueKey('today-date'))).dy, lessThan(40), reason: 'a short page starts at the top, not in the middle');
       expect(find.text('Nothing marked done yet today.'), findsOneWidget);
@@ -347,7 +347,7 @@ void main() {
       got('sarah@x.com', 'Sarah Chen', 'Can you call me today?', ago(hours: 2));
       await pumpApp(tester, opensOn: Destination.focus);
       expect(find.byKey(const ValueKey('focus-empty')), findsOneWidget);
-      expect(find.textContaining('The assistant is not connected yet'), findsOneWidget);
+      expect(find.textContaining('The assistant is not on'), findsOneWidget);
       expect(find.text('Sarah Chen'), findsNothing);
       await teardown(tester);
     });

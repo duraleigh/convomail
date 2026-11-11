@@ -172,6 +172,14 @@ class Messages extends Table {
   /// When the user marked this email done; null while it is open.
   DateTimeColumn get doneAt => dateTime().nullable()();
 
+  /// The user's own choice for this one email: 'feed' or 'noise'. It wins
+  /// over every rule and over the assistant.
+  TextColumn get pileFix => text().nullable()();
+
+  /// The user's own word on whether this email needs them: 'no' ("Not
+  /// Focus") or 'yes' (put in Focus by hand). Null leaves it to the assistant.
+  TextColumn get focusFix => text().nullable()();
+
   @override
   List<Set<Column>> get uniqueKeys => [
         {folderId, uid},
@@ -591,6 +599,31 @@ class HelperVerdicts extends Table {
   TextColumn get cls => text()();
   TextColumn get cat => text().nullable()();
 
+  /// Feed or Noise for this one email ('feed' | 'noise'); null for mail
+  /// from a person, or when the helper has not said.
+  TextColumn get pile => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {messageId};
+}
+
+/// What the assistant said about one email, by its Message-ID: one
+/// sentence, whether it needs the user, what is asked, by when, and why.
+/// The email's own words are never part of it.
+class HelperReadings extends Table {
+  TextColumn get messageId => text()();
+  TextColumn get line => text().withDefault(const Constant(''))();
+  BoolColumn get focus => boolean().withDefault(const Constant(false))();
+  TextColumn get ask => text().withDefault(const Constant(''))();
+  DateTimeColumn get due => dateTime().nullable()();
+
+  /// Up to three plain reasons, as a JSON list.
+  TextColumn get why => text().withDefault(const Constant('[]'))();
+
+  /// The user has answered this email since.
+  BoolColumn get answered => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get readAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {messageId};
 }
@@ -632,7 +665,7 @@ class HelperState extends Table {
   Cards,
   CardTags,
   Reminders,
-  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState])
+  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState, HelperReadings])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
 
@@ -649,7 +682,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -795,6 +828,13 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await customStatement('UPDATE classification_rules SET uid = lower(hex(randomblob(12))) WHERE uid IS NULL');
             await customStatement('UPDATE reminders SET uid = lower(hex(randomblob(12))) WHERE uid IS NULL');
             await _createHelperTriggers();
+          }
+          if (from < 21) {
+            await m.addColumn(messages, messages.pileFix);
+            await m.addColumn(messages, messages.focusFix);
+            if (from >= 20) await m.addColumn(helperVerdicts, helperVerdicts.pile);
+            await m.createTable(helperReadings);
+            await customStatement('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages (message_id)');
           }
         },
         beforeOpen: (details) async {

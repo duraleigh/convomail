@@ -26,6 +26,12 @@ class FakeHelper {
   /// When true, every call fails as an unplugged network would.
   bool unreachable = false;
 
+  /// How the assistant is doing, as the real helper reports it.
+  Map<String, Object?> assistant = {'hasKey': false, 'on': false, 'model': '', 'modelName': '', 'ceiling': 10000000, 'month': 0, 'today': 0, 'problem': '', 'problemKind': '', 'waiting': 0, 'read': 0, 'focus': 0};
+
+  /// The clock offset the device last sent, in minutes.
+  String? zone;
+
   /// Kinds the helper refuses, to check one bad change cannot block others.
   final Set<String> refuse = {};
   int calls = 0;
@@ -73,6 +79,7 @@ class FakeHelper {
       return json({'device': id, 'token': tokens[id], 'seq': 0});
     }
     final token = headers['X-Precis-Token'];
+    zone = headers['X-Precis-Zone'] ?? zone;
     final device = tokens.entries.where((e) => e.value == token).map((e) => e.key).firstOrNull;
     if (device == null) return json({'error': 'This device is not signed in to the helper.'}, 401);
     switch ('$method $path') {
@@ -87,7 +94,15 @@ class FakeHelper {
           ],
           'next': page.isEmpty ? since : page.last.value.seq,
           'more': rows.length > 500,
+          'assistant': assistant['on'] == true && assistant['hasKey'] == true,
         });
+      case 'POST /api/assistant':
+        if (j['ceiling'] is int) assistant = {...assistant, 'ceiling': j['ceiling']};
+        if (j['on'] is bool) {
+          if (j['on'] == true && assistant['hasKey'] != true) return json({'error': 'The assistant has no key or reader yet. Set it on the helper’s page.'}, 409);
+          assistant = {...assistant, 'on': j['on']};
+        }
+        return json({'assistant': assistant});
       case 'POST /api/push':
         final list = [for (final i in (j['items'] as List?) ?? const []) (i as Map).cast<String, Object?>()];
         for (final i in list) {
@@ -127,6 +142,7 @@ class FakeHelper {
           ],
           'timer': DateTime.now().millisecondsSinceEpoch ~/ 1000 - 20,
           'emails': 200,
+          'assistant': assistant,
         });
       case 'GET /api/devices':
         return json({

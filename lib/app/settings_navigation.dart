@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 enum SettingsSection {
   accounts('Accounts', Icons.account_circle_outlined),
   devices('Your devices', Icons.devices_other_rounded),
+  assistant('The assistant and its cost', Icons.auto_awesome_outlined),
   appearance('Appearance', Icons.palette_outlined),
   notifications('Notifications', Icons.notifications_outlined),
   privacy('Privacy', Icons.shield_outlined),

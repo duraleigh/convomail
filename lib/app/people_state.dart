@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/misc.dart' show ProviderListenable;
 import '../domain/piles.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart' hide ClassificationRule;
+import '../store/mail_queries.dart';
 import '../store/people_queries.dart';
 import 'account_scope.dart';
 import 'destinations.dart';
@@ -60,7 +61,14 @@ class SelectedRowNotifier extends Notifier<String?> {
 Future<void> openRow(T Function<T>(ProviderListenable<T>) read, String? key) async {
   var destination = Destination.chats;
   if (key != null) {
-    destination = switch (await read(databaseProvider).rowPile(key)) {
+    final db = read(databaseProvider);
+    var pile = await db.rowPile(key);
+    if (pile != null) {
+      // Feed or Noise is settled for each email: go where its newest one is.
+      final newest = (await db.watchOtherMail().first).where((i) => i.rowKey == key).firstOrNull;
+      pile = newest?.pile ?? pile;
+    }
+    destination = switch (pile) {
       FeedsPile.feed => Destination.feed,
       FeedsPile.noise => Destination.noise,
       null => Destination.chats,

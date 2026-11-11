@@ -14,6 +14,7 @@ import '../../../store/database.dart';
 import '../../../sync/row_actions.dart';
 import '../../../sync/sync_controller.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/reading_line.dart';
 import '../../widgets/tonal_avatar.dart';
 import 'files/attachment_ui.dart';
 import 'html_body_view.dart';
@@ -117,6 +118,9 @@ class MessageCard extends ConsumerWidget {
           ],
         ),
         if (detailsOpen) _MessageDetails(message: message, participants: participants, account: ref.watch(multiAccountProvider) ? _accountEmail(ref) : null),
+        // The assistant's one sentence, and the "?" that says why the email
+        // is where it is. Nothing of the kind sits on the user's own mail.
+        if (!message.isFromMe && !message.isDraft) ReadingLine(messageId: message.id),
         const SizedBox(height: AppSpace.md),
         // While the email is worked out again (marked read, say), the one on
         // screen stays: a reload never blanks it.

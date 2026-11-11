@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('today-greeting')), findsOneWidget);
-    expect(find.textContaining('The assistant is not connected yet'), findsOneWidget, reason: 'Needs you stays empty until the assistant is connected');
+    expect(find.textContaining('The assistant is not on'), findsOneWidget, reason: 'Needs you stays empty until the assistant is on');
 
     await tester.tap(find.text('Focus'));
     await tester.pumpAndSettle();

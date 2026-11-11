@@ -405,6 +405,33 @@ return [
         same(400, $s->post('/assistant/key', ['key' => FakeClaude::KEY])->status);
     },
 
+    'your own word on one email ("Not Focus", "this needs me") reaches every device with the reading' => function () use ($renee): void {
+        $s = new Site();
+        $s->connectGoogle();
+        $token = $s->join();
+        $s->owner('/assistant/key', ['key' => FakeClaude::KEY]);
+        $s->owner('/assistant/settings', ['model' => 'claude-haiku-5-5']);
+        $s->owner('/assistant/switch', ['on' => '1']);
+        $s->claude->answer = static fn (): array => ['line' => 'Renee asks for a yes or no.', 'needs_owner' => true, 'ask' => 'Say yes or no.', 'due' => '', 'place' => 'none', 'reasons' => ['It asks you a question.']];
+        $s->fake->add(['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'Hello'], ['SENT'], '', $s->clock->now - 86400);
+        $id = $s->fake->add($renee + ['Message-ID' => '<ask@x>']);
+        $s->fake->setBody($id, 'Yes or no?');
+        (new Timer($s->app->store(), $s->app->reader(), $s->app->readings()))->run(20);
+        $read = static fn (Site $s): array => $s->app->store()->item('read', '<ask@x>') ?? [];
+        same(true, $read($s)['focus']);
+        // With each pull a device hears that the assistant is on.
+        same(true, $s->api('GET', '/api/changes', null, $token, ['since' => '0'])->data()['assistant']);
+        // "Not Focus" from a device: the reading every device follows says so.
+        $r = $s->api('POST', '/api/push', ['items' => [['kind' => 'msgfix', 'k' => '<ask@x>', 'data' => ['focus' => false]]]], $token);
+        same(200, $r->status, $r->body);
+        same(false, $read($s)['focus']);
+        // Taken back, the assistant's own answer stands again.
+        $s->api('POST', '/api/push', ['items' => [['kind' => 'msgfix', 'k' => '<ask@x>', 'data' => ['focus' => null]]]], $token);
+        same(true, $read($s)['focus']);
+        $s->owner('/assistant/switch', ['on' => '0']);
+        same(false, $s->api('GET', '/api/changes', null, $token, ['since' => '0'])->data()['assistant']);
+    },
+
     'a device sees how the assistant is doing, can switch it off and on, and says what time it is there' => function (): void {
         $s = new Site();
         $s->connectGoogle();

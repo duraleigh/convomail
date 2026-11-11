@@ -296,7 +296,8 @@ extension HelperQueries on AppDatabase {
         }
         final cls = data['cls'] == 'feeds' ? 'feeds' : 'people';
         final cat = cls == 'feeds' ? data['cat'] as String? : null;
-        await into(helperVerdicts).insertOnConflictUpdate(HelperVerdictsCompanion.insert(messageId: k, cls: cls, cat: Value(cat)));
+        final pile = cls == 'feeds' && (data['pile'] == 'feed' || data['pile'] == 'noise') ? data['pile'] as String : null;
+        await into(helperVerdicts).insertOnConflictUpdate(HelperVerdictsCompanion.insert(messageId: k, cls: cls, cat: Value(cat), pile: Value(pile)));
         await (update(messages)..where((m) => m.messageId.equals(k) & m.isFromMe.equals(false))).write(MessagesCompanion(classification: Value(cls), feedsCategory: Value(cat)));
         return const {};
       case 'rule':
@@ -362,6 +363,35 @@ extension HelperQueries on AppDatabase {
         return const {};
       case 'done':
         await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(doneAt: Value(deleted ? null : (_time(data['at']) ?? DateTime.now()))));
+        return const {};
+      case 'msgfix':
+        // What the user set on one email on another device: Focus or not,
+        // Feed or Noise. (Its place among Chats and Feed arrives as 'sort'.)
+        if (deleted) return const {};
+        if (data.containsKey('focus') || data.containsKey('pile')) {
+          await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(
+            focusFix: data.containsKey('focus') ? Value(data['focus'] == true ? 'yes' : (data['focus'] == false ? 'no' : null)) : const Value.absent(),
+            pileFix: data.containsKey('pile') ? Value(data['pile'] == 'feed' || data['pile'] == 'noise' ? data['pile'] as String : null) : const Value.absent(),
+          ));
+        }
+        return const {};
+      case 'read':
+        // The assistant's reading of one email.
+        if (deleted) {
+          await (delete(helperReadings)..where((r) => r.messageId.equals(k))).go();
+          return const {};
+        }
+        final why = data['why'];
+        await into(helperReadings).insertOnConflictUpdate(HelperReadingsCompanion.insert(
+          messageId: k,
+          line: Value((data['line'] as String?) ?? ''),
+          focus: Value(data['focus'] == true),
+          ask: Value((data['ask'] as String?) ?? ''),
+          due: Value(_time(data['due'])),
+          why: Value(jsonEncode(why is List ? [for (final w in why) if (w is String) w] : const <String>[])),
+          answered: Value(data['answered'] == true),
+          readAt: Value(_time(data['at'])),
+        ));
         return const {};
       default:
         // Things only this device tells the helper (own addresses, the

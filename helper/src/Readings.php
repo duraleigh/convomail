@@ -516,6 +516,15 @@ final class Readings
         $this->publish($emailId);
     }
 
+    /** Writes again the reading of the email with this Message-ID, if it has one. */
+    public function publishFor(string $messageId): void
+    {
+        $id = $this->store->db->val('SELECT e.id FROM {emails} e JOIN {readings} r ON r.email_id = e.id WHERE e.message_id = ? LIMIT 1', [$messageId]);
+        if ($id !== null) {
+            $this->publish((int) $id);
+        }
+    }
+
     /** Writes the reading into the stream devices follow. */
     public function publish(int $emailId): void
     {
@@ -523,9 +532,11 @@ final class Readings
         if ($r === null || (string) $r['message_id'] === '') {
             return;
         }
+        // The owner's own word on this one email ("Not Focus", or "this needs me") wins over the assistant.
+        $fix = $this->store->item('msgfix', (string) $r['message_id']);
         $this->store->put('read', (string) $r['message_id'], [
             'line' => (string) $r['line'],
-            'focus' => (int) $r['focus'] === 1,
+            'focus' => ($fix['focus'] ?? null) === true || ((int) $r['focus'] === 1 && ($fix['focus'] ?? null) !== false),
             'ask' => (string) $r['ask'],
             'due' => $r['due'] === null ? null : (int) $r['due'],
             'why' => array_values(array_map('strval', Store::decode((string) $r['why']))),
