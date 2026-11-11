@@ -340,11 +340,17 @@ final class Sorter
         }
         return (bool) $this->store->db->transaction(function () use ($skey): bool {
             $facts = $this->facts($skey);
-            // Nothing from it and nothing to it: nothing to decide.
+            $old = $this->store->item('sender', $skey);
+            // Nothing counted from it and nothing to it: nothing new to decide
+            // the sender on. (A device knew the sender, but the only mail the
+            // helper holds from it is older than what the device sent up.)
+            // Its emails still get their place, from the sender's standing one.
             if ($facts['messagesReceived'] === 0 && $facts['messagesSentTo'] === 0 && $facts['override'] === null) {
+                if ($old !== null && in_array($old['cls'] ?? null, ['people', 'feeds'], true)) {
+                    $this->sortEmailsOf($skey, (string) $old['cls'], isset($old['cat']) ? (string) $old['cat'] : null);
+                }
                 return false;
             }
-            $old = $this->store->item('sender', $skey);
             $d = $this->classifier()->classifySender($facts);
             $new = $old ?? [];
             $new['cls'] = $d['bucket'];

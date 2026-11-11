@@ -352,11 +352,29 @@ final class App
         $data = base64_decode(strtr((string) ($r->json()['message']['data'] ?? ''), '-_', '+/'), true);
         $email = is_string($data) ? (string) (Store::decode($data)['emailAddress'] ?? '') : '';
         if ($email !== '') {
+            // One reader at a time: the notice waits its turn behind the
+            // every-minute look (a few seconds at most), so the same new email
+            // is never filed twice at once. If the wait is too long, the
+            // every-minute look picks the email up instead.
+            $lock = @fopen($this->home . DIRECTORY_SEPARATOR . 'clock.lock', 'c');
+            $mine = false;
+            for ($i = 0; $lock !== false && $i < 16 && !($mine = flock($lock, LOCK_EX | LOCK_NB)); $i++) {
+                usleep(500000);
+            }
             try {
-                $this->reader()->notice($email);
+                if ($mine) {
+                    $this->reader()->notice($email);
+                }
             } catch (\Throwable $e) {
                 // The every-minute look will catch up; Google is still told "received".
                 $store->log('error', 'Acting on a notice failed: ' . mb_substr($e->getMessage(), 0, 200));
+            } finally {
+                if ($lock !== false) {
+                    if ($mine) {
+                        flock($lock, LOCK_UN);
+                    }
+                    fclose($lock);
+                }
             }
         }
         return new Response(204);

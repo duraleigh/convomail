@@ -539,6 +539,20 @@ return [
         same('people', $w->sort($m2)['cls']);
     },
 
+    'older mail from a sender a device knew, but had no mail from, still gets its place' => function (): void {
+        $w = new World();
+        // The device knows this sender (it was on a Cc line, say) but holds no mail from it.
+        $w->sync->seed(1, [['k' => 'quiet@x.com', 'item' => ['cls' => 'feeds', 'src' => 'auto', 'cat' => 'Receipt', 'reasons' => 'x'], 'facts' => ['address' => 'quiet@x.com', 'messagesReceived' => 0]]], $w->clock->now);
+        // The helper then reads an email from it that is older than the sending-up.
+        $id = $w->fake->add(['From' => 'Quiet <quiet@x.com>', 'To' => 'me@example.com', 'Subject' => 'Hello', 'Message-ID' => '<quiet-1@x.com>'], at: $w->clock->now - 86400);
+        $w->reader->backfill($w->account);
+        // No tag of its own: it shows under the sender's tag, as on the app.
+        same(['cat' => null, 'cls' => 'feeds'], $w->sort('<quiet-1@x.com>'));
+        same(0, (int) $w->store->db->val("SELECT COUNT(*) FROM {emails} WHERE cls = ''"));
+        same('feeds', $w->sender('quiet@x.com')['cls'], 'and the sender stays where the device had it');
+        check($id !== '');
+    },
+
     'my own mail is in Chats from the moment it is filed' => function (): void {
         $w = new World();
         $w->arrive(['From' => 'me@example.com', 'To' => 'sarah@x.com', 'Subject' => 'Hello'], ['SENT']);
