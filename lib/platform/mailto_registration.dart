@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -68,6 +69,48 @@ class WindowsMailtoRegistration implements MailtoRegistration {
     final registered = hkcu.createKey(r'Software\RegisteredApplications');
     registered.createValue(const RegistryValue.string(appName, r'Software\Precis\Capabilities'));
     registered.close();
+    _declareLinkType();
+    _tellWindows();
+  }
+
+  /// Whether Windows has `mailto` on its list of link types at all.
+  static bool get linkTypeKnown {
+    try {
+      Registry.openPath(RegistryHive.classesRoot, path: 'mailto').close();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Windows offers apps for a link type only when it knows the type. On a
+  /// PC where an earlier mail app took the `mailto` entry with it when it
+  /// was removed, the Default apps page shows no MAILTO and offers no app,
+  /// whatever is registered. This puts the bare entry back for this user.
+  /// It names no app: the user still chooses one in Windows Settings.
+  static void _declareLinkType() {
+    if (linkTypeKnown) return;
+    try {
+      final scheme = Registry.currentUser.createKey(r'Software\Classes\mailto');
+      scheme.createValue(const RegistryValue.string('', 'URL:MailTo Protocol'));
+      scheme.createValue(const RegistryValue.string('URL Protocol', ''));
+      scheme.close();
+    } catch (_) {
+      // Registered all the same; Windows may list it once the type exists.
+    }
+  }
+
+  /// Tells Windows that which apps open which links has changed, so the
+  /// Default apps page lists Précis at once instead of after the next
+  /// sign-in. Changes no setting.
+  static void _tellWindows() {
+    try {
+      const assocChanged = 0x08000000; // SHCNE_ASSOCCHANGED
+      final notify = DynamicLibrary.open('shell32.dll').lookupFunction<Void Function(Int32, Uint32, Pointer<Void>, Pointer<Void>), void Function(int, int, Pointer<Void>, Pointer<Void>)>('SHChangeNotify');
+      notify(assocChanged, 0, nullptr, nullptr);
+    } catch (_) {
+      // Windows still picks the change up later by itself.
+    }
   }
 
   @override
@@ -96,6 +139,7 @@ class WindowsMailtoRegistration implements MailtoRegistration {
       registered.deleteValue(legacyAppName);
       registered.close();
     } catch (_) {}
+    _tellWindows();
   }
 }
 
