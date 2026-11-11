@@ -287,6 +287,26 @@ final class Google
         }
     }
 
+    /**
+     * Every email of one thread, words included, oldest first as Gmail
+     * gives them. Handed on and let go like [full]. Empty when Gmail no
+     * longer has the thread.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function thread(int $accountId, string $threadId): array
+    {
+        try {
+            $r = $this->call('GET', self::GMAIL . 'threads/' . rawurlencode($threadId) . '?format=full', $this->accessToken($accountId));
+        } catch (GoogleError $e) {
+            if ($e->status === 404) {
+                return [];
+            }
+            throw $e;
+        }
+        return array_values(array_filter($r['messages'] ?? [], 'is_array'));
+    }
+
     /** The addresses the owner sends from, lower-cased. */
     public function sendingAddresses(int $accountId): array
     {

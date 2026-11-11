@@ -10,9 +10,13 @@ use Precis\EmailPile;
 use Precis\Prices;
 use Precis\Readings;
 
-/** A person the owner writes with: the owner has written to them. */
+/**
+ * A person the owner writes with: the owner has written to them. (That
+ * setup email is set aside, so each check counts only the mail it is about.)
+ */
 $person = static function (World $w, string $address = 'renee@booking.example'): void {
     $w->arrive(['From' => 'me@example.com', 'To' => $address, 'Subject' => 'Hello'], ['SENT'], '', $w->clock->now - 86400);
+    $w->store->db->run('UPDATE {emails} SET read_state = ? WHERE is_from_me = 1', [Readings::SKIPPED]);
 };
 $renee = ['From' => 'Renee Calloway <renee@booking.example>', 'To' => 'me@example.com', 'Subject' => 'Re: Spring dates'];
 $news = static fn (int $n): array => ['From' => 'Pollstar Daily <news@pollstar.example>', 'To' => 'me@example.com', 'Subject' => "Daily #$n", 'List-Unsubscribe' => '<mailto:u@pollstar.example>', 'List-Id' => 'Daily <daily.pollstar.example>'];
@@ -92,7 +96,6 @@ return [
         same(Readings::SKIPPED, $state($w, $code), 'a sign-in code is never sent anywhere');
         same(Readings::NEW, $state($w, $archived), 'mail that is not in the inbox is left alone');
         same('noise', $w->sort($promo)['pile']);
-        same(0, (int) $w->store->db->val('SELECT COUNT(*) FROM {emails} WHERE is_from_me = 1 AND read_state = ?', [Readings::WAITING]));
         // Nothing has been sent anywhere: planning asks the assistant nothing.
         same([], $w->claude->requests);
     },
@@ -136,6 +139,7 @@ return [
         check(!isset($sent['body']['thinking']) && !isset($sent['body']['temperature']), 'no settings the readers refuse');
         $shown = (string) $sent['body']['messages'][0]['content'];
         check(str_contains($shown, 'They will hold it until 3 today. Yes or no?'));
+        check(!str_contains($shown, 'Earlier in this thread'), 'an email on its own is shown on its own');
         check(!str_contains($shown, 'SECRET-OLD-WORDS'), 'the copied history is never shown');
         check(str_contains($shown, 'Kind: from a person the owner writes with'));
         check(str_contains($shown, 'The owner is: in To'));
@@ -237,9 +241,201 @@ return [
         $w->reader->poll($w->account);
         $w->readings->plan();
         $w->readings->work();
-        $shown = (string) $w->claude->readings()[1]['body']['messages'][0]['content'];
+        $late = array_values(array_filter($w->claude->readings(), static fn (array $r): bool => str_contains((string) $r['body']['messages'][0]['content'], 'Any news?')));
+        $shown = (string) $late[0]['body']['messages'][0]['content'];
         check(str_contains($shown, 'The owner has already answered this email: yes'));
         same(false, $w->reading('<late@x>')['focus']);
+    },
+
+    'a deadline set earlier in a thread is found: the earlier emails are shown as background, new words only' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->readings->setZone(-300);
+        $w->assistantOn();
+        $thread = 'thread-spring';
+        $add = static function (World $w, array $headers, string $words, array $labels, int $ago) use ($thread): string {
+            $id = $w->fake->add($headers, $labels, '', $w->clock->now - $ago);
+            $w->fake->messages[$id]['threadId'] = $thread;
+            $w->fake->setBody($id, $words);
+            return $id;
+        };
+        $add($w, $renee + ['Message-ID' => '<t1@x>'], "The venue needs an answer by Friday at noon.\n\nOn Mon Clay wrote:\n> OLD-QUOTED-WORDS", ['INBOX'], 3 * 86400);
+        $add($w, ['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'Re: Spring dates', 'Message-ID' => '<t2@x>'], 'Let me check with the band.', ['SENT'], 2 * 86400);
+        $add($w, ['From' => 'Renee Calloway <renee@booking.example>', 'To' => 'me@example.com', 'Subject' => 'Re: Spring dates', 'Message-ID' => '<draft@x>'], 'A DRAFT NOBODY SENT', ['DRAFT'], 86400);
+        $add($w, $renee + ['Message-ID' => '<t3@x>'], 'Any word yet?', ['INBOX', 'UNREAD'], 600);
+        $w->reader->poll($w->account);
+        $w->store->db->run('UPDATE {emails} SET read_state = ? WHERE message_id IN (?, ?)', [Readings::SKIPPED, '<t1@x>', '<t2@x>']);
+        $w->claude->answer = static fn (): array => ['line' => 'Renee asks again for your answer.', 'needs_owner' => true, 'ask' => 'Give Renee your answer for the venue.', 'due' => '2026-11-13T12:00', 'place' => 'none', 'reasons' => ['She asks for your answer.', 'The deadline was set in the email of November 8.']];
+        $w->readings->plan();
+        same(1, $w->readings->work());
+
+        $shown = (string) $w->claude->readings()[0]['body']['messages'][0]['content'];
+        check(str_contains($shown, 'Earlier in this thread'));
+        check(str_contains($shown, 'The venue needs an answer by Friday at noon.'), 'the earlier email that set the deadline is shown');
+        check(str_contains($shown, "The owner, "), 'the owner\'s own earlier reply is named as theirs');
+        check(str_contains($shown, 'Let me check with the band.'));
+        check(!str_contains($shown, 'OLD-QUOTED-WORDS'), 'only the new words of each earlier email');
+        check(!str_contains($shown, 'A DRAFT NOBODY SENT'), 'a draft is not part of the thread');
+        // Earlier emails come before the email itself, which is last.
+        check(strpos($shown, 'The venue needs an answer') < strpos($shown, 'Any word yet?'));
+        check(str_contains($shown, 'The owner has already answered this email: no'), 'the owner\'s reply was before this email, not after it');
+        same(gmmktime(17, 0, 0, 11, 13, 2026), $w->reading('<t3@x>')['due']);
+        // One request to Google brought the whole thread: no second fetch for the email itself.
+        same(1, count(array_filter($w->fake->calls, static fn (string $c): bool => str_contains($c, '/threads/'))));
+    },
+
+    'a long earlier thread is trimmed: the newest few emails, each cut short' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        for ($i = 1; $i <= 9; $i++) {
+            $id = $w->fake->add($renee + ['Message-ID' => "<long-$i@x>"], ['INBOX'], '', $w->clock->now - (20 - $i) * 3600);
+            $w->fake->messages[$id]['threadId'] = 'thread-long';
+            $w->fake->setBody($id, "EMAIL-$i-START " . str_repeat('word ', 300) . "EMAIL-$i-END");
+        }
+        $w->reader->poll($w->account);
+        $w->store->db->run('UPDATE {emails} SET read_state = ? WHERE message_id <> ?', [Readings::SKIPPED, '<long-9@x>']);
+        $w->readings->plan();
+        same(1, $w->readings->work());
+        $shown = (string) $w->claude->readings()[0]['body']['messages'][0]['content'];
+        check(!str_contains($shown, 'EMAIL-1-START') && !str_contains($shown, 'EMAIL-2-START'), 'the oldest are left out');
+        check(str_contains($shown, 'EMAIL-8-START') && str_contains($shown, 'EMAIL-3-START'), 'the six before it are shown');
+        check(!str_contains($shown, 'EMAIL-8-END'), 'each earlier email is cut short');
+        check(str_contains($shown, 'EMAIL-9-END'), 'the email itself is whole');
+        check(mb_strlen($shown) < 6500 + 1600, 'the whole thing stays a fixed size');
+    },
+
+    'mail you send to a person is read to tell whether you asked for something; mail to a company is not' => function () use ($person): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        $w->claude->answer = static fn (string $email): array => str_contains($email, 'signed copy')
+            ? ['line' => 'You asked Renee to send the signed copy.', 'asks' => true, 'ask' => 'The signed copy.', 'reasons' => ['You asked her to send something.']]
+            : ['line' => 'You thanked Renee.', 'asks' => false, 'ask' => 'ignored', 'reasons' => ['Nothing is asked.']];
+        $send = static function (World $w, string $to, string $subject, string $words, string $mid): void {
+            $id = $w->fake->add(['From' => 'me@example.com', 'To' => $to, 'Subject' => $subject, 'Message-ID' => $mid], ['SENT']);
+            $w->fake->setBody($id, $words);
+            $w->reader->poll($w->account);
+        };
+        $send($w, 'Renee Calloway <renee@booking.example>', 'The contract', "Can you send the signed copy?\n\nOn Mon Renee wrote:\n> HER-OLD-WORDS", '<ask@me>');
+        $send($w, 'renee@booking.example', 'Thanks', 'Thank you!', '<thanks@me>');
+        $send($w, 'help@shop.example', 'Order problem', 'Where is my order?', '<shop@me>');
+        // The shop is not a person (the owner said so), so mail to it is not read.
+        $w->sync->push(1, [['kind' => 'sender', 'k' => 'help@shop.example', 'data' => ['cls' => 'feeds', 'src' => 'override']]]);
+        same('feeds', $w->sender('help@shop.example')['cls']);
+        $w->readings->plan();
+        $w->readings->work();
+        $sent = array_values(array_filter($w->claude->readings(), static fn (array $r): bool => str_contains((string) $r['body']['messages'][0]['content'], 'Kind: sent by the owner')));
+        same(2, count($sent), 'the two to a person, not the one to a company');
+        $asked = array_values(array_filter($sent, static fn (array $r): bool => str_contains((string) $r['body']['messages'][0]['content'], 'signed copy')))[0];
+        $shown = (string) $asked['body']['messages'][0]['content'];
+        check(str_contains($shown, 'To: Renee Calloway'));
+        check(str_contains($shown, 'Can you send the signed copy?') && !str_contains($shown, 'HER-OLD-WORDS'), 'only what the owner wrote this time');
+        check(str_contains((string) json_encode($asked['body']['system']), 'SENT to someone'), 'its own instructions');
+        same(['line', 'asks', 'ask', 'reasons'], $asked['body']['output_config']['format']['schema']['required']);
+        $r = $w->reading('<ask@me>');
+        same([true, true, 'The signed copy.', false], [$r['sent'], $r['asks'], $r['ask'], $r['focus']]);
+        $r = $w->reading('<thanks@me>');
+        same([true, false, ''], [$r['sent'], $r['asks'], $r['ask']]);
+        same(null, $w->reading('<shop@me>'));
+    },
+
+    'Focus as it stands: not what you answered, finished, put off or said was not Focus; and what you added by hand' => function () use ($person, $renee, $news): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        $w->claude->answer = static fn (string $email): array => str_contains($email, 'Daily #')
+            ? ['line' => 'Five stories.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'reasons' => ['A newsletter.']]
+            : ['line' => 'Renee asks something.', 'needs_owner' => true, 'ask' => 'Answer Renee.', 'due' => '', 'place' => 'none', 'reasons' => ['It asks you a question.']];
+        $a = $w->arriveWith($renee + ['Message-ID' => '<a@x>'], 'One?', null, ['INBOX'], $w->clock->now - 400);
+        $b = $w->arriveWith($renee + ['Message-ID' => '<b@x>'], 'Two?', null, ['INBOX'], $w->clock->now - 300);
+        $c = $w->arriveWith($renee + ['Message-ID' => '<c@x>'], 'Three?', null, ['INBOX'], $w->clock->now - 200);
+        $d = $w->arriveWith($renee + ['Message-ID' => '<d@x>'], 'Four?', null, ['INBOX'], $w->clock->now - 100);
+        $n = $w->arriveWith($news(1), 'Stories.');
+        $w->readings->plan();
+        $w->readings->work();
+        $ids = static fn (World $w): array => array_map(static fn (array $f): string => $f['message_id'], $w->readings->focusNow());
+        same(['<d@x>', '<c@x>', '<b@x>', '<a@x>'], $ids($w), 'newest first');
+        $w->sync->push(1, [
+            ['kind' => 'done', 'k' => '<a@x>', 'data' => ['at' => $w->clock->now]],
+            ['kind' => 'msgfix', 'k' => '<b@x>', 'data' => ['focus' => false]],
+            ['kind' => 'msgfix', 'k' => '<c@x>', 'data' => ['later' => $w->clock->now + 3600]],
+            ['kind' => 'msgfix', 'k' => $n, 'data' => ['focus' => true]],
+        ]);
+        same([$n, '<d@x>'], $ids($w));
+        same(2, $w->readings->status()['focus']);
+        same('Answer Renee.', $w->readings->focusNow()[1]['ask']);
+        // Its time comes: the one put off is back.
+        $w->later(3700);
+        same([$n, '<d@x>', '<c@x>'], $ids($w));
+        // For the past week: five lines made, two of them corrected (Not Focus, and This needs me).
+        $s = $w->readings->status();
+        same([5, 2], [$s['made7'], $s['fixed7']]);
+    },
+
+    'the sentence at the top of Today is written from the lines below it, and only when they change' => function () use ($person, $renee, $news): void {
+        $w = new World();
+        $person($w);
+        $w->readings->setZone(-300);
+        $w->assistantOn();
+        $day = new \Precis\Day($w->store, $w->readings);
+        $w->claude->answer = static function (string $shown): array {
+            if (str_contains($shown, 'Needs them (')) {
+                return ['sentence' => "Renee needs your yes or no by 3:00 PM,\n and your subscription renews Friday."];
+            }
+            return str_contains($shown, 'Daily #')
+                ? ['line' => 'Your subscription renews Friday.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'reasons' => ['About your account.']]
+                : ['line' => 'Renee asks for a yes or no on March 14.', 'needs_owner' => true, 'ask' => 'Say yes or no to Charlotte, March 14.', 'due' => gmdate('Y-m-d\TH:i', (new World())->clock->now - 5 * 3600 + 5 * 3600), 'place' => 'none', 'reasons' => ['It asks you.']];
+        };
+        // Nothing below it: no sentence, and the assistant is not asked.
+        check($day->refresh());
+        same('', $w->store->item('day', 'today')['text']);
+        same(0, count($w->claude->readings()));
+
+        $a = $w->arriveWith($renee + ['Message-ID' => '<a@x>'], 'Yes or no on March 14? SECRET-EMAIL-WORDS');
+        $w->arriveWith($news(1), 'Your subscription renews Friday. SECRET-FEED-WORDS');
+        $w->readings->plan();
+        $w->readings->work();
+        $before = count($w->claude->readings());
+        same(false, $day->refresh(), 'not twice within twenty minutes');
+        $w->later(1300);
+        check($day->refresh());
+        same($before + 1, count($w->claude->readings()));
+        $sent = $w->claude->readings()[$before];
+        $shown = (string) $sent['body']['messages'][0]['content'];
+        check(str_contains($shown, 'Needs them (1):'));
+        check(str_contains($shown, 'From Renee Calloway'));
+        check(str_contains($shown, 'Say yes or no to Charlotte, March 14.'));
+        check(str_contains($shown, '(needed by '));
+        check(str_contains($shown, 'Arrived today, worth knowing (1):'));
+        check(str_contains($shown, 'Pollstar Daily: Your subscription renews Friday.'));
+        check(!str_contains($shown, 'SECRET'), 'only the assistant\'s own lines are shown, never an email\'s words');
+        check(str_contains((string) json_encode($sent['body']['system']), 'ONE sentence'));
+        $item = $w->store->item('day', 'today');
+        same('Renee needs your yes or no by 3:00 PM, and your subscription renews Friday.', $item['text']);
+        same($w->clock->now, $item['at']);
+        check($w->store->db->val("SELECT micro FROM {spend} WHERE purpose = 'day'") > 0, 'it is on the meter');
+
+        // Nothing changed below it: it is not written again, however long passes.
+        $w->later(7200);
+        same(false, $day->refresh());
+        same($before + 1, count($w->claude->readings()));
+        // The by-time passes: that is a change ("comes due").
+        $w->later(86400);
+        check($day->refresh());
+        check(str_contains((string) $w->claude->readings()[$before + 1]['body']['messages'][0]['content'], 'now past'));
+        // A line is finished: rewritten, and with nothing left the sentence goes.
+        $w->sync->push(1, [['kind' => 'done', 'k' => $a, 'data' => ['at' => $w->clock->now]]]);
+        $w->later(1300);
+        $n = count($w->claude->readings());
+        check($day->refresh());
+        same('', $w->store->item('day', 'today')['text'], 'yesterday\'s Feed line is not today\'s, and nothing needs them');
+        same($n, count($w->claude->readings()));
+        // With the assistant off, nothing is written.
+        $w->readings->turn(false);
+        $w->arriveWith($renee + ['Message-ID' => '<b@x>'], 'Another?');
+        $w->later(1300);
+        same(false, $day->refresh());
     },
 
     'the meter counts what Anthropic reports, at the listed prices' => function () use ($person, $renee): void {

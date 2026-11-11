@@ -17,7 +17,7 @@ namespace Precis;
  */
 final class Schema
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     public static function migrate(Db $db): void
     {
@@ -41,6 +41,13 @@ final class Schema
             foreach (self::v2() as $sql) {
                 $db->exec(str_contains($sql, 'CREATE TABLE') ? $sql . $tail : $sql);
             }
+        }
+        if ($have < 3) {
+            // The owner's own sent mail is read too, to tell whether it asked
+            // for something: whether it did is kept with its reading, and
+            // sent mail already passed over is looked at again.
+            $db->exec('ALTER TABLE {readings} ADD COLUMN asks INT NOT NULL DEFAULT 0');
+            $db->run('UPDATE {emails} SET read_state = 0 WHERE is_from_me = 1');
         }
         $db->upsert('meta', ['k' => 'schema'], ['v' => (string) self::VERSION]);
     }

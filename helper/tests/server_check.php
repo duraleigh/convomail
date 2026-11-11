@@ -108,7 +108,7 @@ try {
     $ok((int) $db->val("SELECT inbox FROM {emails} WHERE message_id = '<a2@x>'") === 1 && (int) $db->val("SELECT inbox FROM {emails} WHERE message_id = '<a3@x>'") === 0, 'whether an email is in the inbox is kept');
     $ok(($store->item('sort', '<a2@x>')['pile'] ?? '') !== '', 'each email that is not from a person has its own place, Feed or Noise');
     $readings = new \Precis\Readings($store, new \Precis\Google($store, new \Precis\CurlHttp()), $sorter);
-    $ok($readings->plan() === 2, 'the two inbox emails wait for the assistant; the owner\'s own does not');
+    $ok($readings->plan() === 3, 'the two inbox emails wait for the assistant, and so does the one the owner sent to a person');
     $a2 = (int) $db->val("SELECT id FROM {emails} WHERE message_id = '<a2@x>'");
     $readings->keep($a2, 'claude-haiku-5-5', ['line' => 'Cinq histoires 🗞 aujourd’hui.', 'focus' => false, 'ask' => '', 'due' => null, 'place' => 'noise', 'why' => ['It is a general newsletter.']]);
     $ok(($store->item('read', '<a2@x>')['line'] ?? '') === 'Cinq histoires 🗞 aujourd’hui.' && ($store->item('read', '<a2@x>')['why'] ?? []) === ['It is a general newsletter.'], 'a reading is kept and told to devices, accents and all');
@@ -116,6 +116,14 @@ try {
     $a1 = (int) $db->val("SELECT id FROM {emails} WHERE message_id = '<a1@x>'");
     $readings->keep($a1, 'claude-haiku-5-5', ['line' => 'José asks about lunch.', 'focus' => true, 'ask' => 'Answer José.', 'due' => time() + 3600, 'place' => '', 'why' => ['It asks you a question.']]);
     $ok($readings->status()['focus'] === 1 && $readings->status()['read'] === 2, 'what needs the owner is counted');
+    $a3 = (int) $db->val("SELECT id FROM {emails} WHERE message_id = '<a3@x>'");
+    $readings->keep($a3, 'claude-haiku-5-5', ['line' => 'You said hello.', 'focus' => false, 'ask' => 'A reply.', 'due' => null, 'place' => '', 'why' => [], 'asks' => true]);
+    $ok(($store->item('read', '<a3@x>')['sent'] ?? false) === true && ($store->item('read', '<a3@x>')['asks'] ?? false) === true && !array_key_exists('sent', $store->item('read', '<a1@x>')), 'a reading of mail the owner sent says whether it asked for something');
+    $store->put('done', '<a1@x>', ['at' => time()]);
+    $ok($readings->focusNow() === [] && $readings->status()['made7'] === 2, 'Focus as it stands leaves out what is finished');
+    $store->remove('done', '<a1@x>');
+    $day = new \Precis\Day($store, $readings);
+    $ok(strlen($day->lines()['key']) === 40 && count($day->lines()['needs']) === 1, 'the lines under the sentence for the day are gathered');
     $use = ['in' => 1000, 'out' => 150, 'cacheRead' => 700, 'cacheWrite' => 0];
     $readings->count('claude-haiku-5-5', 'mail', $use);
     $readings->count('claude-haiku-5-5', 'mail', $use);

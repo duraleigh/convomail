@@ -12,6 +12,9 @@ declare(strict_types=1);
  *   php server_trial.php ceiling DOLLARS  set the monthly ceiling
  *   php server_trial.php on | off         turn the assistant on or off
  *   php server_trial.php status           how the assistant is doing, in counts only
+ *   php server_trial.php threads          read again the emails from people that sit in a thread, now with the
+ *                                         earlier emails shown, and say what changed and what it cost (counts only)
+ *   php server_trial.php step4            sent mail read, the day's sentence, and this month's cost by purpose (counts only)
  *
  * Prints no email addresses, names, subjects or words. Stops itself when the
  * test has cost ten dollars.
@@ -225,7 +228,75 @@ switch ($argv[1] ?? '') {
         echo 'inbox emails by place: Chats ' . (int) $p['people'] . ' | Feed ' . (int) $p['feed'] . ' | Noise ' . (int) $p['noise'] . "\n";
         break;
 
+    case 'threads':
+        if (!$readings->ready()) {
+            echo "the assistant is not on\n";
+            exit(1);
+        }
+        $assistant = $readings->assistant();
+        $model = $readings->model();
+        $rows = $db->all("SELECT e.* FROM {emails} e JOIN {readings} r ON r.email_id = e.id
+            WHERE e.cls = 'people' AND e.is_from_me = 0 AND e.inbox = 1 AND e.gone = 0 AND e.at > ? AND e.thread_id <> ''
+              AND (SELECT COUNT(*) FROM {emails} t WHERE t.thread_id = e.thread_id AND t.gone = 0) > 1
+            ORDER BY e.at DESC", [$now - Readings::DAYS * 86400]);
+        $t = ['read' => 0, 'shown' => 0, 'gained' => 0, 'lost' => 0, 'moved' => 0, 'kept' => 0, 'none' => 0, 'focusOn' => 0, 'focusOff' => 0, 'in' => 0, 'out' => 0, 'cr' => 0, 'cw' => 0, 'micro' => 0, 'failed' => 0];
+        foreach ($rows as $e) {
+            $old = $db->one('SELECT focus, due FROM {readings} WHERE email_id = ?', [(int) $e['id']]);
+            $ctx = $readings->prepare($e);
+            if ($ctx === null) {
+                continue;
+            }
+            try {
+                $answer = $assistant->read($model, Readings::INSTRUCTIONS, $ctx['prompt'], Readings::SHAPE, true);
+            } catch (AssistantError $err) {
+                if ($err->kind === 'key' || $err->kind === 'credit') {
+                    echo 'stopped: ' . $err->getMessage() . "\n";
+                    break;
+                }
+                $t['failed']++;
+                continue;
+            }
+            $t['micro'] += $readings->count($model, 'thread', $answer);
+            $t['in'] += $answer['in'];
+            $t['out'] += $answer['out'];
+            $t['cr'] += $answer['cacheRead'];
+            $t['cw'] += $answer['cacheWrite'];
+            if ($answer['refused'] || $answer['data'] === null) {
+                $t['failed']++;
+                continue;
+            }
+            $new = Readings::normalize($answer['data'], $ctx);
+            $t['read']++;
+            $t['shown'] += (int) ($ctx['earlier'] > 0);
+            $had = $old !== null && $old['due'] !== null;
+            $has = $new['due'] !== null;
+            $t[$had ? ($has ? ((int) $old['due'] === $new['due'] ? 'kept' : 'moved') : 'lost') : ($has ? 'gained' : 'none')]++;
+            $wasFocus = $old !== null && (int) $old['focus'] === 1;
+            $t['focusOn'] += (int) (!$wasFocus && $new['focus']);
+            $t['focusOff'] += (int) ($wasFocus && !$new['focus']);
+            $readings->keep((int) $e['id'], $model, $new);
+        }
+        echo 'emails from people that sit in a thread (inbox, 30 days): ' . count($rows) . ' | read again: ' . $t['read'] . ' | earlier emails were shown for: ' . $t['shown'] . ' | could not read: ' . $t['failed'] . "\n";
+        echo '"by" time: gained ' . $t['gained'] . ' | changed ' . $t['moved'] . ' | same ' . $t['kept'] . ' | lost ' . $t['lost'] . ' | none before or after ' . $t['none'] . "\n";
+        echo '"needs you": newly yes ' . $t['focusOn'] . ' | newly no ' . $t['focusOff'] . "\n";
+        echo 'cost of this pass: ' . $money($t['micro']) . ' | per email ' . $money((int) round($t['micro'] / max(1, $t['read'] + $t['failed']))) . ' | fresh input ' . $t['in'] . ' | kept-ready input ' . $t['cr'] . ' | stored-for-reuse input ' . $t['cw'] . ' | output ' . $t['out'] . "\n";
+        break;
+
+    case 'step4':
+        $s4 = $db->one("SELECT COUNT(*) AS n, SUM(r.asks) AS asks FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE e.is_from_me = 1") ?? [];
+        $mineAll = (int) $db->val('SELECT COUNT(*) FROM {emails} WHERE is_from_me = 1 AND gone = 0 AND at > ?', [$now - Readings::DAYS * 86400]);
+        $mineWait = (int) $db->val('SELECT COUNT(*) FROM {emails} WHERE is_from_me = 1 AND gone = 0 AND at > ? AND read_state IN (0, 1, 4)', [$now - Readings::DAYS * 86400]);
+        echo 'emails the owner sent, 30 days: ' . $mineAll . ' | read: ' . (int) $s4['n'] . ' | of those, asked for something: ' . (int) $s4['asks'] . ' | still waiting to be looked at: ' . $mineWait . "\n";
+        $dayItem = $store->item('day', 'today');
+        echo 'the day\'s sentence: ' . ($dayItem === null ? 'not written yet' : (($dayItem['text'] ?? '') === '' ? 'empty (nothing below it)' : mb_strlen((string) $dayItem['text']) . ' characters') . ', written ' . ($now - (int) ($dayItem['at'] ?? 0)) . ' s ago, after ' . (int) ($dayItem['after'] ?? 0) . ' new emails') . "\n";
+        $st = $readings->status();
+        echo 'need the owner now: ' . $st['focus'] . ' | past week: ' . $st['made7'] . ' lines made, ' . $st['fixed7'] . " corrected by the owner\n";
+        foreach ($db->all("SELECT purpose, SUM(calls) AS calls, SUM(micro) AS micro FROM {spend} WHERE day LIKE ? GROUP BY purpose ORDER BY purpose", [gmdate('Y-m', $now + $readings->zone() * 60) . '-%']) as $r) {
+            echo '  this month, ' . $r['purpose'] . ': ' . (int) $r['calls'] . ' readings, ' . $money((int) $r['micro']) . ((int) $r['calls'] > 0 ? ' (' . $money((int) round((int) $r['micro'] / (int) $r['calls'])) . ' each)' : '') . "\n";
+        }
+        break;
+
     default:
-        echo "run SHARD OF | report | zone MINUTES | choose MODEL | ceiling DOLLARS | on | off | status\n";
+        echo "run SHARD OF | report | zone MINUTES | choose MODEL | ceiling DOLLARS | on | off | status | threads | step4\n";
         exit(2);
 }

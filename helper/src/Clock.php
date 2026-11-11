@@ -39,7 +39,7 @@ final class Clock
     public function run(int $seconds = 48): array
     {
         $started = microtime(true);
-        $out = ['new' => 0, 'older' => 0, 'reminders' => 0, 'back' => 0, 'queued' => 0, 'read' => 0];
+        $out = ['new' => 0, 'older' => 0, 'reminders' => 0, 'back' => 0, 'queued' => 0, 'read' => 0, 'day' => 0];
         foreach ($this->reader->accounts() as $a) {
             $id = (int) $a['id'];
             $this->reader->renewWatch($id);
@@ -60,6 +60,10 @@ final class Clock
             $left = $seconds - (microtime(true) - $started);
             if ($left > 5) {
                 $out['read'] = $this->readings->work($left - 4);
+            }
+            // The sentence at the top of Today, when the page under it has changed.
+            if ($seconds - (microtime(true) - $started) > 6) {
+                $out['day'] = (int) (new Day($this->store, $this->readings))->refresh();
             }
         }
         return $out;

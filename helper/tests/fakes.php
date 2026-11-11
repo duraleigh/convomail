@@ -157,6 +157,12 @@ final class FakeGoogle implements \Precis\Http
             }
             return $json($d);
         }
+        if (str_starts_with($rest, 'threads/')) {
+            $tid = substr($rest, 8);
+            $in = array_values(array_filter($this->messages, static fn (array $m): bool => (string) $m['threadId'] === $tid));
+            usort($in, static fn (array $a, array $b): int => (int) $a['internalDate'] <=> (int) $b['internalDate']);
+            return $in === [] ? $json(['error' => ['message' => 'gone']], 404) : $json(['id' => $tid, 'messages' => $in]);
+        }
         if (str_starts_with($rest, 'messages/')) {
             $id = substr($rest, 9);
             return isset($this->messages[$id]) ? $json($this->messages[$id]) : $json(['error' => ['message' => 'gone']], 404);
