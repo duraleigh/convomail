@@ -13,6 +13,34 @@ void main() {
 
   String? code(String subject, {String text = ''}) => read(subject, text: text).where((f) => f.type == TimelyType.code).firstOrNull?.code;
 
+  group('confirm your email address', () {
+    const button = '<p>Thanks for signing up.</p><a href="https://acme.example/help">Help</a> <a href="https://acme.example/confirm?t=abc123">Confirm my email</a>';
+
+    test('an email that asks you to press a button to confirm your address gives the button\'s own link', () {
+      final f = read('Please confirm your email address', text: 'Press the button to confirm your email address.', html: button, fromName: 'Acme').single;
+      expect(f.type, TimelyType.confirm);
+      expect(f.actionUrl, 'https://acme.example/confirm?t=abc123');
+      expect(f.title, 'Acme');
+      final w = TimelyWindow.of(f, received);
+      expect(w.from, received);
+      expect(w.until, received.add(const Duration(hours: 24)));
+    });
+
+    test('"verify your account" counts too', () {
+      expect(read('One more step', text: 'Verify your account to get started.', html: '<a href="https://x.example/v/1">Verify account</a>').single.type, TimelyType.confirm);
+    });
+
+    test('an email with a code in it is a code, not a button to press', () {
+      final facts = read('Verify your email', text: 'Your code is A7K2QX', html: button);
+      expect(facts.map((f) => f.type), [TimelyType.code]);
+    });
+
+    test('no button, no card; and other mail that says "confirm" is left alone', () {
+      expect(read('Please confirm your email address', text: 'Reply to this email to confirm your email address.'), isEmpty);
+      expect(read('Your order is confirmed', text: 'We will confirm the delivery date soon.', html: button), isEmpty);
+    });
+  });
+
   group('one-time codes', () {
     final cases = <(String, String, String)>[
       ('Your verification code is 482913', '', '482913'),

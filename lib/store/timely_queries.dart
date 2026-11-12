@@ -69,6 +69,12 @@ extension TimelyQueries on AppDatabase {
 
   Future<void> dismissTimely(int id) => (update(timelyItems)..where((t) => t.id.equals(id))).write(TimelyItemsCompanion(dismissedAt: Value(DateTime.now())));
 
+  /// Puts an item off its card until [until]; null brings it back.
+  Future<void> setTimelyLater(int id, DateTime? until) => (update(timelyItems)..where((t) => t.id.equals(id))).write(TimelyItemsCompanion(laterUntil: Value(until)));
+
+  /// Brings back an item taken off its card.
+  Future<void> undismissTimely(int id) => (update(timelyItems)..where((t) => t.id.equals(id))).write(const TimelyItemsCompanion(dismissedAt: Value(null)));
+
   /// Drops items long past, so the table stays small.
   Future<void> pruneTimely(DateTime now) => (delete(timelyItems)..where((t) => t.hideAfter.isSmallerThanValue(now.subtract(const Duration(days: 30))))).go();
 

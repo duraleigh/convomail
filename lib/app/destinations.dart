@@ -5,7 +5,7 @@ import '../store/people_queries.dart';
 
 /// Top-level navigation destinations on the rail.
 enum Destination {
-  today('Today', Icons.today_outlined, Icons.today_rounded),
+  today('Précis', Icons.today_outlined, Icons.today_rounded),
   focus('Focus', Icons.adjust_rounded, Icons.adjust_rounded),
   chats('Chats', Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded),
   feed('Feed', Icons.rss_feed_rounded, Icons.rss_feed_rounded),

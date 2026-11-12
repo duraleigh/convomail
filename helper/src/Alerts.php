@@ -96,13 +96,17 @@ final class Alerts
         $sent = 0;
         $count = count($focus);
 
-        $ring = function (array $data, bool $silentIfFront, bool $codeOnly = false) use ($phones, $quiet, $front, &$sent): void {
+        $ring = function (array $data, bool $silentIfFront, bool $codeOnly = false, bool $kindsOnly = false) use ($phones, $quiet, $front, &$sent): void {
             foreach ($phones as $p) {
                 if ((int) $p['ring'] !== 1) {
                     continue;
                 }
                 // Only a phone whose app knows how to show a code gets one.
                 if ($codeOnly && $this->store->get('push.codes.' . (int) $p['id']) !== '1') {
+                    continue;
+                }
+                // Only a phone whose app has a channel for each kind gets "Good to know" and "Chats".
+                if ($kindsOnly && $this->store->get('push.kinds.' . (int) $p['id']) !== '1') {
                     continue;
                 }
                 if ($silentIfFront && $front) {
@@ -134,6 +138,51 @@ final class Alerts
                     $ring(['t' => 'due', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $f['name'], 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count], false);
                 }
             }
+        }
+
+        // Good to know, and a new email from a person that does not need
+        // the owner: each on a channel of its own on the phone, so the owner
+        // decides there which ones ring. Only once the assistant has read the
+        // email (or will not), so one email never rings twice.
+        $needs = [];
+        foreach ($focus as $f) {
+            $needs[$f['message_id']] = true;
+        }
+        foreach ($db->all("SELECT e.id, e.message_id, e.from_name, e.from_addr, e.subject, e.at, e.cls, e.read_state, r.line, r.know, r.thing, r.at AS read_at
+            FROM {emails} e LEFT JOIN {readings} r ON r.email_id = e.id
+            WHERE e.inbox = 1 AND e.gone = 0 AND e.is_from_me = 0 AND e.message_id <> '' AND e.at > ? AND e.at >= ?
+            ORDER BY e.at DESC LIMIT 200", [$now - 86400, $since]) as $e) {
+            $mid = (string) $e['message_id'];
+            if (isset($needs[$mid])) {
+                continue;
+            }
+            $read = (int) $e['read_state'];
+            if ($read === Readings::NEW || $read === Readings::WAITING || $read === Readings::RETRY) {
+                // Not read yet: wait, unless the assistant is not reading at all.
+                if ($this->readings->ready()) {
+                    continue;
+                }
+            }
+            $fix = $this->store->item('msgfix', $mid) ?? [];
+            $know = (int) ($e['know'] ?? 0) === 1 && ($fix['know'] ?? null) !== false;
+            $kind = $know ? 'know' : ((string) $e['cls'] === 'people' ? 'chat' : null);
+            if ($kind === null) {
+                continue;
+            }
+            $k = $kind . ':' . $mid;
+            if (($fix['off'] ?? null) === true || $this->store->item('done', $mid) !== null || (isset($fix['later']) && (int) $fix['later'] > $now)) {
+                // Finished, dismissed or put off somewhere: its alert comes off below.
+                continue;
+            }
+            $live[Store::key($k)] = true;
+            // An email that needed the owner and no longer does was rung as "Needs you": not again.
+            if ($this->seen($k) || $this->seen('focus:' . $mid)) {
+                continue;
+            }
+            $this->note($k);
+            $who = trim((string) $e['from_name']) !== '' ? trim((string) $e['from_name']) : (string) $e['from_addr'];
+            $line = trim((string) ($e['line'] ?? ''));
+            $ring(['t' => $kind, 'id' => self::number(Store::key($k)), 'mid' => $mid, 'who' => $who, 'ask' => $line !== '' ? $line : (string) $e['subject'], 'n' => $count], true, false, true);
         }
 
         // Reminders the owner set, as their time comes.

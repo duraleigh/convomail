@@ -257,6 +257,46 @@ return [
         same([], $w->fake->pushed);
     },
 
+    '"Good to know" and a new email from a person each ring as their own kind, once, only on a phone that has a channel for them, and never for mail that needs you' => function () use ($ringing, $joined): void {
+        [$w, $alerts, $needs] = $ringing();
+        $phone = $joined($w, 'android', 'phone-1');
+        // A phone still on the older app would show these as "Needs you": it is sent none.
+        $joined($w, 'android', 'phone-old');
+        (new Devices($w->store))->setShowsKinds($phone, true);
+        same(2, $alerts->sweep());
+        $w->fake->pushed = [];
+        $w->later(30);
+        $w->claude->answer = static fn (string $email): array => match (true) {
+            str_contains($email, 'Your order') => ['line' => 'Your hard case was delivered.', 'thing' => 'Hard case', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'know' => true, 'reasons' => ['It arrived.']],
+            str_contains($email, 'Lunch') => ['line' => 'Dana says Friday at 12:30 works.', 'thing' => 'Lunch', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'none', 'know' => false, 'reasons' => ['Nothing is asked of you.']],
+            default => ['line' => 'A newsletter.', 'thing' => 'Newsletter', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'know' => false, 'reasons' => ['Nothing is asked of you.']],
+        };
+        $order = $w->arriveWith(['From' => 'Shop <orders@shop.example>', 'To' => 'me@example.com', 'Subject' => 'Your order', 'List-Unsubscribe' => '<mailto:u@shop.example>'], 'Your order was delivered.');
+        $lunch = $w->arriveWith(['From' => 'Renee Calloway <renee@booking.example>', 'To' => 'me@example.com', 'Subject' => 'Lunch'], 'Friday at 12:30 works.');
+        $w->arriveWith(['From' => 'Pollstar Daily <news@pollstar.example>', 'To' => 'me@example.com', 'Subject' => 'Daily', 'List-Unsubscribe' => '<mailto:u@pollstar.example>'], 'Today in touring.');
+        // Not read yet: nothing rings, so nothing can ring twice.
+        $w->readings->plan();
+        same(0, $alerts->sweep());
+        $w->readings->work();
+        same(2, $alerts->sweep());
+        $byKind = [];
+        foreach ($w->fake->pushed as $p) {
+            same('phone-1', $p['token']);
+            $byKind[$p['data']['t']] = $p['data'];
+        }
+        same(['chat', 'know'], (function (array $k): array { sort($k); return $k; })(array_keys($byKind)));
+        same([$order, 'Shop', 'Your hard case was delivered.'], [$byKind['know']['mid'], $byKind['know']['who'], $byKind['know']['ask']]);
+        same([$lunch, 'Renee Calloway', 'Dana says Friday at 12:30 works.'], [$byKind['chat']['mid'], $byKind['chat']['who'], $byKind['chat']['ask']]);
+        check(!in_array($needs, array_column(array_column($w->fake->pushed, 'data'), 'mid'), true), 'what needs you rang as "Needs you" and not again');
+        // The timer looks again: nothing more.
+        $w->later(60);
+        same(0, $alerts->sweep());
+        // "Does not belong here" on a device: its alert comes off the phone.
+        $w->sync->push(99, [['kind' => 'msgfix', 'k' => $order, 'data' => ['know' => false]]]);
+        same(2, $alerts->sweep(), 'taken off every phone (one that never showed it loses nothing)');
+        same(['t' => 'clear', 'id' => $byKind['know']['id']], array_intersect_key($w->fake->pushed[2]['data'], ['t' => 1, 'id' => 1]));
+    },
+
     'done on any device takes the alert off the phones; later brings it back when its time comes' => function () use ($ringing, $joined): void {
         [$w, $alerts, $mid] = $ringing();
         $joined($w, 'android', 'phone-1');

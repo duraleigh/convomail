@@ -22,10 +22,39 @@ final fyiOffProvider = StreamProvider<Set<String>>((ref) {
   return (db.select(db.settings)..where((s) => s.key.equals(kFyiOff))).watchSingleOrNull().map((row) => HelperQueries.decodeFyiOff(row?.value));
 });
 
+/// The cards on the Précis page that hold what the fixed rules find in mail.
+/// (Travel and Bookings are filled by the assistant when it is on; the
+/// rules fill them, with less to say, when it is not.)
+enum FyiCard {
+  otp('otp', 'OTP'),
+  travel('travel', 'Travel'),
+  bookings('bookings', 'Bookings'),
+  deliveries('deliveries', 'Deliveries'),
+  payments('payments', 'Payments'),
+  fyi('fyi', 'FYI');
+
+  const FyiCard(this.id, this.title);
+  final String id;
+  final String title;
+
+  /// The card a kind of item (a [TimelyType] name) sits on.
+  static FyiCard of(String type) => switch (type) {
+        'code' || 'confirm' => FyiCard.otp,
+        'flight' || 'train' => FyiCard.travel,
+        'hotel' || 'car' || 'event' => FyiCard.bookings,
+        'delivery' => FyiCard.deliveries,
+        'bill' => FyiCard.payments,
+        _ => FyiCard.fyi,
+      };
+}
+
 /// Items that should show at [now], most urgent first: codes, then whatever
-/// comes soonest.
-List<TimelyItem> timelyDue(List<TimelyItem> items, DateTime now) {
-  final due = [for (final i in items) if (!i.showFrom.isAfter(now) && i.hideAfter.isAfter(now)) i];
+/// comes soonest. With [card], only that card's.
+List<TimelyItem> timelyDue(List<TimelyItem> items, DateTime now, {FyiCard? card}) {
+  final due = [
+    for (final i in items)
+      if (!i.showFrom.isAfter(now) && i.hideAfter.isAfter(now) && !(i.laterUntil?.isAfter(now) ?? false) && (card == null || FyiCard.of(i.type) == card)) i,
+  ];
   int rank(TimelyItem i) => i.type == 'code' ? 0 : 1;
   due.sort((a, b) {
     final r = rank(a).compareTo(rank(b));

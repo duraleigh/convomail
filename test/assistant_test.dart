@@ -6,6 +6,7 @@ import 'package:convomail/app/time_format.dart';
 import 'package:convomail/domain/classifier.dart';
 import 'package:convomail/domain/email_pile.dart';
 import 'package:convomail/domain/piles.dart';
+import 'package:convomail/domain/timely_extractor.dart';
 import 'package:convomail/helper/helper_sync.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/mail/transport_factory.dart';
@@ -18,6 +19,7 @@ import 'package:convomail/store/helper_queries.dart';
 import 'package:convomail/store/mail_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
+import 'package:convomail/store/timely_queries.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/compose/compose_form.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
@@ -676,6 +678,8 @@ void main() {
       final renee = (await tester.runAsync(() => message('<renee@x>')))!;
       await pumpApp(tester, Destination.today);
       expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'Renee needs your yes or no on Charlotte by tomorrow, and the bank payment failed.');
+      expect(find.descendant(of: find.byKey(const ValueKey('today-sentence')), matching: find.text('The Lede')), findsOneWidget, reason: 'the sentence is labeled');
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-title'))).data, 'Précis', reason: 'the page is labeled');
       final when = tester.widget<Text>(find.byKey(const ValueKey('today-sentence-when'))).data!;
       expect(when, startsWith('Written '));
       expect(when, endsWith(', after 14 new emails'));
@@ -761,7 +765,7 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('an email opened from Today has a way back: "Back to Today" shows until you go somewhere yourself', (tester) async {
+    testWidgets('an email opened from the Précis page has a way back: "Back to Précis" shows until you go somewhere yourself', (tester) async {
       await tester.runAsync(filled);
       final renee = (await tester.runAsync(() => message('<renee@x>')))!;
       final c = await pumpApp(tester, Destination.today);
@@ -770,7 +774,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(c.read(destinationProvider), Destination.focus);
       expect(find.byKey(const ValueKey('back-to-today')), findsOneWidget);
-      expect(find.text('Back to Today'), findsOneWidget);
+      expect(find.text('Back to Précis'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('back-to-today')));
       await tester.pumpAndSettle();
       expect(c.read(destinationProvider), Destination.today);
@@ -979,6 +983,22 @@ void main() {
       await tester.tap(find.byKey(ValueKey('needs-${bank.id}')));
       await tester.pumpAndSettle();
       expect(c.read(destinationProvider), Destination.focus);
+      await teardown(tester);
+    });
+
+    testWidgets('a delivery is headed by who it comes from, with what is inside in small print underneath', (tester) async {
+      await tester.runAsync(filled);
+      await tester.runAsync(() async {
+        await helperSays('read', '<daily-1@x>', {'line': 'Your order is on its way.', 'focus': false, 'ask': '', 'why': <String>[], 'answered': false, 'at': 1, 'know': false, 'thing': 'Hard case and more'});
+        await db.upsertTimely(await message('<daily-1@x>'), [TimelyFact(type: TimelyType.delivery, dedupeKey: 'track:9', title: 'Pollstar Shop', startsAt: DateTime.now().add(const Duration(days: 1)))], DateTime.now());
+      });
+      await pumpApp(tester, Destination.today);
+      final item = (await tester.runAsync(() => db.select(db.timelyItems).get()))!.single;
+      final card = find.byKey(const ValueKey('today-deliveries'));
+      expect(tester.widget<Text>(find.descendant(of: card, matching: find.byKey(ValueKey('timely-title-${item.id}')))).data, 'Pollstar Shop');
+      expect(tester.widget<Text>(find.descendant(of: card, matching: find.byKey(ValueKey('timely-inside-${item.id}')))).data, 'Hard case and more');
+      final title = tester.widget<Text>(find.byKey(ValueKey('timely-title-${item.id}'))).style!.fontSize!;
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-inside-${item.id}'))).style!.fontSize!, lessThan(title), reason: 'smaller print');
       await teardown(tester);
     });
 

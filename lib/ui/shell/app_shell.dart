@@ -179,7 +179,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                                 key: const ValueKey('back-to-today'),
                                 onPressed: () => ref.read(destinationProvider.notifier).select(Destination.today),
                                 icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                                label: const Text('Back to Today'),
+                                label: const Text('Back to Précis'),
                               ),
                             ),
                           ),

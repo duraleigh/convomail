@@ -83,7 +83,7 @@ class _GoogleCalendarDetailState extends ConsumerState<GoogleCalendarDetail> {
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Text(
-            "Today shows the day's events from every calendar you show in Google Calendar, in its colors. Précis only reads your calendar. It never adds or changes anything.",
+            "The Précis page shows the day's events from every calendar you show in Google Calendar, in its colors. Précis only reads your calendar. It never adds or changes anything.",
             style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant),
           ),
         ),
@@ -130,7 +130,7 @@ class _GoogleCalendarDetailState extends ConsumerState<GoogleCalendarDetail> {
                   key: ValueKey('calendar-show-${c.id}'),
                   secondary: CircleAvatar(backgroundColor: Color(c.color), radius: 8),
                   title: Text(c.name),
-                  subtitle: Text(c.primary ? 'Main calendar' : 'Shown on Today'),
+                  subtitle: Text(c.primary ? 'Main calendar' : 'Shown on the Précis page'),
                   value: !hidden.contains(c.id),
                   onChanged: (v) => ref.read(calendarSyncProvider).setHidden(c.id, !v),
                 ),

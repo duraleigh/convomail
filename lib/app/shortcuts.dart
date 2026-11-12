@@ -44,7 +44,7 @@ abstract final class AppShortcuts {
 
   /// Human-readable list for the Settings screen.
   static const List<(String, String)> descriptions = [
-    ('Ctrl+1 … Ctrl+6', 'Switch to Today, Focus, Chats, Feed, Noise, Settings'),
+    ('Ctrl+1 … Ctrl+6', 'Switch to Précis, Focus, Chats, Feed, Noise, Settings'),
     ('Ctrl+N', 'New message'),
     ('Ctrl+F or /', 'Search'),
     ('R / Shift+R / F', 'Reply / Reply all / Forward the selected conversation'),

@@ -117,11 +117,11 @@ void main() {
 
   tearDown(() async => db.close());
 
-  testWidgets('a phone shows one screen at a time, with Today, Focus, Chats, Feed and More along the bottom', (tester) async {
+  testWidgets('a phone shows one screen at a time, with Précis, Focus, Chats, Feed and More along the bottom', (tester) async {
     await pump(tester, Destination.today);
     final bar = find.byKey(const ValueKey('compact-bar'));
     expect(bar, findsOneWidget);
-    for (final label in ['Today', 'Focus', 'Chats', 'Feed', 'More']) {
+    for (final label in ['Précis', 'Focus', 'Chats', 'Feed', 'More']) {
       expect(find.descendant(of: bar, matching: find.text(label)), findsOneWidget, reason: label);
     }
     expect(find.descendant(of: bar, matching: find.text('Noise')), findsNothing);

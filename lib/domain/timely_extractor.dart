@@ -4,7 +4,7 @@ import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 
 /// The kinds of timely information found in mail (spec 4.21).
-enum TimelyType { code, delivery, flight, train, hotel, car, event, bill }
+enum TimelyType { code, delivery, flight, train, hotel, car, event, bill, confirm }
 
 /// One timely thing found in a message.
 class TimelyFact {
@@ -54,6 +54,7 @@ class TimelyWindow {
   static const travelLead = Duration(hours: 48);
   static const otherLead = Duration(hours: 24);
   static const billLead = Duration(days: 3);
+  static const confirmLifetime = Duration(hours: 24);
 
   /// The window for [f], from a message received at [received].
   static TimelyWindow of(TimelyFact f, DateTime received) {
@@ -84,6 +85,8 @@ class TimelyWindow {
       case TimelyType.bill:
         final s = start ?? received;
         return TimelyWindow(s.subtract(billLead), endOfDay(s));
+      case TimelyType.confirm:
+        return TimelyWindow(received, received.add(confirmLifetime));
     }
   }
 }
@@ -132,6 +135,13 @@ class TimelyExtractor {
         ..._bill(m),
       ]) {
         facts.putIfAbsent(f.dedupeKey, () => f);
+      }
+      // An email with a code in it is a code; one with only a button to
+      // press is "confirm your email address".
+      if (!facts.values.any((f) => f.type == TimelyType.code)) {
+        for (final f in _confirm(m)) {
+          facts.putIfAbsent(f.dedupeKey, () => f);
+        }
       }
     }
     return facts.values.toList();
@@ -409,6 +419,33 @@ class TimelyExtractor {
         startsAt: m.received,
         code: code,
         actionLabel: 'Copy',
+      ),
+    ];
+  }
+
+  // ---- "confirm your email address" ---------------------------------------
+
+  static final _confirmTopic = RegExp(
+    r'\b(?:confirm|verify|validate|activate)\s+(?:your\s+|this\s+|the\s+|my\s+)?(?:new\s+)?(?:e-?mail(?:\s+address)?|account|sign-?\s?up|subscription|registration)\b',
+    caseSensitive: false,
+  );
+  static final _confirmButton = RegExp(r'\b(?:confirm|verify|validate|activate)\b', caseSensitive: false);
+
+  /// An email that asks the reader to press a button to confirm their
+  /// address: the button's own link, so it can be pressed from the card.
+  List<TimelyFact> _confirm(TimelyInput m) {
+    final head = m.text.length > 1500 ? m.text.substring(0, 1500) : m.text;
+    if (!_confirmTopic.hasMatch(m.subject) && !_confirmTopic.hasMatch(head)) return const [];
+    final url = _linkLabelled(m.html, _confirmButton);
+    if (url == null) return const [];
+    return [
+      TimelyFact(
+        type: TimelyType.confirm,
+        dedupeKey: 'confirm:${m.messageKey}',
+        title: m.fromName.isEmpty ? m.fromAddress : m.fromName,
+        startsAt: m.received,
+        actionUrl: url,
+        actionLabel: 'Confirm',
       ),
     ];
   }

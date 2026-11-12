@@ -109,6 +109,12 @@ final class Devices
         $this->store->set('push.codes.' . $id, $shows ? '1' : null);
     }
 
+    /** Whether this phone's app has a channel of its own for "Good to know" and for "Chats". */
+    public function setShowsKinds(int $id, bool $shows): void
+    {
+        $this->store->set('push.kinds.' . $id, $shows ? '1' : null);
+    }
+
     public function showsCodes(int $id): bool
     {
         return $this->store->get('push.codes.' . $id) === '1';

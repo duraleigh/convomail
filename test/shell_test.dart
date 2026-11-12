@@ -48,7 +48,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Chats'), findsWidgets);
-    expect(find.text('Today'), findsOneWidget);
+    expect(find.text('Précis'), findsWidgets);
     expect(find.text('Focus'), findsOneWidget);
     expect(find.text('Feed'), findsOneWidget);
     expect(find.text('Noise'), findsOneWidget);
@@ -82,7 +82,7 @@ void main() {
     await tester.pumpWidget(_app(InMemorySettingsStore()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Today'));
+    await tester.tap(find.text('Précis').first);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('today-greeting')), findsOneWidget);
     expect(find.byKey(const ValueKey('today-needs-you')), findsNothing, reason: 'Needs you has nothing until the assistant is on, and an empty card is not drawn');
@@ -146,7 +146,7 @@ void main() {
     await tester.tap(find.text('Noise').first);
     await tester.pumpAndSettle();
     expect(find.text('Nothing in Noise'), findsOneWidget);
-    await tester.tap(find.text('Today').first);
+    await tester.tap(find.text('Précis').first);
     await tester.pumpAndSettle();
     // With no mail, only Schedule shows: a card with nothing in it is not drawn.
     expect(find.text('Schedule'), findsOneWidget);

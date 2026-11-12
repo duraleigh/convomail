@@ -4,8 +4,11 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/app_log.dart';
+import '../app/conversation_state.dart';
 import '../app/destinations.dart';
 import '../app/mail_state.dart';
+import '../app/people_state.dart';
+import '../app/search_state.dart';
 import '../helper/helper_client.dart';
 import '../helper/helper_sync.dart';
 import '../store/database.dart';
@@ -117,6 +120,13 @@ class PhoneAlerts {
       if (m != null && m.classification == 'feeds' && (await _db.watchMailItem(m.id).first)?.needsYou != true) {
         _ref.read(destinationProvider.notifier).select(Destination.feed);
         _ref.read(openMailProvider('feed').notifier).open(m.id);
+        return;
+      }
+      // From a person and not in Focus: its place is that person's chat.
+      if (m != null && (await _db.watchMailItem(m.id).first)?.needsYou != true) {
+        _ref.read(expandedMessagesProvider.notifier).expand(m.id);
+        _ref.read(scrollToMessageProvider.notifier).request(m.id);
+        await openRow(_ref.read, 'c:${m.fromContactKey}');
         return;
       }
       _ref.read(destinationProvider.notifier).select(Destination.focus);

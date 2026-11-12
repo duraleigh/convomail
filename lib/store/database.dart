@@ -387,7 +387,37 @@ class TimelyItems extends Table {
   TextColumn get code => text().nullable()();
   TextColumn get status => text().nullable()();
   DateTimeColumn get dismissedAt => dateTime().nullable()();
+
+  /// Put off from its card until then.
+  DateTimeColumn get laterUntil => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// A travel leg or a booking the assistant read out of the mail. The helper
+/// keeps it, so it is the same on every device.
+class HelperCards extends Table {
+  TextColumn get k => text()();
+
+  /// 'leg' (one flight or train) or 'booking'.
+  TextColumn get kind => text()();
+
+  /// Everything the card shows, as JSON (see [TripLeg] and [Booking]).
+  TextColumn get data => text().withDefault(const Constant('{}'))();
+
+  /// Departure and arrival, or when a booking starts and ends.
+  DateTimeColumn get startsAt => dateTime().nullable()();
+  DateTimeColumn get endsAt => dateTime().nullable()();
+
+  /// The newest email about it, by Message-ID.
+  TextColumn get messageId => text().withDefault(const Constant(''))();
+
+  /// Taken off its card by the user, or put off until later.
+  BoolColumn get dismissed => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get laterUntil => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
+
+  @override
+  Set<Column> get primaryKey => {k};
 }
 
 class FeedsCategoryRows extends Table {
@@ -670,6 +700,10 @@ class HelperReadings extends Table {
   /// A few words naming what the email is about ("Amazon hard case").
   TextColumn get thing => text().withDefault(const Constant(''))();
 
+  /// An email written for the user to look over and send: only ever to ask
+  /// whoever booked travel for them for the details that are missing.
+  TextColumn get draft => text().withDefault(const Constant(''))();
+
   @override
   Set<Column> get primaryKey => {messageId};
 }
@@ -711,7 +745,7 @@ class HelperState extends Table {
   Cards,
   CardTags,
   Reminders,
-  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState, HelperReadings, HelperMarks])
+  PlannerEvents, TimelyItems, AddressBookEntryRows, HelperOutbox, HelperSenders, HelperVerdicts, HelperState, HelperReadings, HelperMarks, HelperCards])
 class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
 
@@ -728,7 +762,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 25;
+  int get schemaVersion => 26;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -922,6 +956,13 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             // Readings now say what is good to know and name what an email
             // is about; those already taken in are taken in again.
             if (from >= 20) await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
+          }
+          if (from < 26) {
+            // Travel legs and bookings from the helper; an item on a card
+            // can be put off; a reading can carry an email to look over.
+            await m.createTable(helperCards);
+            if (from >= 13) await m.addColumn(timelyItems, timelyItems.laterUntil);
+            if (from >= 21) await m.addColumn(helperReadings, helperReadings.draft);
           }
         },
         beforeOpen: (details) async {

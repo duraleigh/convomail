@@ -15096,6 +15096,17 @@ class $TimelyItemsTable extends TimelyItems
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _laterUntilMeta = const VerificationMeta(
+    'laterUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> laterUntil = GeneratedColumn<DateTime>(
+    'later_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -15127,6 +15138,7 @@ class $TimelyItemsTable extends TimelyItems
     code,
     status,
     dismissedAt,
+    laterUntil,
     updatedAt,
   ];
   @override
@@ -15254,6 +15266,12 @@ class $TimelyItemsTable extends TimelyItems
         ),
       );
     }
+    if (data.containsKey('later_until')) {
+      context.handle(
+        _laterUntilMeta,
+        laterUntil.isAcceptableOrUnknown(data['later_until']!, _laterUntilMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -15337,6 +15355,10 @@ class $TimelyItemsTable extends TimelyItems
         DriftSqlType.dateTime,
         data['${effectivePrefix}dismissed_at'],
       ),
+      laterUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}later_until'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -15370,6 +15392,9 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
   final String? code;
   final String? status;
   final DateTime? dismissedAt;
+
+  /// Put off from its card until then.
+  final DateTime? laterUntil;
   final DateTime updatedAt;
   const TimelyItem({
     required this.id,
@@ -15389,6 +15414,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     this.code,
     this.status,
     this.dismissedAt,
+    this.laterUntil,
     required this.updatedAt,
   });
   @override
@@ -15429,6 +15455,9 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     if (!nullToAbsent || dismissedAt != null) {
       map['dismissed_at'] = Variable<DateTime>(dismissedAt);
     }
+    if (!nullToAbsent || laterUntil != null) {
+      map['later_until'] = Variable<DateTime>(laterUntil);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -15468,6 +15497,9 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       dismissedAt: dismissedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(dismissedAt),
+      laterUntil: laterUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(laterUntil),
       updatedAt: Value(updatedAt),
     );
   }
@@ -15495,6 +15527,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       code: serializer.fromJson<String?>(json['code']),
       status: serializer.fromJson<String?>(json['status']),
       dismissedAt: serializer.fromJson<DateTime?>(json['dismissedAt']),
+      laterUntil: serializer.fromJson<DateTime?>(json['laterUntil']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -15519,6 +15552,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       'code': serializer.toJson<String?>(code),
       'status': serializer.toJson<String?>(status),
       'dismissedAt': serializer.toJson<DateTime?>(dismissedAt),
+      'laterUntil': serializer.toJson<DateTime?>(laterUntil),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -15541,6 +15575,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     Value<String?> code = const Value.absent(),
     Value<String?> status = const Value.absent(),
     Value<DateTime?> dismissedAt = const Value.absent(),
+    Value<DateTime?> laterUntil = const Value.absent(),
     DateTime? updatedAt,
   }) => TimelyItem(
     id: id ?? this.id,
@@ -15560,6 +15595,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     code: code.present ? code.value : this.code,
     status: status.present ? status.value : this.status,
     dismissedAt: dismissedAt.present ? dismissedAt.value : this.dismissedAt,
+    laterUntil: laterUntil.present ? laterUntil.value : this.laterUntil,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   TimelyItem copyWithCompanion(TimelyItemsCompanion data) {
@@ -15587,6 +15623,9 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       dismissedAt: data.dismissedAt.present
           ? data.dismissedAt.value
           : this.dismissedAt,
+      laterUntil: data.laterUntil.present
+          ? data.laterUntil.value
+          : this.laterUntil,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -15611,6 +15650,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
           ..write('code: $code, ')
           ..write('status: $status, ')
           ..write('dismissedAt: $dismissedAt, ')
+          ..write('laterUntil: $laterUntil, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -15635,6 +15675,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     code,
     status,
     dismissedAt,
+    laterUntil,
     updatedAt,
   );
   @override
@@ -15658,6 +15699,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
           other.code == this.code &&
           other.status == this.status &&
           other.dismissedAt == this.dismissedAt &&
+          other.laterUntil == this.laterUntil &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -15679,6 +15721,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
   final Value<String?> code;
   final Value<String?> status;
   final Value<DateTime?> dismissedAt;
+  final Value<DateTime?> laterUntil;
   final Value<DateTime> updatedAt;
   const TimelyItemsCompanion({
     this.id = const Value.absent(),
@@ -15698,6 +15741,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     this.code = const Value.absent(),
     this.status = const Value.absent(),
     this.dismissedAt = const Value.absent(),
+    this.laterUntil = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
   TimelyItemsCompanion.insert({
@@ -15718,6 +15762,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     this.code = const Value.absent(),
     this.status = const Value.absent(),
     this.dismissedAt = const Value.absent(),
+    this.laterUntil = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : type = Value(type),
        dedupeKey = Value(dedupeKey),
@@ -15741,6 +15786,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     Expression<String>? code,
     Expression<String>? status,
     Expression<DateTime>? dismissedAt,
+    Expression<DateTime>? laterUntil,
     Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
@@ -15761,6 +15807,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
       if (code != null) 'code': code,
       if (status != null) 'status': status,
       if (dismissedAt != null) 'dismissed_at': dismissedAt,
+      if (laterUntil != null) 'later_until': laterUntil,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
@@ -15783,6 +15830,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     Value<String?>? code,
     Value<String?>? status,
     Value<DateTime?>? dismissedAt,
+    Value<DateTime?>? laterUntil,
     Value<DateTime>? updatedAt,
   }) {
     return TimelyItemsCompanion(
@@ -15803,6 +15851,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
       code: code ?? this.code,
       status: status ?? this.status,
       dismissedAt: dismissedAt ?? this.dismissedAt,
+      laterUntil: laterUntil ?? this.laterUntil,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -15861,6 +15910,9 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     if (dismissedAt.present) {
       map['dismissed_at'] = Variable<DateTime>(dismissedAt.value);
     }
+    if (laterUntil.present) {
+      map['later_until'] = Variable<DateTime>(laterUntil.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -15887,6 +15939,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
           ..write('code: $code, ')
           ..write('status: $status, ')
           ..write('dismissedAt: $dismissedAt, ')
+          ..write('laterUntil: $laterUntil, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -17760,6 +17813,16 @@ class $HelperReadingsTable extends HelperReadings
     requiredDuringInsert: false,
     defaultValue: const Constant(''),
   );
+  static const VerificationMeta _draftMeta = const VerificationMeta('draft');
+  @override
+  late final GeneratedColumn<String> draft = GeneratedColumn<String>(
+    'draft',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -17774,6 +17837,7 @@ class $HelperReadingsTable extends HelperReadings
     asks,
     know,
     thing,
+    draft,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -17861,6 +17925,12 @@ class $HelperReadingsTable extends HelperReadings
         thing.isAcceptableOrUnknown(data['thing']!, _thingMeta),
       );
     }
+    if (data.containsKey('draft')) {
+      context.handle(
+        _draftMeta,
+        draft.isAcceptableOrUnknown(data['draft']!, _draftMeta),
+      );
+    }
     return context;
   }
 
@@ -17918,6 +17988,10 @@ class $HelperReadingsTable extends HelperReadings
         DriftSqlType.string,
         data['${effectivePrefix}thing'],
       )!,
+      draft: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}draft'],
+      )!,
     );
   }
 
@@ -17954,6 +18028,10 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
 
   /// A few words naming what the email is about ("Amazon hard case").
   final String thing;
+
+  /// An email written for the user to look over and send: only ever to ask
+  /// whoever booked travel for them for the details that are missing.
+  final String draft;
   const HelperReading({
     required this.messageId,
     required this.line,
@@ -17967,6 +18045,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     required this.asks,
     required this.know,
     required this.thing,
+    required this.draft,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -17987,6 +18066,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     map['asks'] = Variable<bool>(asks);
     map['know'] = Variable<bool>(know);
     map['thing'] = Variable<String>(thing);
+    map['draft'] = Variable<String>(draft);
     return map;
   }
 
@@ -18006,6 +18086,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       asks: Value(asks),
       know: Value(know),
       thing: Value(thing),
+      draft: Value(draft),
     );
   }
 
@@ -18027,6 +18108,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       asks: serializer.fromJson<bool>(json['asks']),
       know: serializer.fromJson<bool>(json['know']),
       thing: serializer.fromJson<String>(json['thing']),
+      draft: serializer.fromJson<String>(json['draft']),
     );
   }
   @override
@@ -18045,6 +18127,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       'asks': serializer.toJson<bool>(asks),
       'know': serializer.toJson<bool>(know),
       'thing': serializer.toJson<String>(thing),
+      'draft': serializer.toJson<String>(draft),
     };
   }
 
@@ -18061,6 +18144,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     bool? asks,
     bool? know,
     String? thing,
+    String? draft,
   }) => HelperReading(
     messageId: messageId ?? this.messageId,
     line: line ?? this.line,
@@ -18074,6 +18158,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     asks: asks ?? this.asks,
     know: know ?? this.know,
     thing: thing ?? this.thing,
+    draft: draft ?? this.draft,
   );
   HelperReading copyWithCompanion(HelperReadingsCompanion data) {
     return HelperReading(
@@ -18089,6 +18174,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       asks: data.asks.present ? data.asks.value : this.asks,
       know: data.know.present ? data.know.value : this.know,
       thing: data.thing.present ? data.thing.value : this.thing,
+      draft: data.draft.present ? data.draft.value : this.draft,
     );
   }
 
@@ -18106,7 +18192,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           ..write('sent: $sent, ')
           ..write('asks: $asks, ')
           ..write('know: $know, ')
-          ..write('thing: $thing')
+          ..write('thing: $thing, ')
+          ..write('draft: $draft')
           ..write(')'))
         .toString();
   }
@@ -18125,6 +18212,7 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     asks,
     know,
     thing,
+    draft,
   );
   @override
   bool operator ==(Object other) =>
@@ -18141,7 +18229,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           other.sent == this.sent &&
           other.asks == this.asks &&
           other.know == this.know &&
-          other.thing == this.thing);
+          other.thing == this.thing &&
+          other.draft == this.draft);
 }
 
 class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
@@ -18157,6 +18246,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
   final Value<bool> asks;
   final Value<bool> know;
   final Value<String> thing;
+  final Value<String> draft;
   final Value<int> rowid;
   const HelperReadingsCompanion({
     this.messageId = const Value.absent(),
@@ -18171,6 +18261,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     this.asks = const Value.absent(),
     this.know = const Value.absent(),
     this.thing = const Value.absent(),
+    this.draft = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HelperReadingsCompanion.insert({
@@ -18186,6 +18277,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     this.asks = const Value.absent(),
     this.know = const Value.absent(),
     this.thing = const Value.absent(),
+    this.draft = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId);
   static Insertable<HelperReading> custom({
@@ -18201,6 +18293,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     Expression<bool>? asks,
     Expression<bool>? know,
     Expression<String>? thing,
+    Expression<String>? draft,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -18216,6 +18309,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
       if (asks != null) 'asks': asks,
       if (know != null) 'know': know,
       if (thing != null) 'thing': thing,
+      if (draft != null) 'draft': draft,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -18233,6 +18327,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     Value<bool>? asks,
     Value<bool>? know,
     Value<String>? thing,
+    Value<String>? draft,
     Value<int>? rowid,
   }) {
     return HelperReadingsCompanion(
@@ -18248,6 +18343,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
       asks: asks ?? this.asks,
       know: know ?? this.know,
       thing: thing ?? this.thing,
+      draft: draft ?? this.draft,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -18291,6 +18387,9 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     if (thing.present) {
       map['thing'] = Variable<String>(thing.value);
     }
+    if (draft.present) {
+      map['draft'] = Variable<String>(draft.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -18312,6 +18411,7 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
           ..write('asks: $asks, ')
           ..write('know: $know, ')
           ..write('thing: $thing, ')
+          ..write('draft: $draft, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -18690,6 +18790,570 @@ class HelperMarksCompanion extends UpdateCompanion<HelperMark> {
   }
 }
 
+class $HelperCardsTable extends HelperCards
+    with TableInfo<$HelperCardsTable, HelperCard> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $HelperCardsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _kMeta = const VerificationMeta('k');
+  @override
+  late final GeneratedColumn<String> k = GeneratedColumn<String>(
+    'k',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _kindMeta = const VerificationMeta('kind');
+  @override
+  late final GeneratedColumn<String> kind = GeneratedColumn<String>(
+    'kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _dataMeta = const VerificationMeta('data');
+  @override
+  late final GeneratedColumn<String> data = GeneratedColumn<String>(
+    'data',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
+  );
+  static const VerificationMeta _startsAtMeta = const VerificationMeta(
+    'startsAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startsAt = GeneratedColumn<DateTime>(
+    'starts_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _endsAtMeta = const VerificationMeta('endsAt');
+  @override
+  late final GeneratedColumn<DateTime> endsAt = GeneratedColumn<DateTime>(
+    'ends_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _messageIdMeta = const VerificationMeta(
+    'messageId',
+  );
+  @override
+  late final GeneratedColumn<String> messageId = GeneratedColumn<String>(
+    'message_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _dismissedMeta = const VerificationMeta(
+    'dismissed',
+  );
+  @override
+  late final GeneratedColumn<bool> dismissed = GeneratedColumn<bool>(
+    'dismissed',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("dismissed" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _laterUntilMeta = const VerificationMeta(
+    'laterUntil',
+  );
+  @override
+  late final GeneratedColumn<DateTime> laterUntil = GeneratedColumn<DateTime>(
+    'later_until',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    k,
+    kind,
+    data,
+    startsAt,
+    endsAt,
+    messageId,
+    dismissed,
+    laterUntil,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'helper_cards';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<HelperCard> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('k')) {
+      context.handle(_kMeta, k.isAcceptableOrUnknown(data['k']!, _kMeta));
+    } else if (isInserting) {
+      context.missing(_kMeta);
+    }
+    if (data.containsKey('kind')) {
+      context.handle(
+        _kindMeta,
+        kind.isAcceptableOrUnknown(data['kind']!, _kindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_kindMeta);
+    }
+    if (data.containsKey('data')) {
+      context.handle(
+        _dataMeta,
+        this.data.isAcceptableOrUnknown(data['data']!, _dataMeta),
+      );
+    }
+    if (data.containsKey('starts_at')) {
+      context.handle(
+        _startsAtMeta,
+        startsAt.isAcceptableOrUnknown(data['starts_at']!, _startsAtMeta),
+      );
+    }
+    if (data.containsKey('ends_at')) {
+      context.handle(
+        _endsAtMeta,
+        endsAt.isAcceptableOrUnknown(data['ends_at']!, _endsAtMeta),
+      );
+    }
+    if (data.containsKey('message_id')) {
+      context.handle(
+        _messageIdMeta,
+        messageId.isAcceptableOrUnknown(data['message_id']!, _messageIdMeta),
+      );
+    }
+    if (data.containsKey('dismissed')) {
+      context.handle(
+        _dismissedMeta,
+        dismissed.isAcceptableOrUnknown(data['dismissed']!, _dismissedMeta),
+      );
+    }
+    if (data.containsKey('later_until')) {
+      context.handle(
+        _laterUntilMeta,
+        laterUntil.isAcceptableOrUnknown(data['later_until']!, _laterUntilMeta),
+      );
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {k};
+  @override
+  HelperCard map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return HelperCard(
+      k: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}k'],
+      )!,
+      kind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}kind'],
+      )!,
+      data: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}data'],
+      )!,
+      startsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}starts_at'],
+      ),
+      endsAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}ends_at'],
+      ),
+      messageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}message_id'],
+      )!,
+      dismissed: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}dismissed'],
+      )!,
+      laterUntil: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}later_until'],
+      ),
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $HelperCardsTable createAlias(String alias) {
+    return $HelperCardsTable(attachedDatabase, alias);
+  }
+}
+
+class HelperCard extends DataClass implements Insertable<HelperCard> {
+  final String k;
+
+  /// 'leg' (one flight or train) or 'booking'.
+  final String kind;
+
+  /// Everything the card shows, as JSON (see [TripLeg] and [Booking]).
+  final String data;
+
+  /// Departure and arrival, or when a booking starts and ends.
+  final DateTime? startsAt;
+  final DateTime? endsAt;
+
+  /// The newest email about it, by Message-ID.
+  final String messageId;
+
+  /// Taken off its card by the user, or put off until later.
+  final bool dismissed;
+  final DateTime? laterUntil;
+  final DateTime updatedAt;
+  const HelperCard({
+    required this.k,
+    required this.kind,
+    required this.data,
+    this.startsAt,
+    this.endsAt,
+    required this.messageId,
+    required this.dismissed,
+    this.laterUntil,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['k'] = Variable<String>(k);
+    map['kind'] = Variable<String>(kind);
+    map['data'] = Variable<String>(data);
+    if (!nullToAbsent || startsAt != null) {
+      map['starts_at'] = Variable<DateTime>(startsAt);
+    }
+    if (!nullToAbsent || endsAt != null) {
+      map['ends_at'] = Variable<DateTime>(endsAt);
+    }
+    map['message_id'] = Variable<String>(messageId);
+    map['dismissed'] = Variable<bool>(dismissed);
+    if (!nullToAbsent || laterUntil != null) {
+      map['later_until'] = Variable<DateTime>(laterUntil);
+    }
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  HelperCardsCompanion toCompanion(bool nullToAbsent) {
+    return HelperCardsCompanion(
+      k: Value(k),
+      kind: Value(kind),
+      data: Value(data),
+      startsAt: startsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startsAt),
+      endsAt: endsAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(endsAt),
+      messageId: Value(messageId),
+      dismissed: Value(dismissed),
+      laterUntil: laterUntil == null && nullToAbsent
+          ? const Value.absent()
+          : Value(laterUntil),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory HelperCard.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return HelperCard(
+      k: serializer.fromJson<String>(json['k']),
+      kind: serializer.fromJson<String>(json['kind']),
+      data: serializer.fromJson<String>(json['data']),
+      startsAt: serializer.fromJson<DateTime?>(json['startsAt']),
+      endsAt: serializer.fromJson<DateTime?>(json['endsAt']),
+      messageId: serializer.fromJson<String>(json['messageId']),
+      dismissed: serializer.fromJson<bool>(json['dismissed']),
+      laterUntil: serializer.fromJson<DateTime?>(json['laterUntil']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'k': serializer.toJson<String>(k),
+      'kind': serializer.toJson<String>(kind),
+      'data': serializer.toJson<String>(data),
+      'startsAt': serializer.toJson<DateTime?>(startsAt),
+      'endsAt': serializer.toJson<DateTime?>(endsAt),
+      'messageId': serializer.toJson<String>(messageId),
+      'dismissed': serializer.toJson<bool>(dismissed),
+      'laterUntil': serializer.toJson<DateTime?>(laterUntil),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  HelperCard copyWith({
+    String? k,
+    String? kind,
+    String? data,
+    Value<DateTime?> startsAt = const Value.absent(),
+    Value<DateTime?> endsAt = const Value.absent(),
+    String? messageId,
+    bool? dismissed,
+    Value<DateTime?> laterUntil = const Value.absent(),
+    DateTime? updatedAt,
+  }) => HelperCard(
+    k: k ?? this.k,
+    kind: kind ?? this.kind,
+    data: data ?? this.data,
+    startsAt: startsAt.present ? startsAt.value : this.startsAt,
+    endsAt: endsAt.present ? endsAt.value : this.endsAt,
+    messageId: messageId ?? this.messageId,
+    dismissed: dismissed ?? this.dismissed,
+    laterUntil: laterUntil.present ? laterUntil.value : this.laterUntil,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  HelperCard copyWithCompanion(HelperCardsCompanion data) {
+    return HelperCard(
+      k: data.k.present ? data.k.value : this.k,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      data: data.data.present ? data.data.value : this.data,
+      startsAt: data.startsAt.present ? data.startsAt.value : this.startsAt,
+      endsAt: data.endsAt.present ? data.endsAt.value : this.endsAt,
+      messageId: data.messageId.present ? data.messageId.value : this.messageId,
+      dismissed: data.dismissed.present ? data.dismissed.value : this.dismissed,
+      laterUntil: data.laterUntil.present
+          ? data.laterUntil.value
+          : this.laterUntil,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperCard(')
+          ..write('k: $k, ')
+          ..write('kind: $kind, ')
+          ..write('data: $data, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('endsAt: $endsAt, ')
+          ..write('messageId: $messageId, ')
+          ..write('dismissed: $dismissed, ')
+          ..write('laterUntil: $laterUntil, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    k,
+    kind,
+    data,
+    startsAt,
+    endsAt,
+    messageId,
+    dismissed,
+    laterUntil,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is HelperCard &&
+          other.k == this.k &&
+          other.kind == this.kind &&
+          other.data == this.data &&
+          other.startsAt == this.startsAt &&
+          other.endsAt == this.endsAt &&
+          other.messageId == this.messageId &&
+          other.dismissed == this.dismissed &&
+          other.laterUntil == this.laterUntil &&
+          other.updatedAt == this.updatedAt);
+}
+
+class HelperCardsCompanion extends UpdateCompanion<HelperCard> {
+  final Value<String> k;
+  final Value<String> kind;
+  final Value<String> data;
+  final Value<DateTime?> startsAt;
+  final Value<DateTime?> endsAt;
+  final Value<String> messageId;
+  final Value<bool> dismissed;
+  final Value<DateTime?> laterUntil;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const HelperCardsCompanion({
+    this.k = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.data = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
+    this.messageId = const Value.absent(),
+    this.dismissed = const Value.absent(),
+    this.laterUntil = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  HelperCardsCompanion.insert({
+    required String k,
+    required String kind,
+    this.data = const Value.absent(),
+    this.startsAt = const Value.absent(),
+    this.endsAt = const Value.absent(),
+    this.messageId = const Value.absent(),
+    this.dismissed = const Value.absent(),
+    this.laterUntil = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : k = Value(k),
+       kind = Value(kind);
+  static Insertable<HelperCard> custom({
+    Expression<String>? k,
+    Expression<String>? kind,
+    Expression<String>? data,
+    Expression<DateTime>? startsAt,
+    Expression<DateTime>? endsAt,
+    Expression<String>? messageId,
+    Expression<bool>? dismissed,
+    Expression<DateTime>? laterUntil,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (k != null) 'k': k,
+      if (kind != null) 'kind': kind,
+      if (data != null) 'data': data,
+      if (startsAt != null) 'starts_at': startsAt,
+      if (endsAt != null) 'ends_at': endsAt,
+      if (messageId != null) 'message_id': messageId,
+      if (dismissed != null) 'dismissed': dismissed,
+      if (laterUntil != null) 'later_until': laterUntil,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  HelperCardsCompanion copyWith({
+    Value<String>? k,
+    Value<String>? kind,
+    Value<String>? data,
+    Value<DateTime?>? startsAt,
+    Value<DateTime?>? endsAt,
+    Value<String>? messageId,
+    Value<bool>? dismissed,
+    Value<DateTime?>? laterUntil,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return HelperCardsCompanion(
+      k: k ?? this.k,
+      kind: kind ?? this.kind,
+      data: data ?? this.data,
+      startsAt: startsAt ?? this.startsAt,
+      endsAt: endsAt ?? this.endsAt,
+      messageId: messageId ?? this.messageId,
+      dismissed: dismissed ?? this.dismissed,
+      laterUntil: laterUntil ?? this.laterUntil,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (k.present) {
+      map['k'] = Variable<String>(k.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(kind.value);
+    }
+    if (data.present) {
+      map['data'] = Variable<String>(data.value);
+    }
+    if (startsAt.present) {
+      map['starts_at'] = Variable<DateTime>(startsAt.value);
+    }
+    if (endsAt.present) {
+      map['ends_at'] = Variable<DateTime>(endsAt.value);
+    }
+    if (messageId.present) {
+      map['message_id'] = Variable<String>(messageId.value);
+    }
+    if (dismissed.present) {
+      map['dismissed'] = Variable<bool>(dismissed.value);
+    }
+    if (laterUntil.present) {
+      map['later_until'] = Variable<DateTime>(laterUntil.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('HelperCardsCompanion(')
+          ..write('k: $k, ')
+          ..write('kind: $kind, ')
+          ..write('data: $data, ')
+          ..write('startsAt: $startsAt, ')
+          ..write('endsAt: $endsAt, ')
+          ..write('messageId: $messageId, ')
+          ..write('dismissed: $dismissed, ')
+          ..write('laterUntil: $laterUntil, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -18735,6 +19399,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $HelperStateTable helperState = $HelperStateTable(this);
   late final $HelperReadingsTable helperReadings = $HelperReadingsTable(this);
   late final $HelperMarksTable helperMarks = $HelperMarksTable(this);
+  late final $HelperCardsTable helperCards = $HelperCardsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -18774,6 +19439,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     helperState,
     helperReadings,
     helperMarks,
+    helperCards,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -29335,6 +30001,7 @@ typedef $$TimelyItemsTableCreateCompanionBuilder =
       Value<String?> code,
       Value<String?> status,
       Value<DateTime?> dismissedAt,
+      Value<DateTime?> laterUntil,
       Value<DateTime> updatedAt,
     });
 typedef $$TimelyItemsTableUpdateCompanionBuilder =
@@ -29356,6 +30023,7 @@ typedef $$TimelyItemsTableUpdateCompanionBuilder =
       Value<String?> code,
       Value<String?> status,
       Value<DateTime?> dismissedAt,
+      Value<DateTime?> laterUntil,
       Value<DateTime> updatedAt,
     });
 
@@ -29467,6 +30135,11 @@ class $$TimelyItemsTableFilterComposer
 
   ColumnFilters<DateTime> get dismissedAt => $composableBuilder(
     column: $table.dismissedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -29588,6 +30261,11 @@ class $$TimelyItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -29680,6 +30358,11 @@ class $$TimelyItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -29752,6 +30435,7 @@ class $$TimelyItemsTableTableManager
                 Value<String?> code = const Value.absent(),
                 Value<String?> status = const Value.absent(),
                 Value<DateTime?> dismissedAt = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => TimelyItemsCompanion(
                 id: id,
@@ -29771,6 +30455,7 @@ class $$TimelyItemsTableTableManager
                 code: code,
                 status: status,
                 dismissedAt: dismissedAt,
+                laterUntil: laterUntil,
                 updatedAt: updatedAt,
               ),
           createCompanionCallback:
@@ -29792,6 +30477,7 @@ class $$TimelyItemsTableTableManager
                 Value<String?> code = const Value.absent(),
                 Value<String?> status = const Value.absent(),
                 Value<DateTime?> dismissedAt = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => TimelyItemsCompanion.insert(
                 id: id,
@@ -29811,6 +30497,7 @@ class $$TimelyItemsTableTableManager
                 code: code,
                 status: status,
                 dismissedAt: dismissedAt,
+                laterUntil: laterUntil,
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
@@ -30922,6 +31609,7 @@ typedef $$HelperReadingsTableCreateCompanionBuilder =
       Value<bool> asks,
       Value<bool> know,
       Value<String> thing,
+      Value<String> draft,
       Value<int> rowid,
     });
 typedef $$HelperReadingsTableUpdateCompanionBuilder =
@@ -30938,6 +31626,7 @@ typedef $$HelperReadingsTableUpdateCompanionBuilder =
       Value<bool> asks,
       Value<bool> know,
       Value<String> thing,
+      Value<String> draft,
       Value<int> rowid,
     });
 
@@ -31007,6 +31696,11 @@ class $$HelperReadingsTableFilterComposer
 
   ColumnFilters<String> get thing => $composableBuilder(
     column: $table.thing,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get draft => $composableBuilder(
+    column: $table.draft,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -31079,6 +31773,11 @@ class $$HelperReadingsTableOrderingComposer
     column: $table.thing,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get draft => $composableBuilder(
+    column: $table.draft,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HelperReadingsTableAnnotationComposer
@@ -31125,6 +31824,9 @@ class $$HelperReadingsTableAnnotationComposer
 
   GeneratedColumn<String> get thing =>
       $composableBuilder(column: $table.thing, builder: (column) => column);
+
+  GeneratedColumn<String> get draft =>
+      $composableBuilder(column: $table.draft, builder: (column) => column);
 }
 
 class $$HelperReadingsTableTableManager
@@ -31172,6 +31874,7 @@ class $$HelperReadingsTableTableManager
                 Value<bool> asks = const Value.absent(),
                 Value<bool> know = const Value.absent(),
                 Value<String> thing = const Value.absent(),
+                Value<String> draft = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperReadingsCompanion(
                 messageId: messageId,
@@ -31186,6 +31889,7 @@ class $$HelperReadingsTableTableManager
                 asks: asks,
                 know: know,
                 thing: thing,
+                draft: draft,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -31202,6 +31906,7 @@ class $$HelperReadingsTableTableManager
                 Value<bool> asks = const Value.absent(),
                 Value<bool> know = const Value.absent(),
                 Value<String> thing = const Value.absent(),
+                Value<String> draft = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperReadingsCompanion.insert(
                 messageId: messageId,
@@ -31216,6 +31921,7 @@ class $$HelperReadingsTableTableManager
                 asks: asks,
                 know: know,
                 thing: thing,
+                draft: draft,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -31463,6 +32169,293 @@ typedef $$HelperMarksTableProcessedTableManager =
       HelperMark,
       PrefetchHooks Function()
     >;
+typedef $$HelperCardsTableCreateCompanionBuilder =
+    HelperCardsCompanion Function({
+      required String k,
+      required String kind,
+      Value<String> data,
+      Value<DateTime?> startsAt,
+      Value<DateTime?> endsAt,
+      Value<String> messageId,
+      Value<bool> dismissed,
+      Value<DateTime?> laterUntil,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+typedef $$HelperCardsTableUpdateCompanionBuilder =
+    HelperCardsCompanion Function({
+      Value<String> k,
+      Value<String> kind,
+      Value<String> data,
+      Value<DateTime?> startsAt,
+      Value<DateTime?> endsAt,
+      Value<String> messageId,
+      Value<bool> dismissed,
+      Value<DateTime?> laterUntil,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$HelperCardsTableFilterComposer
+    extends Composer<_$AppDatabase, $HelperCardsTable> {
+  $$HelperCardsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get k => $composableBuilder(
+    column: $table.k,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startsAt => $composableBuilder(
+    column: $table.startsAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get dismissed => $composableBuilder(
+    column: $table.dismissed,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$HelperCardsTableOrderingComposer
+    extends Composer<_$AppDatabase, $HelperCardsTable> {
+  $$HelperCardsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get k => $composableBuilder(
+    column: $table.k,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get data => $composableBuilder(
+    column: $table.data,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startsAt => $composableBuilder(
+    column: $table.startsAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get endsAt => $composableBuilder(
+    column: $table.endsAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get messageId => $composableBuilder(
+    column: $table.messageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get dismissed => $composableBuilder(
+    column: $table.dismissed,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$HelperCardsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $HelperCardsTable> {
+  $$HelperCardsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get k =>
+      $composableBuilder(column: $table.k, builder: (column) => column);
+
+  GeneratedColumn<String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<String> get data =>
+      $composableBuilder(column: $table.data, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startsAt =>
+      $composableBuilder(column: $table.startsAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get endsAt =>
+      $composableBuilder(column: $table.endsAt, builder: (column) => column);
+
+  GeneratedColumn<String> get messageId =>
+      $composableBuilder(column: $table.messageId, builder: (column) => column);
+
+  GeneratedColumn<bool> get dismissed =>
+      $composableBuilder(column: $table.dismissed, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get laterUntil => $composableBuilder(
+    column: $table.laterUntil,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$HelperCardsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $HelperCardsTable,
+          HelperCard,
+          $$HelperCardsTableFilterComposer,
+          $$HelperCardsTableOrderingComposer,
+          $$HelperCardsTableAnnotationComposer,
+          $$HelperCardsTableCreateCompanionBuilder,
+          $$HelperCardsTableUpdateCompanionBuilder,
+          (
+            HelperCard,
+            BaseReferences<_$AppDatabase, $HelperCardsTable, HelperCard>,
+          ),
+          HelperCard,
+          PrefetchHooks Function()
+        > {
+  $$HelperCardsTableTableManager(_$AppDatabase db, $HelperCardsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$HelperCardsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$HelperCardsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$HelperCardsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> k = const Value.absent(),
+                Value<String> kind = const Value.absent(),
+                Value<String> data = const Value.absent(),
+                Value<DateTime?> startsAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
+                Value<String> messageId = const Value.absent(),
+                Value<bool> dismissed = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperCardsCompanion(
+                k: k,
+                kind: kind,
+                data: data,
+                startsAt: startsAt,
+                endsAt: endsAt,
+                messageId: messageId,
+                dismissed: dismissed,
+                laterUntil: laterUntil,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String k,
+                required String kind,
+                Value<String> data = const Value.absent(),
+                Value<DateTime?> startsAt = const Value.absent(),
+                Value<DateTime?> endsAt = const Value.absent(),
+                Value<String> messageId = const Value.absent(),
+                Value<bool> dismissed = const Value.absent(),
+                Value<DateTime?> laterUntil = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => HelperCardsCompanion.insert(
+                k: k,
+                kind: kind,
+                data: data,
+                startsAt: startsAt,
+                endsAt: endsAt,
+                messageId: messageId,
+                dismissed: dismissed,
+                laterUntil: laterUntil,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$HelperCardsTable, HelperCard>(table),
+                  BaseReferences<_$AppDatabase, $HelperCardsTable, HelperCard>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$HelperCardsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $HelperCardsTable,
+      HelperCard,
+      $$HelperCardsTableFilterComposer,
+      $$HelperCardsTableOrderingComposer,
+      $$HelperCardsTableAnnotationComposer,
+      $$HelperCardsTableCreateCompanionBuilder,
+      $$HelperCardsTableUpdateCompanionBuilder,
+      (
+        HelperCard,
+        BaseReferences<_$AppDatabase, $HelperCardsTable, HelperCard>,
+      ),
+      HelperCard,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -31534,4 +32527,6 @@ class $AppDatabaseManager {
       $$HelperReadingsTableTableManager(_db, _db.helperReadings);
   $$HelperMarksTableTableManager get helperMarks =>
       $$HelperMarksTableTableManager(_db, _db.helperMarks);
+  $$HelperCardsTableTableManager get helperCards =>
+      $$HelperCardsTableTableManager(_db, _db.helperCards);
 }

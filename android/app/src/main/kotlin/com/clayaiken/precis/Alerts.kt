@@ -46,6 +46,8 @@ object Alerts {
     private const val REMINDERS = "reminders"
     private const val QUIET = "quiet"
     private const val CODES = "codes"
+    private const val KNOW = "good_to_know"
+    private const val CHATS = "chats"
     const val ACTION = "com.clayaiken.precis.ALERT_ACTION"
 
     /** The key the app keeps this device's own key to the helper under. */
@@ -120,15 +122,25 @@ object Alerts {
     private fun channels(context: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = context.getSystemService(NotificationManager::class.java)
+        // One channel for each kind of alert, so each can be turned off or
+        // given its own sound in the phone's settings for Précis.
         manager.createNotificationChannel(NotificationChannel(NEEDS_YOU, "Needs you", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "An email that needs you, and a notice an hour before its time."
+            setShowBadge(true)
+        })
+        manager.createNotificationChannel(NotificationChannel(KNOW, "Good to know", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "Something worth knowing that asks nothing of you: an answer you were waiting for, news about your own orders, accounts and bookings."
+            setShowBadge(true)
+        })
+        manager.createNotificationChannel(NotificationChannel(CHATS, "Chats", NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = "A new email from a person, when it does not need you."
             setShowBadge(true)
         })
         manager.createNotificationChannel(NotificationChannel(REMINDERS, "Reminders", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "A reminder you set, at its time."
             setShowBadge(true)
         })
-        manager.createNotificationChannel(NotificationChannel(CODES, "Sign-in codes", NotificationManager.IMPORTANCE_HIGH).apply {
+        manager.createNotificationChannel(NotificationChannel(CODES, "OTP", NotificationManager.IMPORTANCE_HIGH).apply {
             description = "A sign-in code that just came by email: the code, ready to paste."
             setShowBadge(false)
         })
@@ -160,7 +172,12 @@ object Alerts {
             showCode(context, id, mid, who, data["code"] ?: "", data["until"]?.toLongOrNull(), quiet)
             return
         }
-        val channel = if (quiet) QUIET else if (kind == "reminder") REMINDERS else NEEDS_YOU
+        val channel = if (quiet) QUIET else when (kind) {
+            "reminder" -> REMINDERS
+            "know" -> KNOW
+            "chat" -> CHATS
+            else -> NEEDS_YOU
+        }
 
         val title = when (kind) {
             "reminder" -> "Reminder"
@@ -198,8 +215,8 @@ object Alerts {
             }
             builder.addAction(0, label, PendingIntent.getBroadcast(context, id * 4 + request, press, flags))
         }
-        if (kind == "test") {
-            // Nothing to act on.
+        if (kind == "test" || kind == "know" || kind == "chat") {
+            // Nothing to act on: a tap opens it.
         } else if (kind == "reminder") {
             if (uid.isNotEmpty()) action("reminder-done", "Done", 1)
         } else if (mid.isNotEmpty()) {

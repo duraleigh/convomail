@@ -11,6 +11,7 @@ import 'package:convomail/main.dart';
 import 'package:convomail/platform/credential_store.dart';
 import 'package:convomail/store/classification_queries.dart';
 import 'package:convomail/store/database.dart' hide ClassificationRule;
+import 'package:convomail/store/helper_queries.dart';
 import 'package:convomail/store/mail_queries.dart';
 import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/settings_store.dart';
@@ -507,7 +508,7 @@ void main() {
       await tester.pump(const Duration(milliseconds: 50));
     }
 
-    testWidgets('Today shows a code to copy without opening the email; the Feed row offers it too; X dismisses; Chats carries no strip', (tester) async {
+    testWidgets('the OTP card shows a code to copy without opening the email; the Feed row offers it too; the x dismisses; Chats carries no strip', (tester) async {
       final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
       String? copied;
       messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
@@ -524,9 +525,13 @@ void main() {
 
       container.read(destinationProvider.notifier).select(Destination.today);
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('today-fyi')), findsOneWidget);
-      expect(find.byKey(const ValueKey('timely-strip')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-otp')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('today-otp')), matching: find.text('OTP')), findsOneWidget);
+      expect(find.byKey(const ValueKey('timely-strip-otp')), findsOneWidget);
       expect(find.text('482913'), findsOneWidget);
+      for (final other in ['travel', 'bookings', 'deliveries', 'payments', 'fyi']) {
+        expect(find.byKey(ValueKey('today-$other')), findsNothing, reason: 'a card with nothing in it is not drawn: $other');
+      }
 
       final item = (await db.select(db.timelyItems).get()).single;
       await tester.tap(find.byKey(ValueKey('timely-copy-${item.id}')));
@@ -542,9 +547,76 @@ void main() {
 
       container.read(destinationProvider.notifier).select(Destination.today);
       await tester.pumpAndSettle();
+      // The small x shows only while the mouse is over the line.
+      double x() => tester.widget<Opacity>(find.ancestor(of: find.byKey(ValueKey('timely-dismiss-${item.id}')), matching: find.byType(Opacity)).first).opacity;
+      expect(x(), 0);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.byKey(ValueKey('timely-title-${item.id}'))));
+      await tester.pumpAndSettle();
+      expect(x(), 1);
       await tester.tap(find.byKey(ValueKey('timely-dismiss-${item.id}')));
       await tester.pumpAndSettle();
-      expect(find.byKey(const ValueKey('timely-strip')), findsNothing);
+      expect(find.byKey(const ValueKey('timely-strip-otp')), findsNothing);
+      expect(find.byKey(const ValueKey('today-otp')), findsNothing, reason: 'the card goes with its last item');
+      await teardown(tester);
+    });
+
+    testWidgets('what the rules find sits on its own card: Deliveries holds a delivery, Payments holds a bill, OTP holds "confirm your email address" with its button; each item has the menu', (tester) async {
+      final container = await pumpApp(tester);
+      final all = await db.select(db.messages).get();
+      final bank = all.firstWhere((m) => m.fromAddress == 'noreply@bank.com');
+      final now = DateTime.now();
+      await db.upsertTimely(bank, [
+        TimelyFact(type: TimelyType.delivery, dedupeKey: 'track:1', title: 'Acme Shop', startsAt: now.add(const Duration(days: 1))),
+        TimelyFact(type: TimelyType.bill, dedupeKey: 'bill:1', title: 'Power Co', startsAt: now.add(const Duration(days: 2)), detail: r'$84.12'),
+        const TimelyFact(type: TimelyType.confirm, dedupeKey: 'confirm:1', title: 'Acme Shop', actionUrl: 'https://acme.example/confirm?t=abc', actionLabel: 'Confirm'),
+      ], now);
+      container.read(destinationProvider.notifier).select(Destination.today);
+      await tester.pumpAndSettle();
+      final items = {for (final t in await db.select(db.timelyItems).get()) t.type: t};
+
+      // Deliveries: who it is from on top, what is inside underneath.
+      final deliveries = find.byKey(const ValueKey('today-deliveries'));
+      expect(find.descendant(of: deliveries, matching: find.text('Deliveries')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-title-${items['delivery']!.id}'))).data, 'Acme Shop');
+      expect(find.byKey(ValueKey('timely-inside-${items['delivery']!.id}')), findsNothing, reason: 'the assistant is not on here, so nothing says what is inside');
+      expect(find.descendant(of: deliveries, matching: find.textContaining('Arriving Tomorrow')), findsOneWidget);
+      // Payments.
+      expect(find.descendant(of: find.byKey(const ValueKey('today-payments')), matching: find.byKey(ValueKey('timely-${items['bill']!.id}'))), findsOneWidget);
+      // OTP: confirm your email address, with the button that goes to the email's own link.
+      final otp = find.byKey(const ValueKey('today-otp'));
+      expect(find.descendant(of: otp, matching: find.text('Confirm your email address for Acme Shop')), findsOneWidget);
+      expect(find.descendant(of: otp, matching: find.widgetWithText(FilledButton, 'Confirm')), findsOneWidget);
+      for (final none in ['travel', 'bookings', 'fyi']) {
+        expect(find.byKey(ValueKey('today-$none')), findsNothing, reason: none);
+      }
+
+      // The menu on an item: Dismiss, Later, Does not belong here.
+      final delivery = items['delivery']!;
+      await tester.tap(find.byKey(ValueKey('timely-${delivery.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('menu-dismiss')), findsOneWidget);
+      expect(find.byKey(const ValueKey('menu-reject')), findsOneWidget);
+      // Later: off the card until then, and Undo brings it straight back.
+      await tester.tap(find.byKey(const ValueKey('menu-later')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('snooze-Tomorrow morning')));
+      await tester.pumpAndSettle();
+      expect(deliveries, findsNothing);
+      expect(find.textContaining('It comes back to Deliveries then'), findsOneWidget);
+      expect((await db.select(db.timelyItems).get()).firstWhere((t) => t.id == delivery.id).laterUntil, isNotNull);
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(deliveries, findsOneWidget);
+      // A press and hold opens the same menu; Dismiss takes it off, with Undo.
+      await tester.longPress(find.byKey(ValueKey('timely-${delivery.id}')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu-dismiss')));
+      await tester.pumpAndSettle();
+      expect(deliveries, findsNothing);
+      expect(find.text('Taken off Deliveries.'), findsOneWidget);
       await teardown(tester);
     });
 

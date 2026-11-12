@@ -93,7 +93,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     title: 'Receipts and promotions stay out of the way',
                     body: 'Mail that is not from a person lands in Feed when it is worth knowing and in Noise when it is not. Only people count toward your badge unless you say otherwise.',
                   ),
-                  const _Point(icon: Icons.today_outlined, title: 'Your day on one page', body: 'Today shows your calendar, who you are still waiting on, and what you put off until later.'),
+                  const _Point(icon: Icons.today_outlined, title: 'Your day on one page', body: 'The Précis page shows your calendar, who you are still waiting on, and what you put off until later.'),
                   const _Point(icon: Icons.shield_outlined, title: 'Local first', body: 'Mail syncs straight from your provider over IMAP. Passwords live in Windows Credential Manager; nothing goes through a relay server.'),
                   const SizedBox(height: AppSpace.xl),
                   Row(

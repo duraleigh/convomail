@@ -110,7 +110,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
       builder: (context, box) {
         final two = box.maxWidth >= 860 && leftHasSomething;
         final left = [const _NeedsYou(), const _GoodToKnow(), const _WaitingOn()];
-        final right = [const _Schedule(), const _Fyi(), const _Later(), const _Done()];
+        final right = [
+          const _Schedule(),
+          for (final c in const [FyiCard.otp, FyiCard.travel, FyiCard.bookings, FyiCard.deliveries, FyiCard.payments, FyiCard.fyi]) _Fyi(c),
+          const _Later(),
+          const _Done(),
+        ];
         return Stack(
           children: [
             // Fills its area, so a short page starts at the top.
@@ -128,6 +133,8 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              Text('Précis', key: const ValueKey('today-title'), style: text.labelLarge!.copyWith(color: scheme.primary, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+                              const SizedBox(height: 2),
                               Text(
                                 _date(now),
                                 key: const ValueKey('today-date'),
@@ -401,6 +408,8 @@ class _Sentence extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Text('The Lede', key: const ValueKey('today-sentence-label'), style: text.labelMedium!.copyWith(color: scheme.primary, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+                  const SizedBox(height: 2),
                   Text(timesInText(s.text), key: const ValueKey('today-sentence-text'), style: text.titleMedium!.copyWith(height: 1.35, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
                   Text(
@@ -884,19 +893,33 @@ class _GoodToKnow extends ConsumerWidget {
   }
 }
 
+/// One of the cards the fixed rules fill: OTP, Travel, Bookings, Deliveries,
+/// Payments, FYI. Like every card but Schedule, it is not drawn when it has
+/// nothing in it.
 class _Fyi extends ConsumerWidget {
-  const _Fyi();
+  const _Fyi(this.card);
+  final FyiCard card;
+
+  static (IconData, Color) _look(FyiCard c) => switch (c) {
+        FyiCard.otp => (Icons.password_rounded, const Color(0xFF4DD0E1)),
+        FyiCard.travel => (Icons.flight_takeoff_rounded, const Color(0xFF7986CB)),
+        FyiCard.bookings => (Icons.event_available_rounded, const Color(0xFF4DB6AC)),
+        FyiCard.deliveries => (Icons.local_shipping_outlined, const Color(0xFFA1887F)),
+        FyiCard.payments => (Icons.receipt_long_outlined, const Color(0xFFE57373)),
+        FyiCard.fyi => (Icons.info_outline_rounded, const Color(0xFF64B5F6)),
+      };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final due = timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now());
+    final due = timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now(), card: card);
+    final (icon, color) = _look(card);
     return _Section(
-      id: 'fyi',
-      icon: Icons.info_outline_rounded,
-      color: const Color(0xFF64B5F6),
-      title: 'FYI',
+      id: card.id,
+      icon: icon,
+      color: color,
+      title: card.title,
       count: due.length,
-      children: [if (due.isNotEmpty) const TimelyStrip(embedded: true)],
+      children: [if (due.isNotEmpty) TimelyStrip(embedded: true, card: card)],
     );
   }
 }

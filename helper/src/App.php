@@ -631,6 +631,9 @@ final class App
                 $j = $r->json() ?? [];
                 $devices->setPush($id, array_key_exists('token', $j) ? (string) ($j['token'] ?? '') : null, is_bool($j['ring'] ?? null) ? $j['ring'] : null);
                 // A phone whose app can show a sign-in code says so.
+                if (is_bool($j['kinds'] ?? null)) {
+                    $devices->setShowsKinds($id, $j['kinds']);
+                }
                 if (is_bool($j['codes'] ?? null)) {
                     $devices->setShowsCodes($id, $j['codes']);
                 }
