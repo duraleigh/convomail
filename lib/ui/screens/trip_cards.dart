@@ -121,7 +121,9 @@ class _TravelLegsState extends ConsumerState<TravelLegs> {
             onTap: () => unawaited(openEmailByMessageId(ref, shown[i].messageId)),
             child: Padding(
               padding: EdgeInsets.fromLTRB(2, i == 0 ? 4 : 9, 4, 9),
-              child: i == 0 ? _BigLeg(leg: shown[i], now: now) : _SmallLeg(leg: shown[i], now: now),
+              // On a wide page the large leg keeps the width of a phone
+              // card, so its arc stays an arc.
+              child: i == 0 ? Align(alignment: Alignment.centerLeft, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 540), child: _BigLeg(leg: shown[i], now: now))) : _SmallLeg(leg: shown[i], now: now),
             ),
           ),
         ],
@@ -257,7 +259,7 @@ class _BigLeg extends StatelessWidget {
                 child: Column(
                   children: [
                     SizedBox(
-                      height: 30,
+                      height: 36,
                       child: CustomPaint(
                         size: Size.infinite,
                         painter: _ArcPainter(color: color, badge: scheme.onSurface, glyphColor: scheme.surface, train: leg.mode == 'train'),
@@ -315,7 +317,7 @@ class _Pair extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(top, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.titleSmall!.copyWith(fontWeight: FontWeight.w700)),
+        Text(top, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall!.copyWith(fontWeight: FontWeight.w700)),
         SelectableText(bottom, key: ValueKey(id), maxLines: 1, style: text.titleSmall!.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w400)),
       ],
     );
@@ -354,7 +356,7 @@ class _SmallLeg extends StatelessWidget {
               Text(
                 '${leg.fromCode.isEmpty ? '–' : leg.fromCode} → ${leg.toCode.isEmpty ? '–' : leg.toCode} · ${leg.route}',
                 key: ValueKey('leg-route-${leg.key}'),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: text.labelLarge!.copyWith(decoration: leg.cancelled ? TextDecoration.lineThrough : null),
               ),
@@ -380,7 +382,7 @@ class _SmallLeg extends StatelessWidget {
                   if (leg.locator.isNotEmpty) 'Confirmation ${leg.locator}',
                 ].where((s) => s.isNotEmpty).join(' · '),
                 key: ValueKey('leg-number-${leg.key}'),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: quiet,
               ),
@@ -602,9 +604,9 @@ class _BookingLineState extends ConsumerState<_BookingLine> {
                       key: ValueKey('booking-heading-$k'),
                       style: text.labelSmall!.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w800, color: b.cancelled ? const Color(0xFFEF5350) : scheme.onSurfaceVariant),
                     ),
-                    Text(_title, key: ValueKey('booking-title-$k'), maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge!.copyWith(decoration: b.cancelled ? TextDecoration.lineThrough : null)),
-                    if (times.isNotEmpty) Text(times, key: ValueKey('booking-when-$k'), maxLines: 2, overflow: TextOverflow.ellipsis, style: quiet),
-                    if (rest.isNotEmpty) Text(rest, key: ValueKey('booking-rest-$k'), maxLines: 2, overflow: TextOverflow.ellipsis, style: quiet),
+                    Text(_title, key: ValueKey('booking-title-$k'), maxLines: 2, overflow: TextOverflow.ellipsis, style: text.labelLarge!.copyWith(decoration: b.cancelled ? TextDecoration.lineThrough : null)),
+                    if (times.isNotEmpty) Text(times, key: ValueKey('booking-when-$k'), maxLines: 3, overflow: TextOverflow.ellipsis, style: quiet),
+                    if (rest.isNotEmpty) Text(rest, key: ValueKey('booking-rest-$k'), maxLines: 4, overflow: TextOverflow.ellipsis, style: quiet),
                   ],
                 ),
               ),
