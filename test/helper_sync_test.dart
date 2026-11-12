@@ -352,6 +352,55 @@ void main() {
       expect(await db.helperOutboxCount(), 0);
     });
 
+    test('a move made by hand on another device holds on a device that learns of the sender only later (a phone that just joined), and is never sent back as this device\'s own guess', () async {
+      // The helper says: moved by hand to "not a person". This device has no mail from them yet.
+      helper.put('sender', 'pat@agency.example', {'cls': 'feeds', 'src': 'override', 'cat': null, 'reasons': 'Moved by you'}, origin: 99);
+      await link().syncNow();
+      helper.pushed.clear();
+      // Their mail arrives. By this device's own rules it is plain mail from a person.
+      got('pat@agency.example', 'Pat Agent', 'Hello', id: '<pat-1@x>');
+      await sync();
+      final c = await contact('pat@agency.example');
+      expect([c.classification, c.classificationSource], ['feeds', 'override'], reason: 'the move is the user\'s, here too');
+      expect((await message('<pat-1@x>')).classification, 'feeds');
+      await link().syncNow();
+      for (final p in helper.pushedOf('sender').where((p) => p['k'] == 'pat@agency.example')) {
+        expect((p['data'] as Map)['src'], 'override', reason: 'never sent up as this device\'s own guess');
+      }
+      expect(helper.item('sender', 'pat@agency.example'), containsPair('src', 'override'));
+      // More mail, more sorting: it stays.
+      got('pat@agency.example', 'Pat Agent', 'Again', id: '<pat-2@x>');
+      await sync();
+      await link().syncNow();
+      expect((await contact('pat@agency.example')).classificationSource, 'override');
+      expect(helper.item('sender', 'pat@agency.example'), containsPair('src', 'override'));
+    });
+
+    test('taking a move back is said to the helper in so many words; moved again before it is sent, it is not said', () async {
+      await service().moveSender('sarah@x.com', Bucket.feeds);
+      await link().syncNow();
+      expect(helper.item('sender', 'sarah@x.com'), containsPair('src', 'override'));
+      helper.pushed.clear();
+      await service().moveSender('sarah@x.com', null);
+      await link().syncNow();
+      expect(helper.pushed.where((p) => p['op'] == 'unmove').single, containsPair('k', 'sarah@x.com'));
+      expect((await contact('sarah@x.com')).classificationSource, isNot('override'));
+      expect(helper.item('sender', 'sarah@x.com'), isNot(containsPair('src', 'override')));
+      // Moved, taken back and moved again while nothing could be sent: only the move goes up.
+      helper.pushed.clear();
+      await service().moveSender('sarah@x.com', Bucket.feeds);
+      await link().syncNow();
+      helper.pushed.clear();
+      helper.unreachable = true;
+      await service().moveSender('sarah@x.com', null);
+      await service().moveSender('sarah@x.com', Bucket.feeds);
+      helper.unreachable = false;
+      await link().syncNow();
+      expect(helper.pushed.where((p) => p['op'] == 'unmove'), isEmpty);
+      expect((await contact('sarah@x.com')).classificationSource, 'override');
+      expect(helper.item('sender', 'sarah@x.com'), containsPair('src', 'override'));
+    });
+
     test('the helper\'s answer for one email applies, even when it arrives before the email does', () async {
       helper.put('sort', '<statement@bank.com>', {'cls': 'people', 'cat': null});
       helper.put('sort', '<not-here-yet@bank.com>', {'cls': 'feeds', 'cat': 'OTP'});

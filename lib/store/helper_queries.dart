@@ -281,7 +281,10 @@ extension HelperQueries on AppDatabase {
       'SELECT s.cls, s.src, s.cat, s.reasons FROM helper_senders s JOIN helper_state h ON h.id = 1 AND h.connected = 1 WHERE s.key = ?',
       variables: [Variable.withString(key)],
     ).getSingleOrNull();
-    if (r == null || r.read<String>('src') == 'override') return null;
+    if (r == null) return null;
+    // A move the user made by hand on another device is theirs here too: it
+    // comes back marked as a move, so this device never mistakes the sender
+    // for one it may decide by itself (and never tells the helper so).
     final reasons = r.read<String>('reasons');
     return SenderDecision(
       r.read<String>('cls') == 'feeds' ? Bucket.feeds : Bucket.people,

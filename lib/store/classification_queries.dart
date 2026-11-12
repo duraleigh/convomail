@@ -281,11 +281,26 @@ extension ClassificationQueries on AppDatabase {
 
   // ---- overrides and per-sender settings ---------------------------------------
 
-  Future<void> setSenderOverride(String contactKey, Bucket? bucket) => (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(
-        classification: bucket == null ? const Value.absent() : Value(bucket.name),
-        classificationSource: Value(bucket == null ? 'auto' : 'override'),
-        classReasons: Value(bucket == null ? '' : 'Moved by you'),
-      ));
+  Future<void> setSenderOverride(String contactKey, Bucket? bucket) async {
+    await (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(
+      classification: bucket == null ? const Value.absent() : Value(bucket.name),
+      classificationSource: Value(bucket == null ? 'auto' : 'override'),
+      classReasons: Value(bucket == null ? '' : 'Moved by you'),
+    ));
+    if (bucket == null) {
+      // The move is taken back. The helper is told in so many words (a
+      // sender merely sent up without its move never undoes one), and what
+      // this device holds from the helper stops saying "moved by hand".
+      await customStatement("UPDATE helper_senders SET src = 'auto' WHERE key = ? AND src = 'override'", [contactKey]);
+      await customStatement(
+        "INSERT OR REPLACE INTO helper_outbox (kind, k, data) SELECT 'op', ?, ? FROM helper_state WHERE id = 1 AND connected = 1 AND applying = 0",
+        ['unmove:$contactKey', jsonEncode({'op': 'unmove', 'k': contactKey})],
+      );
+    } else {
+      // Moved again before the taking-back was sent: it is not sent after all.
+      await customStatement("DELETE FROM helper_outbox WHERE kind = 'op' AND k = ?", ['unmove:$contactKey']);
+    }
+  }
 
   Future<void> setCountsTowardUnread(String contactKey, bool on) => (update(contacts)..where((c) => c.key.equals(contactKey))).write(ContactsCompanion(countsTowardUnread: Value(on)));
 

@@ -368,9 +368,27 @@ return [
         $w->arrive($brief(4));
         same(['people', 'override'], [$w->sender('hello@dailybrief.com')['cls'], $w->sender('hello@dailybrief.com')['src']]);
         same('people', $w->sort($m)['cls']);
-        // Handing the choice back lets the rules decide again.
-        $w->sync->push(1, [['kind' => 'sender', 'k' => 'hello@dailybrief.com', 'data' => ['src' => 'auto'] + $w->sender('hello@dailybrief.com')]]);
+        // A device that does not know of the move (a phone that just joined,
+        // working out its own guess and its own tag) sends the sender up as
+        // it sees it. The move stands, and so does the tag: nothing the
+        // owner set is taken away by a device that never knew of it.
+        $before = $w->sender('hello@dailybrief.com');
+        $w->sync->push(2, [['kind' => 'sender', 'k' => 'hello@dailybrief.com', 'data' => ['cls' => 'feeds', 'src' => 'auto', 'cat' => 'Newsletter', 'pile' => null, 'counts' => false, 'label' => null, 'subtitle' => null, 'name' => 'Daily Brief', 'reasons' => 'Bulk-mail headers']]]);
+        $s = $w->sender('hello@dailybrief.com');
+        same(['people', 'override', $before['cat'] ?? null], [$s['cls'], $s['src'], $s['cat'] ?? null]);
+        same('people', $w->sort($m)['cls']);
+        // The same from a device sending everything up for the first time.
+        $w->sync->seed(2, [['k' => 'hello@dailybrief.com', 'item' => ['cls' => 'feeds', 'src' => 'auto', 'cat' => 'Newsletter', 'reasons' => 'Bulk-mail headers']]], $w->clock->now);
+        same(['people', 'override'], [$w->sender('hello@dailybrief.com')['cls'], $w->sender('hello@dailybrief.com')['src']]);
+        // A name and a pile the owner gave survive the same way; one the phone itself sets is taken.
+        $w->sync->push(1, [['kind' => 'sender', 'k' => 'hello@dailybrief.com', 'data' => ['label' => 'The Brief', 'pile' => 'feed'] + $w->sender('hello@dailybrief.com')]]);
+        $w->sync->push(2, [['kind' => 'sender', 'k' => 'hello@dailybrief.com', 'data' => ['cls' => 'feeds', 'src' => 'auto', 'cat' => 'Promotion', 'pile' => null, 'counts' => true, 'label' => null, 'subtitle' => null]]]);
+        $s = $w->sender('hello@dailybrief.com');
+        same(['people', 'override', 'The Brief', 'feed', true], [$s['cls'], $s['src'], $s['label'], $s['pile'], $s['counts']]);
+        // Handing the choice back is said in so many words; then the rules decide again.
+        $w->sync->push(1, [['op' => 'unmove', 'k' => 'hello@dailybrief.com']]);
         same(['feeds', 'auto'], [$w->sender('hello@dailybrief.com')['cls'], $w->sender('hello@dailybrief.com')['src']]);
+        same('The Brief', $w->sender('hello@dailybrief.com')['label'], 'the name the owner gave is still theirs');
     },
 
     'a pile, a tag and a name a device set on a sender are kept through later sorting' => function () use ($brief): void {

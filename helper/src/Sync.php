@@ -151,7 +151,7 @@ final class Sync
             if (is_array($s['facts'] ?? null)) {
                 $this->sorter->setSeed($k, $s['facts'], $at);
             }
-            $this->store->put('sender', $k, $s['item'], $device);
+            $this->store->put('sender', $k, self::keepOwnersWord($this->store->item('sender', $k), $s['item']), $device);
             $n++;
             // Mail the helper read before it knew this was decided with next
             // to nothing to go on. Now that the device's facts are here, the
@@ -170,6 +170,12 @@ final class Sync
      * the name, whether it rings. Who is a person is otherwise the helper's
      * to decide, so a device's own guess never replaces the helper's.
      *
+     * A move by hand is never undone by a device that merely does not know
+     * of it (a phone that just joined, working out its own guess). It is
+     * undone only when a device says so in so many words: the "unmove"
+     * action. And while a sender is moved by hand, the tag it has is the
+     * owner's: a device that does not carry the move cannot change it.
+     *
      * @param array<string, mixed>|null $old
      * @param array<string, mixed> $new
      * @return array<string, mixed>
@@ -177,17 +183,22 @@ final class Sync
     private static function mergeSender(?array $old, array $new): array
     {
         $out = $old ?? ['cls' => (string) ($new['cls'] ?? 'people'), 'src' => 'auto', 'reasons' => (string) ($new['reasons'] ?? '')];
-        if (($new['src'] ?? '') === 'override' && in_array($new['cls'] ?? null, ['people', 'feeds'], true)) {
+        $moved = ($old['src'] ?? '') === 'override';
+        $knows = ($new['src'] ?? '') === 'override';
+        if ($knows && in_array($new['cls'] ?? null, ['people', 'feeds'], true)) {
             $out['cls'] = $new['cls'];
             $out['src'] = 'override';
-        } elseif (($old['src'] ?? '') === 'override') {
-            // The move was taken back: the rules decide again.
-            $out['src'] = 'auto';
         }
         foreach (['cat', 'pile', 'counts', 'label', 'subtitle'] as $mine) {
-            if (array_key_exists($mine, $new)) {
-                $out[$mine] = $new[$mine];
+            if (!array_key_exists($mine, $new)) {
+                continue;
             }
+            // From a device that does not know of the move: only what it
+            // actually sets is taken, never an empty value over a set one.
+            if ($moved && !$knows && ($mine === 'cat' || $new[$mine] === null || $new[$mine] === false || $new[$mine] === '')) {
+                continue;
+            }
+            $out[$mine] = $new[$mine];
         }
         if (($new['name'] ?? '') !== '') {
             $out['name'] = $new['name'];
@@ -195,9 +206,51 @@ final class Sync
         return $out + ['cat' => null, 'pile' => null, 'counts' => false];
     }
 
+    /**
+     * A sender as a device sends it the first time it sends everything up,
+     * with whatever the owner already set (on another device) kept: the
+     * move by hand and its place, the tag, the pile, the names, whether it
+     * counts. A device's first sending-up never takes those away.
+     *
+     * @param array<string, mixed>|null $old
+     * @param array<string, mixed> $new
+     * @return array<string, mixed>
+     */
+    private static function keepOwnersWord(?array $old, array $new): array
+    {
+        if ($old === null) {
+            return $new;
+        }
+        if (($old['src'] ?? '') === 'override' && ($new['src'] ?? '') !== 'override') {
+            $new['cls'] = $old['cls'] ?? ($new['cls'] ?? 'people');
+            $new['src'] = 'override';
+            $new['cat'] = $old['cat'] ?? null;
+        }
+        foreach (['cat', 'pile', 'label', 'subtitle'] as $mine) {
+            if (($new[$mine] ?? null) === null && ($old[$mine] ?? null) !== null) {
+                $new[$mine] = $old[$mine];
+            }
+        }
+        if (($old['counts'] ?? false) === true) {
+            $new['counts'] = true;
+        }
+        return $new;
+    }
+
     private function action(int $device, array $e): int
     {
         switch ($e['op']) {
+            case 'unmove':
+                // The owner took a move by hand back: the rules decide that sender again.
+                $k = (string) ($e['k'] ?? '');
+                $old = $k === '' ? null : $this->store->item('sender', $k);
+                if ($old === null || ($old['src'] ?? '') !== 'override') {
+                    return 0;
+                }
+                $changed = (int) $this->store->put('sender', $k, ['src' => 'auto'] + $old, $device);
+                $this->sorter->reset();
+                $this->sorter->resort($k);
+                return $changed;
             case 'rename-tag':
                 return $this->renameTag($device, (string) ($e['from'] ?? ''), (string) ($e['to'] ?? ''));
             case 'delete-tag':

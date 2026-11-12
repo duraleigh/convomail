@@ -170,6 +170,11 @@ class FakeHelper {
         final origin = j['echo'] == true ? null : device;
         for (final i in list) {
           pushed.add(i);
+          if (i['op'] == 'unmove') {
+            // A move by hand, taken back: the only thing that undoes one.
+            final old = item('sender', '${i['k']}');
+            if (old != null) put('sender', '${i['k']}', {...old, 'src': 'auto'}, origin: origin);
+          }
           if (i['op'] != null) continue;
           if (i['deleted'] == true) {
             remove('${i['kind']}', '${i['k']}', origin: origin);
