@@ -528,6 +528,16 @@ class MailEmailPane extends ConsumerWidget {
               ),
             ],
             const SizedBox(width: 4),
+            // An email written for the user to look over and send.
+            if ((item.reading?.draft ?? '').isNotEmpty) ...[
+              FilledButton.tonalIcon(
+                key: const ValueKey('mail-draft'),
+                onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(item.id, rowKey: item.rowKey, body: item.reading!.draft)),
+                icon: const Icon(Icons.edit_note_rounded, size: 18),
+                label: const Text('Review draft'),
+              ),
+              const SizedBox(width: 4),
+            ],
             // Answering happens right here, under the email.
             if (item.person) ...[
               IconButton(

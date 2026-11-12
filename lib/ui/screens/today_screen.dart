@@ -31,6 +31,7 @@ import 'chats/people_list_pane.dart' show relativeTime;
 import 'chats/thread_view_panel.dart';
 import 'chats/timely_strip.dart';
 import 'mail/mail_widgets.dart' show openMail, putOffFocusMail;
+import 'trip_cards.dart';
 
 /// Today's calendar events, in the calendars the user shows.
 final todayEventsProvider = StreamProvider<List<PlannerEvent>>((ref) {
@@ -112,7 +113,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         final left = [const _NeedsYou(), const _GoodToKnow(), const _WaitingOn()];
         final right = [
           const _Schedule(),
-          for (final c in const [FyiCard.otp, FyiCard.travel, FyiCard.bookings, FyiCard.deliveries, FyiCard.payments, FyiCard.fyi]) _Fyi(c),
+          const _Fyi(FyiCard.otp),
+          const _Travel(),
+          const _Bookings(),
+          for (final c in const [FyiCard.deliveries, FyiCard.payments, FyiCard.fyi]) _Fyi(c),
           const _Later(),
           const _Done(),
         ];
@@ -203,7 +207,7 @@ List<MailItem> _goodToKnowItems(WidgetRef ref) {
 /// One card on Today: an icon, a title, a count, then its lines. A card with
 /// no lines is not drawn at all, unless it is [alwaysShown] (Schedule).
 class _Section extends StatelessWidget {
-  const _Section({required this.id, required this.icon, required this.color, required this.title, required this.children, this.count, this.empty, this.alwaysShown = false});
+  const _Section({required this.id, required this.icon, required this.color, required this.title, required this.children, this.count, this.empty, this.alwaysShown = false, this.alarm});
   final String id;
   final IconData icon;
   final Color color;
@@ -215,6 +219,10 @@ class _Section extends StatelessWidget {
   final String? empty;
   final bool alwaysShown;
 
+  /// The whole card takes this color to draw the eye: yellow for a delay,
+  /// red for a cancellation.
+  final Color? alarm;
+
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty && !alwaysShown) return const SizedBox.shrink();
@@ -224,8 +232,11 @@ class _Section extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: AppSpace.md),
       child: Material(
         key: ValueKey('today-$id'),
-        color: scheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(AppShapes.lgIncreased),
+        color: alarm == null ? scheme.surfaceContainerLowest : Color.alphaBlend(alarm!.withValues(alpha: 0.22), scheme.surfaceContainerLowest),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppShapes.lgIncreased),
+          side: alarm == null ? BorderSide.none : BorderSide(color: alarm!, width: 2),
+        ),
         clipBehavior: Clip.antiAlias,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
@@ -524,6 +535,21 @@ class _NeedsYou extends ConsumerWidget {
                                       ),
                                     ],
                                   ),
+                                ),
+                              // An email written for the user to look over and
+                              // send: it opens under the email, ready to change.
+                              if ((i.reading?.draft ?? '').isNotEmpty)
+                                FilledButton.tonalIcon(
+                                  key: ValueKey('needs-draft-${i.id}'),
+                                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
+                                  onPressed: () {
+                                    ref.read(openMailProvider('focus').notifier).open(i.id);
+                                    openMail(ref, i);
+                                    ref.read(destinationProvider.notifier).select(Destination.focus, fromToday: true);
+                                    ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(i.id, rowKey: i.rowKey, body: i.reading!.draft));
+                                  },
+                                  icon: const Icon(Icons.edit_note_rounded, size: 16),
+                                  label: const Text('Review draft'),
                                 ),
                               TextButton.icon(
                                 key: ValueKey('needs-done-${i.id}'),
@@ -889,6 +915,53 @@ class _GoodToKnow extends ConsumerWidget {
           ),
         if (items.length > 10) Padding(padding: const EdgeInsets.only(top: 4), child: Text('and ${items.length - 10} more', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant))),
       ],
+    );
+  }
+}
+
+/// Travel: flights and trains only, one line for each leg. With the
+/// assistant on, the legs it read out of the mail; with it off, what the
+/// fixed rules find. The whole card turns yellow for a delay and red for a
+/// cancellation.
+class _Travel extends ConsumerWidget {
+  const _Travel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!(ref.watch(readingsShownProvider).value ?? false)) return const _Fyi(FyiCard.travel);
+    ref.watch(tripClockProvider);
+    final legs = travelNow(ref.watch(helperCardsProvider).value ?? const [], DateTime.now());
+    final alarm = legs.any((l) => l.cancelled) ? const Color(0xFFEF5350) : (legs.any((l) => l.delayed) ? const Color(0xFFFFCA28) : null);
+    return _Section(
+      id: 'travel',
+      icon: Icons.flight_takeoff_rounded,
+      color: alarm ?? const Color(0xFF7986CB),
+      title: 'Travel',
+      count: legs.length,
+      alarm: alarm,
+      children: [if (legs.isNotEmpty) TravelLegs(legs: legs)],
+    );
+  }
+}
+
+/// Bookings: a hotel stay, a rental car, a car with a driver, a restaurant
+/// table, an appointment, a ticket. With the assistant off, what the fixed
+/// rules find.
+class _Bookings extends ConsumerWidget {
+  const _Bookings();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!(ref.watch(readingsShownProvider).value ?? false)) return const _Fyi(FyiCard.bookings);
+    ref.watch(tripClockProvider);
+    final items = bookingsNow(ref.watch(helperCardsProvider).value ?? const [], DateTime.now());
+    return _Section(
+      id: 'bookings',
+      icon: Icons.event_available_rounded,
+      color: const Color(0xFF4DB6AC),
+      title: 'Bookings',
+      count: items.length,
+      children: [if (items.isNotEmpty) BookingLines(items: items)],
     );
   }
 }

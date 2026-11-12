@@ -202,7 +202,8 @@ Thank you,
 Clay", 'the storage upgrades from version 5, and a reading keeps the email written for the owner, lines and all');
     $db->run('DELETE FROM {readings} WHERE email_id = ?', [987655]);
     $store->put('leg', 'AA1|2026-11-20|RDU|DFW', ['fcity' => 'Raleigh/Durham', 'dep_at' => 1795000000, 'arr_at' => null]);
-    $ok($store->item('leg', 'AA1|2026-11-20|RDU|DFW') === ['fcity' => 'Raleigh/Durham', 'dep_at' => 1795000000, 'arr_at' => null], 'a travel leg is kept as written');
+    $leg = $store->item('leg', 'AA1|2026-11-20|RDU|DFW') ?? [];
+    $ok(($leg['fcity'] ?? '') === 'Raleigh/Durham' && ($leg['dep_at'] ?? 0) === 1795000000 && array_key_exists('arr_at', $leg) && $leg['arr_at'] === null, 'a travel leg is kept as written');
     $store->remove('leg', 'AA1|2026-11-20|RDU|DFW');
 
     // Phones: where to reach one, whether it rings, and a PC saying it is in front.

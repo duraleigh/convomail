@@ -10,11 +10,12 @@ class ComposeRequest {
         rowKey = null,
         _nonce = _counter++;
 
-  ComposeRequest.reply(this.messageId, {required this.rowKey, bool all = false})
+  /// With [body], the reply box opens with those words already in it, for
+  /// the user to look over (an email the assistant wrote for them).
+  ComposeRequest.reply(this.messageId, {required this.rowKey, bool all = false, this.body = ''})
       : kind = all ? 'replyAll' : 'reply',
         to = const [],
         subject = '',
-        body = '',
         _nonce = _counter++;
 
   ComposeRequest.forward(this.messageId, {required this.rowKey})
@@ -33,7 +34,8 @@ class ComposeRequest {
   /// The People-list row the request came from.
   final String? rowKey;
 
-  /// Prefill for new messages (mailto: handling in M10 uses these).
+  /// Prefill for new messages (mailto: handling in M10 uses these). [body]
+  /// also fills a reply.
   final List<String> to;
   final String subject;
   final String body;

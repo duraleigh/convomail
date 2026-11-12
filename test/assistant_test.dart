@@ -986,6 +986,170 @@ void main() {
       await teardown(tester);
     });
 
+    testWidgets('the Travel card: one line for each leg, the first drawn large; the check-in link, a delay and a cancellation show as they should', (tester) async {
+      await tester.runAsync(filled);
+      int secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
+      final out = DateTime.now().add(const Duration(days: 2));
+      final back = DateTime.now().add(const Duration(days: 4));
+      Map<String, Object?> leg(String number, String fc, String fcity, String tc, String tcity, DateTime dep, {String state = 'confirmed', String wasDep = '', String wasArr = '', String checkin = '', String dep0 = '2026-11-16T19:57', String arr0 = '2026-11-16T22:00'}) => {
+            'mode': 'flight', 'carrier': 'American Airlines', 'number': number, 'fc': fc, 'fcity': fcity, 'tc': tc, 'tcity': tcity,
+            'dep': dep0, 'arr': arr0, 'dep_at': secs(dep), 'arr_at': secs(dep.add(const Duration(hours: 2, minutes: 3))), 'loc': 'HEYLVT',
+            'state': state, 'news_at': 0, 'was_dep': wasDep, 'was_arr': wasArr, 'checkin': checkin, 'mid': '<daily-2@x>', 'missing': <String>[],
+          };
+      const a = 'AA4704|2026-11-16|RDU|LGA';
+      const b = 'AA1187|2026-11-18|LGA|RDU';
+      await tester.runAsync(() async {
+        await helperSays('leg', a, leg('AA4704', 'RDU', 'Raleigh/Durham', 'LGA', 'New York LaGuardia', out));
+        await helperSays('leg', b, leg('AA1187', 'LGA', 'New York LaGuardia', 'RDU', 'Raleigh/Durham', back, dep0: '2026-11-18T08:15', arr0: '2026-11-18T10:04'));
+        // One that landed an hour ago is not on the card.
+        await helperSays('leg', 'AA9|x|RDU|CLT', leg('AA9', 'RDU', 'Raleigh/Durham', 'CLT', 'Charlotte', DateTime.now().subtract(const Duration(hours: 4))));
+      });
+      final c = await pumpApp(tester, Destination.today);
+      final card = find.byKey(const ValueKey('today-travel'));
+      expect(card, findsOneWidget);
+      String text(String key) => tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+      // The first leg, large: the route, the day, the two codes, the times under them, how long, the confirmation, the carrier and number.
+      expect(text('leg-heading-leg:$a'), 'UPCOMING');
+      expect(text('leg-route-leg:$a'), 'Raleigh/Durham to New York LaGuardia');
+      expect(text('leg-day-leg:$a'), 'Mon, Nov 16');
+      expect([text('leg-from-leg:$a'), text('leg-to-leg:$a')], ['RDU', 'LGA']);
+      expect([text('leg-dep-leg:$a'), text('leg-arr-leg:$a')], ['7:57 PM', '10:00 PM']);
+      expect(text('leg-length-leg:$a'), '2h 3m');
+      expect(tester.widget<SelectableText>(find.byKey(const ValueKey('leg-conf-leg:$a'))).data, 'HEYLVT');
+      expect(tester.widget<SelectableText>(find.byKey(const ValueKey('leg-number-leg:$a'))).data, 'AA4704');
+      expect(find.descendant(of: card, matching: find.text('American Airlines')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('leg-from-leg:$a'))).style!.fontSize!, greaterThan(30), reason: 'the codes are drawn large');
+      // The leg after it: its own line, every detail, smaller.
+      expect(text('leg-route-leg:$b'), 'LGA → RDU · New York LaGuardia to Raleigh/Durham');
+      expect([text('leg-day-leg:$b'), text('leg-dep-leg:$b'), text('leg-arr-leg:$b')], ['Wed, Nov 18', '8:15 AM', '10:04 AM']);
+      expect(text('leg-number-leg:$b'), 'American Airlines AA1187 · Confirmation HEYLVT');
+      expect(find.byKey(const ValueKey('leg-leg:AA9|x|RDU|CLT')), findsNothing, reason: 'landed');
+      Material section() => tester.widget<Material>(card);
+      expect((section().shape! as RoundedRectangleBorder).side, BorderSide.none);
+
+      // The invitation to check in came: a button that goes where the email's own button goes.
+      expect(find.byKey(const ValueKey('leg-checkin-leg:$a')), findsNothing);
+      await tester.runAsync(() => helperSays('leg', a, leg('AA4704', 'RDU', 'Raleigh/Durham', 'LGA', 'New York LaGuardia', out, state: 'checkin', checkin: 'https://aa.example/checkin?r=HEYLVT')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('leg-checkin-leg:$a')), findsOneWidget);
+      expect(text('leg-heading-leg:$a'), 'UPCOMING');
+      await tester.runAsync(() => helperSays('leg', a, leg('AA4704', 'RDU', 'Raleigh/Durham', 'LGA', 'New York LaGuardia', out, state: 'checked', checkin: 'https://aa.example/checkin?r=HEYLVT')));
+      await tester.pumpAndSettle();
+      expect(text('leg-heading-leg:$a'), 'CHECKED IN');
+      expect(find.byKey(const ValueKey('leg-checkin-leg:$a')), findsNothing);
+
+      // A delay: the card turns yellow; the old times are struck through with the new ones beside them.
+      await tester.runAsync(() => helperSays('leg', a, leg('AA4704', 'RDU', 'Raleigh/Durham', 'LGA', 'New York LaGuardia', out, state: 'delayed', dep0: '2026-11-16T21:10', arr0: '2026-11-16T23:15', wasDep: '2026-11-16T19:57', wasArr: '2026-11-16T22:00')));
+      await tester.pumpAndSettle();
+      expect(text('leg-heading-leg:$a'), 'DELAYED');
+      expect((section().shape! as RoundedRectangleBorder).side.color, const Color(0xFFFFCA28));
+      expect([text('leg-dep-leg:$a-was'), text('leg-dep-leg:$a'), text('leg-arr-leg:$a-was'), text('leg-arr-leg:$a')], ['7:57 PM', '9:10 PM', '10:00 PM', '11:15 PM']);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('leg-dep-leg:$a-was'))).style!.decoration, TextDecoration.lineThrough);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('leg-dep-leg:$a'))).style!.color, const Color(0xFFFFCA28));
+
+      // A cancellation: red.
+      await tester.runAsync(() => helperSays('leg', b, leg('AA1187', 'LGA', 'New York LaGuardia', 'RDU', 'Raleigh/Durham', back, state: 'cancelled')));
+      await tester.pumpAndSettle();
+      expect(text('leg-heading-leg:$b'), 'CANCELLED');
+      expect((section().shape! as RoundedRectangleBorder).side.color, const Color(0xFFEF5350));
+
+      // A click on a leg opens the newest email about it, with the way back.
+      await tester.tap(find.byKey(const ValueKey('leg-route-leg:$a')));
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.feed);
+      expect(c.read(openMailProvider('feed')), (await tester.runAsync(() => message('<daily-2@x>')))!.id);
+      expect(find.text('Back to Précis'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await teardown(tester);
+    });
+
+    testWidgets('the Bookings card: a hotel and a car with a driver, each with its details; the x and the menu take one off on every device', (tester) async {
+      await tester.runAsync(filled);
+      int secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
+      final start = DateTime.now().add(const Duration(days: 3));
+      await tester.runAsync(() async {
+        await helperSays('booking', 'hotel|88412207', {
+          'type': 'hotel', 'name': 'The Joule', 'starts': '2026-11-20T15:00', 'ends': '2026-11-22T11:00', 'start_at': secs(start), 'end_at': secs(start.add(const Duration(days: 2))),
+          'place': 'Dallas', 'to': '', 'address': '1530 Main St, Dallas, TX', 'conf': '88412207', 'phone': '214-555-0100', 'person': '', 'party': '', 'state': 'confirmed', 'news_at': 0, 'mid': '<daily-2@x>',
+        });
+        await helperSays('booking', 'car_service|cr-5521', {
+          'type': 'car_service', 'name': 'Carey', 'starts': '2026-11-20T09:30', 'ends': '', 'start_at': secs(start.subtract(const Duration(hours: 5))), 'end_at': null,
+          'place': 'DFW Terminal C', 'to': 'The Joule', 'address': '', 'conf': 'CR-5521', 'phone': '800-555-0199', 'person': 'Luis M.', 'party': '', 'state': 'confirmed', 'news_at': 0, 'mid': '<daily-2@x>',
+        });
+        await db.delete(db.helperOutbox).go();
+      });
+      await pumpApp(tester, Destination.today);
+      final card = find.byKey(const ValueKey('today-bookings'));
+      expect(find.descendant(of: card, matching: find.text('Bookings')), findsOneWidget);
+      String text(String key) => tester.widget<Text>(find.byKey(ValueKey(key))).data!;
+      const hotel = 'booking:hotel|88412207';
+      const car = 'booking:car_service|cr-5521';
+      expect(text('booking-heading-$hotel'), 'HOTEL · UPCOMING');
+      expect(text('booking-title-$hotel'), 'The Joule · Dallas');
+      expect(text('booking-when-$hotel'), 'Check-in Fri, Nov 20 3:00 PM · Check-out Sun, Nov 22 11:00 AM');
+      expect(text('booking-rest-$hotel'), '1530 Main St, Dallas, TX · Confirmation 88412207 · 214-555-0100');
+      expect(text('booking-title-$car'), 'Carey · Driver Luis M.');
+      expect(text('booking-when-$car'), 'Pick-up Fri, Nov 20 9:30 AM');
+      expect(text('booking-rest-$car'), 'DFW Terminal C → The Joule · Confirmation CR-5521 · 800-555-0199');
+      expect(tester.getTopLeft(find.byKey(const ValueKey('booking-$car'))).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('booking-$hotel'))).dy), reason: 'soonest first');
+
+      // The small x shows only while the mouse is over the line; it takes the booking off, and the helper is told.
+      double x() => tester.widget<Opacity>(find.ancestor(of: find.byKey(const ValueKey('booking-dismiss-$car')), matching: find.byType(Opacity)).first).opacity;
+      expect(x(), 0);
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await mouse.addPointer(location: Offset.zero);
+      addTearDown(mouse.removePointer);
+      await mouse.moveTo(tester.getCenter(find.byKey(const ValueKey('booking-title-$car'))));
+      await tester.pumpAndSettle();
+      expect(x(), 1);
+      await tester.tap(find.byKey(const ValueKey('booking-dismiss-$car')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('booking-$car')), findsNothing);
+      var noted = await tester.runAsync(() => db.customSelect("SELECT k, data FROM helper_outbox WHERE kind = 'cardfix'").get());
+      expect([for (final n in noted!) '${n.read<String>('k')} ${n.read<String>('data')}'], ['$car {"off":true}']);
+
+      // The menu: "Does not belong here" takes it off and tells the assistant what it was.
+      await tester.tap(find.byKey(const ValueKey('booking-$hotel')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('menu-dismiss')), findsOneWidget);
+      expect(find.byKey(const ValueKey('menu-later')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('menu-reject')));
+      await tester.pumpAndSettle();
+      expect(card, findsNothing, reason: 'with nothing left in it the card goes');
+      noted = await tester.runAsync(() => db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'cardfix' AND k = '$hotel'").get());
+      expect(noted!.single.read<String>('data'), '{"no":true,"what":"Hotel: The Joule"}');
+      // Dismissed on another device: gone here too.
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('booking-$hotel')), findsOneWidget);
+      await tester.runAsync(() => helperSays('cardfix', hotel, {'off': true}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('booking-$hotel')), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('travel someone booked with details missing: their email is under Needs you with "Review draft", which opens the reply box with the email already written', (tester) async {
+      await tester.runAsync(filled);
+      const draft = 'Hi Renee,\n\nCould you send me these for the Dallas trip?\n- the confirmation code\n- the flight number for the flight home\n\nThank you,\nClay';
+      await tester.runAsync(() => helperSays('read', '<renee@x>', {'line': 'Renee sent your Dallas travel.', 'focus': true, 'ask': 'Ask Renee for the travel details that are missing.', 'why': ['Details the travel card needs were not in this email.'], 'answered': false, 'at': 1, 'know': false, 'thing': 'Dallas trip', 'draft': draft}));
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      final bank = (await tester.runAsync(() => message('<bank@x>')))!;
+      final c = await pumpApp(tester, Destination.today);
+      expect(find.descendant(of: find.byKey(ValueKey('needs-${renee.id}')), matching: find.text('Ask Renee for the travel details that are missing.')), findsOneWidget);
+      expect(find.byKey(ValueKey('needs-draft-${bank.id}')), findsNothing, reason: 'no other email ever carries one');
+      await tester.tap(find.byKey(ValueKey('needs-draft-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.focus);
+      expect(find.byType(ComposeForm), findsOneWidget);
+      expect(c.read(replyRequestProvider)!.body, draft);
+      // The words are in the box, to change or send; nothing has gone anywhere.
+      expect(find.textContaining('Could you send me these for the Dallas trip?', findRichText: true), findsWidgets);
+      expect(find.textContaining('the flight number for the flight home', findRichText: true), findsWidgets);
+      expect(find.byKey(const ValueKey('compose-send')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await teardown(tester);
+    });
+
     testWidgets('a delivery is headed by who it comes from, with what is inside in small print underneath', (tester) async {
       await tester.runAsync(filled);
       await tester.runAsync(() async {

@@ -124,6 +124,30 @@ extension HelperQueries on AppDatabase {
     await noteForHelper('pref', 'day', {'dismissed': secs});
   }
 
+  /// Travel legs and bookings from the helper, as they stand.
+  Stream<List<HelperCard>> watchHelperCards() => (select(helperCards)..orderBy([(c) => OrderingTerm(expression: c.startsAt)])).watch();
+
+  /// Takes a booking off its card on every device (true), or brings it
+  /// back. That is all: nothing is taught.
+  Future<void> setCardDismissed(String k, bool off) async {
+    await (update(helperCards)..where((c) => c.k.equals(k))).write(HelperCardsCompanion(dismissed: Value(off)));
+    await noteForHelper('cardfix', k, {'off': off});
+  }
+
+  /// Puts a booking off its card until [until]; null brings it back.
+  Future<void> setCardLater(String k, DateTime? until) async {
+    await (update(helperCards)..where((c) => c.k.equals(k))).write(HelperCardsCompanion(laterUntil: Value(until)));
+    await noteForHelper('cardfix', k, {'later': until == null ? 0 : until.millisecondsSinceEpoch ~/ 1000});
+  }
+
+  /// "Does not belong here" on a booking: it leaves the card, and the
+  /// assistant is shown [what] it was, to learn the kind of thing. With
+  /// [no] false, taken back.
+  Future<void> setCardRejected(String k, bool no, String what) async {
+    await (update(helperCards)..where((c) => c.k.equals(k))).write(HelperCardsCompanion(dismissed: Value(no)));
+    await noteForHelper('cardfix', k, {'no': no, 'what': what});
+  }
+
   /// Notes a change that is not simply a row's state: a fix to one email,
   /// or a tag renamed or removed. Nothing is noted when no helper is followed.
   Future<void> noteForHelper(String kind, String k, Map<String, Object?> data) async {
@@ -557,6 +581,42 @@ extension HelperQueries on AppDatabase {
           asks: Value(data['asks'] == true),
           know: Value(data['know'] == true),
           thing: Value((data['thing'] as String?) ?? ''),
+          draft: Value((data['draft'] as String?) ?? ''),
+        ));
+        return const {};
+      case 'leg':
+      case 'booking':
+        // A flight or train, or another booking, the assistant read out of
+        // the mail. What this device's user did to it (dismissed, put off)
+        // is kept when the helper says more about it.
+        final id = '$kind:$k';
+        if (deleted) {
+          await (delete(helperCards)..where((c) => c.k.equals(id))).go();
+          return const {};
+        }
+        final starts = _time(data[kind == 'leg' ? 'dep_at' : 'start_at']);
+        final ends = _time(data[kind == 'leg' ? 'arr_at' : 'end_at']);
+        final row = HelperCardsCompanion(
+          kind: Value(kind),
+          data: Value(jsonEncode(data)),
+          startsAt: Value(starts),
+          endsAt: Value(ends),
+          messageId: Value((data['mid'] as String?) ?? ''),
+          updatedAt: Value(DateTime.now()),
+        );
+        final have = await (select(helperCards)..where((c) => c.k.equals(id))).getSingleOrNull();
+        if (have == null) {
+          await into(helperCards).insert(row.copyWith(k: Value(id)));
+        } else {
+          await (update(helperCards)..where((c) => c.k.equals(id))).write(row);
+        }
+        return const {};
+      case 'cardfix':
+        // A booking dismissed or put off on another device (or brought back).
+        if (deleted) return const {};
+        await (update(helperCards)..where((c) => c.k.equals(k))).write(HelperCardsCompanion(
+          dismissed: data['off'] is bool || data['no'] is bool ? Value(data['off'] == true || data['no'] == true) : const Value.absent(),
+          laterUntil: data.containsKey('later') ? Value(_time(data['later'])) : const Value.absent(),
         ));
         return const {};
       case 'day':

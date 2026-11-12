@@ -189,6 +189,14 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
         _subject.text = req.subject;
         if (req.body.isNotEmpty) bodyHtml = '<p>${const HtmlEscape().convert(req.body)}</p>';
       }
+      // A reply that comes with words already written (an email the
+      // assistant wrote for the user to look over): each of its lines kept.
+      if (_original != null && !req.isForward && req.body.isNotEmpty) {
+        bodyHtml = [
+          for (final para in req.body.split(RegExp(r'\n\s*\n')))
+            if (para.trim().isNotEmpty) '<p>${const HtmlEscape().convert(para.trim()).replaceAll('\n', '<br>')}</p>',
+        ].join();
+      }
     }
 
     _editor = ComposeEditorController(bodyJson: bodyJson, html: bodyHtml, signature: identity == null || draft != null ? const <Node>[] : signatureNodes(identity));

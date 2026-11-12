@@ -11,7 +11,7 @@ import 'helper_queries.dart';
 
 /// What the assistant said about one email.
 class Reading {
-  const Reading({required String line, required this.focus, required String ask, this.due, List<String> why = const [], this.answered = false, this.know = false, this.thing = ''})
+  const Reading({required String line, required this.focus, required String ask, this.due, List<String> why = const [], this.answered = false, this.know = false, this.thing = '', this.draft = ''})
       : _line = line,
         _ask = ask,
         _why = why;
@@ -45,6 +45,11 @@ class Reading {
 
   /// A few words naming what the email is about ("Amazon hard case").
   final String thing;
+
+  /// An email written for the user to look over and send. There is only
+  /// ever one kind: asking whoever booked travel for them for the details
+  /// that are missing. Nothing is sent unless the user sends it.
+  final String draft;
 }
 
 /// One email as the Focus, Feed and Noise lists show it: who, what, when,
@@ -143,7 +148,7 @@ extension MailQueries on AppDatabase {
            COALESCE(NULLIF(c.user_label, ''), NULLIF(c.display_name, ''), NULLIF(m.from_name, ''), m.from_address) AS who,
            c.feeds_pile AS chosen, COALESCE(m.feeds_category, c.feeds_category) AS tag, c.class_reasons AS sender_why, c.counts_toward_unread AS counts,
            v.pile AS hpile,
-           r.message_id AS rid, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.know, r.thing,
+           r.message_id AS rid, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.know, r.thing, r.draft,
            (SELECT MIN(a.row_key) FROM message_row_assignments a WHERE a.message_id = m.id) AS row_key
     FROM messages m
     JOIN folders f ON f.id = m.folder_id AND f.role = 'inbox'
@@ -177,6 +182,7 @@ extension MailQueries on AppDatabase {
         answered: r.readNullable<bool>('answered') ?? false,
         know: r.readNullable<bool>('know') ?? false,
         thing: r.readNullable<String>('thing') ?? '',
+        draft: r.readNullable<String>('draft') ?? '',
       );
     }
     final tag = r.readNullable<String>('tag');
