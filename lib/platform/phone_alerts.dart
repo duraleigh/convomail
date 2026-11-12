@@ -9,6 +9,7 @@ import '../app/mail_state.dart';
 import '../helper/helper_client.dart';
 import '../helper/helper_sync.dart';
 import '../store/database.dart';
+import '../store/mail_queries.dart';
 import '../ui/shell/compact_shell.dart';
 import 'android_bridge.dart';
 
@@ -107,11 +108,17 @@ class PhoneAlerts {
   }
 
   /// An alert was tapped: Focus opens on that email. If the email has not
-  /// reached this phone yet, Focus opens on its list.
+  /// reached this phone yet, Focus opens on its list. An email that is not
+  /// from a person (a sign-in code, say) opens in Feed, where it lives.
   Future<void> open(String messageId) async {
     try {
       final m = await (_db.select(_db.messages)..where((m) => m.messageId.equals(messageId))..limit(1)).getSingleOrNull();
       _ref.read(compactPageProvider.notifier).show(CompactPage.main);
+      if (m != null && m.classification == 'feeds' && (await _db.watchMailItem(m.id).first)?.needsYou != true) {
+        _ref.read(destinationProvider.notifier).select(Destination.feed);
+        _ref.read(openMailProvider('feed').notifier).open(m.id);
+        return;
+      }
       _ref.read(destinationProvider.notifier).select(Destination.focus);
       _ref.read(openMailProvider('focus').notifier).open(m?.id);
     } catch (e, st) {

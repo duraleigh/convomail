@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 /**
  * Sends one test alert to each phone and says what Google's alert service
- * answered:  php server_alert_test.php
+ * answered:  php server_alert.php
  *
  * Prints answer codes and Google's own short reason. No keys, no phone
  * addresses, no mail.

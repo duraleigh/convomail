@@ -103,6 +103,17 @@ final class Devices
         }
     }
 
+    /** Whether this phone's app can show a sign-in code alert (older ones cannot). */
+    public function setShowsCodes(int $id, bool $shows): void
+    {
+        $this->store->set('push.codes.' . $id, $shows ? '1' : null);
+    }
+
+    public function showsCodes(int $id): bool
+    {
+        return $this->store->get('push.codes.' . $id) === '1';
+    }
+
     /** A PC says Précis is open and in front of the owner right now. */
     public function inFront(int $id): void
     {

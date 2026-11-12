@@ -181,7 +181,9 @@ class HelperClient {
   }
 
   /// Tells the helper where to send this phone its alerts, and whether it may ring.
-  Future<void> setPush({String? token, bool? ring}) => _call('POST', '/api/devices/push', body: {'token': ?token, 'ring': ?ring});
+  /// It also says this app can show a sign-in code alert, so the helper
+  /// sends them here.
+  Future<void> setPush({String? token, bool? ring}) => _call('POST', '/api/devices/push', body: {'token': ?token, 'ring': ?ring, 'codes': true});
 
   /// Turns the assistant on or off, or sets its monthly ceiling (in
   /// millionths of a dollar). Returns how the assistant is doing after.

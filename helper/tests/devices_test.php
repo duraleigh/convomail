@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Precis\Tests;
 
 use Precis\Alerts;
+use Precis\Codes;
 use Precis\Devices;
 use Precis\Google;
 use Precis\Push;
@@ -277,6 +278,57 @@ return [
         $w->later(86400);
         same(0, $alerts->sweep());
         same(4, count($w->fake->pushed));
+    },
+
+    'a sign-in code goes to the phones with the code itself, once, even with Précis open on the PC, and is taken away when it is no longer good' => function () use ($ringing, $joined): void {
+        [$w, $alerts] = $ringing();
+        $phone = $joined($w, 'android', 'phone-1');
+        // A phone still on the older app: it cannot show a code, so it is sent none.
+        $joined($w, 'android', 'phone-old');
+        $pc = $joined($w, 'windows');
+        (new Devices($w->store))->setShowsCodes($phone, true);
+        same(2, $alerts->sweep());
+        $w->fake->pushed = [$w->fake->pushed[0]];
+        (new Devices($w->store))->inFront($pc);
+        $w->later(30);
+        $mid = $w->arrive(['From' => 'Acme Bank <no-reply@acme.example>', 'To' => 'me@example.com', 'Subject' => 'Your verification code'], ['INBOX', 'UNREAD'], 'Your verification code is 482913. It expires in 10 minutes.');
+        // Mail that only looks a little like it does not ring.
+        $w->arrive(['From' => 'Shop <deals@shop.example>', 'To' => 'me@example.com', 'Subject' => 'Use promo code SAVE20 today'], ['INBOX', 'UNREAD'], 'Your discount code is SAVE20.');
+        $w->arrive(['From' => 'Dana <dana@x.example>', 'To' => 'me@example.com', 'Subject' => 'Lunch'], ['INBOX', 'UNREAD'], 'See you at 1230 on Friday.');
+        same(1, $alerts->sweep());
+        same('phone-1', $w->fake->pushed[1]['token']);
+        $d = $w->fake->pushed[1]['data'];
+        same('code', $d['t']);
+        same('482913', $d['code']);
+        same('Acme Bank', $d['who']);
+        same($mid, $d['mid']);
+        check((int) $d['until'] > $w->clock->now && (int) $d['until'] <= $w->clock->now + Codes::LIFETIME);
+        // The helper keeps no copy of the code.
+        foreach ($w->store->db->all('SELECT k FROM {alerts}') as $row) {
+            check(!str_contains((string) $row['k'], '482913'));
+        }
+        // The timer looks again: nothing more.
+        $w->later(60);
+        same(0, $alerts->sweep());
+        // Fifteen minutes on, the code is no good: its alert is taken off the phone.
+        $w->later(Codes::LIFETIME);
+        $alerts->sweep();
+        same(['t' => 'clear', 'id' => $d['id']], array_intersect_key($w->fake->pushed[2]['data'], ['t' => 1, 'id' => 1]));
+        same(0, $alerts->sweep());
+    },
+
+    'what is and is not a sign-in code' => function (): void {
+        same('482913', Codes::find('Your verification code', 'Your verification code is 482913.'));
+        same('123456', Codes::find('123456 is your Facebook confirmation code', ''));
+        same('G-481516', Codes::find('Your Google verification code', 'G-481516 is your Google verification code.'));
+        same('739-204', Codes::find('Sign in to Slack', 'Your sign-in code: 739-204 Enter it to continue.'));
+        same('4821', Codes::find('Your one-time passcode', 'Use 4821 to finish signing in.') ?? Codes::find('Your one-time passcode', '4821'));
+        same('58KQ2M', Codes::find('Security code', 'Your security code is 58KQ2M'));
+        same(null, Codes::find('Use promo code SAVE20', 'Your discount code is SAVE20.'));
+        same(null, Codes::find('Your flight confirmation code', 'Confirmation code: QX7R2P for your trip.'));
+        same(null, Codes::find('Lunch', 'See you at 1230 on Friday.'));
+        same(null, Codes::find('Verification needed', 'Please verify your account by 2026.'));
+        same(null, Codes::find('Dress code for the gala', 'The dress code is BLACK1.'));
     },
 
     'one notice an hour before a "by" time, even with Précis open on the PC' => function () use ($ringing, $joined): void {

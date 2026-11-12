@@ -4,9 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.PersistableBundle
+import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.FirebaseApp
@@ -40,6 +45,7 @@ object Alerts {
     private const val NEEDS_YOU = "needs_you"
     private const val REMINDERS = "reminders"
     private const val QUIET = "quiet"
+    private const val CODES = "codes"
     const val ACTION = "com.clayaiken.precis.ALERT_ACTION"
 
     /** The key the app keeps this device's own key to the helper under. */
@@ -122,6 +128,10 @@ object Alerts {
             description = "A reminder you set, at its time."
             setShowBadge(true)
         })
+        manager.createNotificationChannel(NotificationChannel(CODES, "Sign-in codes", NotificationManager.IMPORTANCE_HIGH).apply {
+            description = "A sign-in code that just came by email: the code, ready to paste."
+            setShowBadge(false)
+        })
         manager.createNotificationChannel(NotificationChannel(QUIET, "During quiet hours", NotificationManager.IMPORTANCE_LOW).apply {
             description = "The same alerts during your quiet hours: they arrive without a sound."
             setShowBadge(true)
@@ -146,6 +156,10 @@ object Alerts {
         val ask = timesInText(data["ask"] ?: "", h24)
         val by = data["by"]?.toLongOrNull()
         val quiet = data["quiet"] == "1"
+        if (kind == "code") {
+            showCode(context, id, mid, who, data["code"] ?: "", data["until"]?.toLongOrNull(), quiet)
+            return
+        }
         val channel = if (quiet) QUIET else if (kind == "reminder") REMINDERS else NEEDS_YOU
 
         val title = when (kind) {
@@ -197,6 +211,72 @@ object Alerts {
         } catch (e: SecurityException) {
             // Alerts were turned off for Précis in the phone's settings.
         }
+    }
+
+    /**
+     * A sign-in code: who sent it and the code itself, already copied, with
+     * Copy to copy it again. It goes away by itself when the code is no good.
+     */
+    private fun showCode(context: Context, id: Int, mid: String, who: String, code: String, until: Long?, quiet: Boolean) {
+        if (code.isEmpty()) return
+        val copied = copy(context, code)
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        val open = Intent(context, MainActivity::class.java).apply {
+            this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra("mid", mid)
+        }
+        val press = Intent(context, AlertActionReceiver::class.java).apply {
+            action = ACTION
+            putExtra("what", "copy")
+            putExtra("id", id)
+            putExtra("code", code)
+        }
+        val title = if (who.isEmpty()) "Sign-in code" else "$who · sign-in code"
+        val text = if (copied) "$code · copied, ready to paste" else code
+        val builder = NotificationCompat.Builder(context, if (quiet) QUIET else CODES)
+            .setSmallIcon(R.drawable.ic_stat_precis)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(PendingIntent.getActivity(context, id, open, flags))
+            .setAutoCancel(false)
+            .setOnlyAlertOnce(true)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setPriority(if (quiet) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
+            // On a locked phone it says a code came, not what the code is.
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(context, if (quiet) QUIET else CODES)
+                    .setSmallIcon(R.drawable.ic_stat_precis)
+                    .setContentTitle(title)
+                    .setContentText("Unlock to see it")
+                    .build()
+            )
+            .addAction(0, "Copy", PendingIntent.getBroadcast(context, id * 4 + 3, press, flags))
+        if (until != null) {
+            val left = until * 1000 - System.currentTimeMillis()
+            if (left <= 0) return
+            builder.setTimeoutAfter(left)
+        }
+        try {
+            NotificationManagerCompat.from(context).notify(id, builder.build())
+        } catch (e: SecurityException) {
+            // Alerts were turned off for Précis in the phone's settings.
+        }
+    }
+
+    /** Puts a code on the phone's clipboard, marked private so it is not shown in previews. */
+    fun copy(context: Context, code: String): Boolean = try {
+        val clip = ClipData.newPlainText("Sign-in code", code)
+        if (Build.VERSION.SDK_INT >= 24) {
+            clip.description.extras = PersistableBundle().apply {
+                putBoolean(if (Build.VERSION.SDK_INT >= 33) ClipDescription.EXTRA_IS_SENSITIVE else "android.content.extra.IS_SENSITIVE", true)
+            }
+        }
+        (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+        true
+    } catch (e: Exception) {
+        false
     }
 
     private fun clock(epochSeconds: Long, h24: Boolean): String = SimpleDateFormat(if (h24) "HH:mm" else "h:mm a", Locale.US).format(Date(epochSeconds * 1000))
@@ -300,6 +380,12 @@ class AlertActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Alerts.ACTION) return
         val app = context.applicationContext
+        if (intent.getStringExtra("what") == "copy") {
+            // Copy on a sign-in code: copied again, and the alert stays.
+            val ok = Alerts.copy(app, intent.getStringExtra("code") ?: "")
+            if (Build.VERSION.SDK_INT < 33) Toast.makeText(app, if (ok) "Code copied" else "Could not copy the code", Toast.LENGTH_SHORT).show()
+            return
+        }
         val change = Alerts.change(intent.getStringExtra("what") ?: "", intent.getStringExtra("mid") ?: "", intent.getStringExtra("uid") ?: "") ?: return
         NotificationManagerCompat.from(app).cancel(intent.getIntExtra("id", 0))
         val pending = goAsync()

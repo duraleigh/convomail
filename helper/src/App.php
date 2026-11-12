@@ -630,6 +630,10 @@ final class App
             case 'POST /api/devices/push':
                 $j = $r->json() ?? [];
                 $devices->setPush($id, array_key_exists('token', $j) ? (string) ($j['token'] ?? '') : null, is_bool($j['ring'] ?? null) ? $j['ring'] : null);
+                // A phone whose app can show a sign-in code says so.
+                if (is_bool($j['codes'] ?? null)) {
+                    $devices->setShowsCodes($id, $j['codes']);
+                }
                 return Response::json(['ok' => true, 'alerts' => $this->push()->hasKey()]);
             case 'GET /api/devices':
                 return Response::json(['devices' => array_values(array_filter($devices->all(), static fn (array $d): bool => (int) $d['revoked'] === 0)), 'me' => $id]);

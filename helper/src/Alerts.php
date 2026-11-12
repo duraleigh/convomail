@@ -96,9 +96,13 @@ final class Alerts
         $sent = 0;
         $count = count($focus);
 
-        $ring = function (array $data, bool $silentIfFront) use ($phones, $quiet, $front, &$sent): void {
+        $ring = function (array $data, bool $silentIfFront, bool $codeOnly = false) use ($phones, $quiet, $front, &$sent): void {
             foreach ($phones as $p) {
                 if ((int) $p['ring'] !== 1) {
+                    continue;
+                }
+                // Only a phone whose app knows how to show a code gets one.
+                if ($codeOnly && $this->store->get('push.codes.' . (int) $p['id']) !== '1') {
                     continue;
                 }
                 if ($silentIfFront && $front) {
@@ -140,6 +144,25 @@ final class Alerts
                     $this->note('rem:' . $uid);
                     $ring(['t' => 'reminder', 'id' => self::number(Store::key('rem:' . $uid)), 'uid' => (string) $uid, 'ask' => (string) ($r['title'] ?? 'Reminder'), 'mid' => (string) ($r['mid'] ?? ''), 'n' => $count], false);
                 }
+            }
+        }
+
+        // A sign-in code that just came: the code itself goes to the phones,
+        // also while Précis is open on a PC, and is taken away again when it
+        // is no longer good. The helper keeps no copy of the code.
+        foreach ($db->all("SELECT message_id, from_name, from_addr, subject, snippet, at FROM {emails}
+            WHERE is_from_me = 0 AND gone = 0 AND message_id <> '' AND at > ? AND at >= ? ORDER BY at DESC LIMIT 40", [$now - Codes::LIFETIME, $since]) as $e) {
+            $mid = (string) $e['message_id'];
+            $known = $this->seen('code:' . $mid);
+            $code = $known ? null : Codes::find((string) $e['subject'], (string) $e['snippet']);
+            if (!$known && $code === null) {
+                continue;
+            }
+            $live[Store::key('code:' . $mid)] = true;
+            if (!$known) {
+                $this->note('code:' . $mid);
+                $who = trim((string) $e['from_name']) !== '' ? trim((string) $e['from_name']) : (string) $e['from_addr'];
+                $ring(['t' => 'code', 'id' => self::number(Store::key('code:' . $mid)), 'mid' => $mid, 'who' => $who, 'code' => $code, 'until' => (int) $e['at'] + Codes::LIFETIME, 'n' => $count], false, true);
             }
         }
 
