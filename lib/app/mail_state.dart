@@ -46,11 +46,10 @@ final focusLaterProvider = StreamProvider<List<MailItem>>((ref) {
   return ref.watch(databaseProvider).watchFocusLater(accountId: ref.watch(accountScopeProvider));
 });
 
-/// "Good to know" on Today: from yesterday morning on, so what came last
-/// night is still there in the morning.
+/// "Good to know" on Today: what came today, the same day The Lede speaks
+/// of, so whatever The Lede mentions is a line on the page.
 final goodToKnowProvider = StreamProvider<List<MailItem>>((ref) {
-  final today = ref.watch(todayDateProvider);
-  return ref.watch(databaseProvider).watchGoodToKnow(accountId: ref.watch(accountScopeProvider), since: DateTime(today.year, today.month, today.day - 1));
+  return ref.watch(databaseProvider).watchGoodToKnow(accountId: ref.watch(accountScopeProvider), since: ref.watch(todayDateProvider));
 });
 
 /// Focus emails marked done today.

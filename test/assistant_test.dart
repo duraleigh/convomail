@@ -841,6 +841,8 @@ void main() {
       await tester.runAsync(filled);
       await tester.runAsync(() => helperSays('sort', '<daily-1@x>', {'cls': 'feeds', 'cat': 'Delivery', 'pile': 'feed'}));
       await tester.runAsync(() => helperSays('read', '<daily-1@x>', {'line': 'Your hard case was delivered at 15:10 and left at the front door.', 'focus': false, 'ask': '', 'why': <String>[], 'answered': false, 'at': 1, 'know': true, 'thing': 'Amazon hard case'}));
+      // It came a minute ago (today, whatever the hour this check runs at).
+      await tester.runAsync(() => db.customStatement('UPDATE messages SET date = ? WHERE message_id = ?', [DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60, '<daily-1@x>']));
       final parcel = (await tester.runAsync(() => message('<daily-1@x>')))!;
       final renee = (await tester.runAsync(() => message('<renee@x>')))!;
       final c = await pumpApp(tester, Destination.today);
