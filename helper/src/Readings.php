@@ -62,6 +62,8 @@ final class Readings
 
         know: true when needs_owner is false and the email still tells the owner something about their own business that they would want to know today. That is: an answer to something the owner asked for (when the lines above the text say the owner was waiting for it, and this email gives that answer or says it cannot be given, know is true and the line says what the answer is); a decision, a result or a change of plan from a person; a security, fraud or credit notice about the owner's own accounts; a delivery that is arriving today, has arrived, or could not be made; money that moved when it was not expected to; a booking or appointment that changed or was cancelled. False for routine receipts and statements, an order merely placed or shipped, sign-in codes, newsletters, offers, thanks that close a conversation, and anything that is "noise". When in doubt, false.
 
+        details: Whether the email should be read in full for the owner's travel and bookings cards. "travel" when the email, or a file attached to it, is about a flight or train journey of the owner's own: a booking or ticket confirmation, a change to it, an invitation to check in, a check-in confirmation or boarding pass, a delay, a cancellation, or an itinerary that someone booked for the owner and sent on. "booking" when it is about another booking of the owner's own: a hotel stay, a rental car, a car with a driver, a restaurant table, an appointment or an event ticket that an automated email confirms, changes, cancels or reminds them of; or a hotel or a car with a driver that a person booked for the owner and sent on. "none" for everything else, and always for: advertising and fare sales; a calendar invitation; an invitation to a Zoom, Google Meet or Microsoft Teams meeting; a meeting, call, interview or appointment that a person merely tells the owner about; somebody else's travel. When an email has both, "travel".
+
         reasons: One to three short plain sentences, each at most 110 characters, that tell the owner why you answered as you did, written to them as "you". Good: "It asks you to pick a time." "A payment failed and will be tried again Thursday." "It is a sale sent to a list." No scores, no percentages, no technical words.
 
         Who is meant. Everything in your report must come from the words under "Text" (and from the earlier emails, when they are shown). The Subject line is the name of the whole conversation, often written days earlier about something else: it is not part of what this email says. Never take a name from the Subject to say who "he", "she", "they" or "it" is. When the email says "he" and the words you were shown do not say who that is, you do not know who it is: keep the email's own word. Good: "Marya agrees the salary is fine and asks whether he can do the tracks." Wrong: putting in a name that the email's own words do not give. The same holds for places, amounts, dates and things: if the words you were shown do not say it, do not say it. A report that leaves a name out is right. A report with a guessed name is wrong, and the owner will act on it.
@@ -124,9 +126,10 @@ final class Readings
             'due' => ['type' => 'string'],
             'place' => ['type' => 'string', 'enum' => ['feed', 'noise', 'none']],
             'know' => ['type' => 'boolean'],
+            'details' => ['type' => 'string', 'enum' => ['travel', 'booking', 'none']],
             'reasons' => ['type' => 'array', 'items' => ['type' => 'string']],
         ],
-        'required' => ['line', 'thing', 'needs_owner', 'ask', 'due', 'place', 'know', 'reasons'],
+        'required' => ['line', 'thing', 'needs_owner', 'ask', 'due', 'place', 'know', 'details', 'reasons'],
         'additionalProperties' => false,
     ];
 
@@ -762,6 +765,11 @@ final class Readings
             if ($awaited !== null) {
                 $lines[] = 'The owner was waiting for this, from an email they sent: ' . (string) $awaited['ask'];
             }
+            // Only what the attached files are called: an itinerary may be in one.
+            $attached = array_map(static fn (array $a): string => $a['name'], Body::attachments($full));
+            if ($attached !== []) {
+                $lines[] = 'Attached files (names only): ' . implode(', ', array_slice($attached, 0, 8));
+            }
             if ($earlier !== []) {
                 array_push($lines, 'Earlier in this thread (background only, oldest first; new words of each, trimmed):', '"""', implode("\n\n", $earlier), '"""');
             }
@@ -866,8 +874,10 @@ final class Readings
         }
         // Good to know: never what already needs the owner, never Noise.
         $know = ($data['know'] ?? false) === true && !$focus && $place !== 'noise';
+        // Travel or another booking: read again in full for the cards. Never what is Noise.
+        $kind = $place !== 'noise' && in_array($data['details'] ?? '', ['travel', 'booking'], true) ? (string) $data['details'] : '';
         return ['line' => $clean($data['line'] ?? '', 200), 'focus' => $focus, 'ask' => $ask, 'due' => $due, 'place' => $place, 'why' => $why, 'asks' => false,
-            'know' => $know, 'thing' => rtrim($clean($data['thing'] ?? '', 60), '.'), 'settles' => false];
+            'know' => $know, 'thing' => rtrim($clean($data['thing'] ?? '', 60), '.'), 'settles' => false, 'kind' => $kind];
     }
 
     /**
@@ -917,6 +927,11 @@ final class Readings
             'know' => (int) ($r['know'] ?? false),
             'thing' => (string) ($r['thing'] ?? ''),
             'settles' => (int) ($r['settles'] ?? false),
+            'kind' => (string) ($r['kind'] ?? ''),
+            'detail' => (string) ($r['kind'] ?? '') === '' ? Trips::NONE : Trips::WANTED,
+            'detail_tries' => 0,
+            'detail_after' => 0,
+            'draft' => null,
             'at' => $this->store->now(),
         ]);
         $db->run('UPDATE {emails} SET read_state = ? WHERE id = ?', [self::READ, $emailId]);
@@ -1008,6 +1023,37 @@ final class Readings
         $this->publishFor($messageId);
     }
 
+    /**
+     * Puts an email in front of the owner with an email written for them to
+     * look over and send. Only ever used for one thing: a person booked
+     * travel for the owner and left details out, and this asks for them.
+     */
+    public function askFor(int $emailId, string $ask, string $draft, string $why): void
+    {
+        $db = $this->store->db;
+        if ($db->val('SELECT 1 FROM {readings} WHERE email_id = ?', [$emailId]) === null) {
+            return;
+        }
+        $db->run('UPDATE {readings} SET focus = 1, answered = 0, know = 0, ask = ?, draft = ?, why = ? WHERE email_id = ?', [$ask, $draft, Store::json([$why]), $emailId]);
+        $this->publish($emailId);
+    }
+
+    /**
+     * What [askFor] asked about has since arrived another way (the airline's
+     * own confirmation): the email no longer needs the owner, and the email
+     * written for them is let go.
+     */
+    public function askedAndAnswered(string $messageId): void
+    {
+        $db = $this->store->db;
+        $id = $db->val("SELECT e.id FROM {emails} e JOIN {readings} r ON r.email_id = e.id WHERE e.message_id = ? AND r.draft IS NOT NULL AND r.draft <> '' LIMIT 1", [$messageId]);
+        if ($id === null) {
+            return;
+        }
+        $db->run("UPDATE {readings} SET focus = 0, ask = '', draft = NULL, why = ? WHERE email_id = ?", [Store::json(['The details asked about have since arrived.']), (int) $id]);
+        $this->publish((int) $id);
+    }
+
     /** Writes again the reading of the email with this Message-ID, if it has one. */
     public function publishFor(string $messageId): void
     {
@@ -1020,7 +1066,7 @@ final class Readings
     /** Writes the reading into the stream devices follow. */
     public function publish(int $emailId): void
     {
-        $r = $this->store->db->one('SELECT e.message_id, e.is_from_me, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.asks, r.know, r.thing, r.at FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE r.email_id = ?', [$emailId]);
+        $r = $this->store->db->one('SELECT e.message_id, e.is_from_me, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.asks, r.know, r.thing, r.draft, r.at FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE r.email_id = ?', [$emailId]);
         if ($r === null || (string) $r['message_id'] === '') {
             return;
         }
@@ -1036,7 +1082,9 @@ final class Readings
             'at' => (int) $r['at'],
             // An email the owner sent: whether it asked for something. One
             // that came in: whether it is good to know, and what it is about.
-        ] + ((int) $r['is_from_me'] === 1 ? ['sent' => true, 'asks' => (int) $r['asks'] === 1] : ['know' => (int) $r['know'] === 1, 'thing' => (string) $r['thing']]));
+        ] + ((int) $r['is_from_me'] === 1 ? ['sent' => true, 'asks' => (int) $r['asks'] === 1] : ['know' => (int) $r['know'] === 1, 'thing' => (string) $r['thing']])
+            // An email written for the owner to look over and send (see [askFor]).
+            + ((string) ($r['draft'] ?? '') === '' ? [] : ['draft' => (string) $r['draft']]));
     }
 
     /**

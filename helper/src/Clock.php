@@ -11,7 +11,7 @@ namespace Precis;
  */
 final class Clock
 {
-    public function __construct(private readonly Store $store, private readonly Reader $reader, private readonly ?Readings $readings = null, private readonly ?Alerts $alerts = null)
+    public function __construct(private readonly Store $store, private readonly Reader $reader, private readonly ?Readings $readings = null, private readonly ?Alerts $alerts = null, private readonly ?Trips $trips = null)
     {
     }
 
@@ -60,6 +60,11 @@ final class Clock
             $left = $seconds - (microtime(true) - $started);
             if ($left > 5) {
                 $out['read'] = $this->readings->work($left - 4);
+            }
+            // Travel and bookings are read in full, attachments included.
+            $left = $seconds - (microtime(true) - $started);
+            if ($this->trips !== null && $left > 12) {
+                $out['trips'] = $this->trips->work($left - 8);
             }
             // What newly needs the owner rings their phones; what is finished stops showing there.
             if ($this->alerts !== null) {

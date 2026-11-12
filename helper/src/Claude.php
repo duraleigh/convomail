@@ -45,12 +45,24 @@ final class Claude implements Assistant
         );
     }
 
-    public function read(string $model, string $instructions, string $email, array $shape, bool $keepReady = false): array
+    public function read(string $model, string $instructions, string $email, array $shape, bool $keepReady = false, array $files = [], int $room = 0): array
     {
+        // Attached files go first, then the email: a PDF as a document, a
+        // picture as an image.
+        $content = $email;
+        if ($files !== []) {
+            $content = [];
+            foreach ($files as $f) {
+                $content[] = $f['mime'] === 'application/pdf'
+                    ? ['type' => 'document', 'source' => ['type' => 'base64', 'mediaType' => 'application/pdf', 'data' => $f['data']], 'title' => $f['name']]
+                    : ['type' => 'image', 'source' => ['type' => 'base64', 'mediaType' => $f['mime'], 'data' => $f['data']]];
+            }
+            $content[] = ['type' => 'text', 'text' => $email];
+        }
         try {
             $message = $this->client->messages->create(
-                maxTokens: self::MAX_TOKENS,
-                messages: [['role' => 'user', 'content' => $email]],
+                maxTokens: max(self::MAX_TOKENS, $room),
+                messages: [['role' => 'user', 'content' => $content]],
                 model: $model,
                 // The instructions are the same for every email. When many
                 // are read close together, Anthropic keeps them ready and

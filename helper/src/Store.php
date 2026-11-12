@@ -10,10 +10,10 @@ namespace Precis;
 final class Store
 {
     /** Kinds of item a device may send up. */
-    public const DEVICE_KINDS = ['sender', 'rule', 'tag', 'rowpref', 'reminder', 'done', 'msgfix', 'addr', 'me', 'book', 'names', 'pref', 'group', 'gmember'];
+    public const DEVICE_KINDS = ['sender', 'rule', 'tag', 'rowpref', 'reminder', 'done', 'msgfix', 'addr', 'me', 'book', 'names', 'pref', 'group', 'gmember', 'cardfix'];
 
     /** Kinds only the helper writes. */
-    public const HELPER_KINDS = ['sort', 'read', 'day'];
+    public const HELPER_KINDS = ['sort', 'read', 'day', 'leg', 'booking'];
 
     public function __construct(public readonly Db $db, public readonly Crypto $crypto, private readonly ?\Closure $clock = null)
     {

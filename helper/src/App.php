@@ -81,6 +81,11 @@ final class App
         return new Readings($this->store(), $this->google(), $this->sorter(), $this->assistant);
     }
 
+    public function trips(): Trips
+    {
+        return new Trips($this->store(), $this->google(), $this->readings());
+    }
+
     public function sending(): Sending
     {
         return new Sending($this->store());

@@ -329,6 +329,24 @@ final class Google
     }
 
     /**
+     * One file attached to an email, as its bytes. Read and let go like the
+     * email itself. Null when Gmail no longer has it.
+     */
+    public function attachment(int $accountId, string $id, string $attachmentId): ?string
+    {
+        try {
+            $r = $this->call('GET', self::GMAIL . 'messages/' . rawurlencode($id) . '/attachments/' . rawurlencode($attachmentId), $this->accessToken($accountId));
+        } catch (GoogleError $e) {
+            if ($e->status === 404) {
+                return null;
+            }
+            throw $e;
+        }
+        $bytes = base64_decode(strtr((string) ($r['data'] ?? ''), '-_', '+/'), true);
+        return is_string($bytes) ? $bytes : null;
+    }
+
+    /**
      * Every email of one thread, words included, oldest first as Gmail
      * gives them. Handed on and let go like [full]. Empty when Gmail no
      * longer has the thread.

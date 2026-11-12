@@ -162,6 +162,9 @@ try {
     $db->exec('ALTER TABLE {readings} DROP COLUMN know');
     $db->exec('ALTER TABLE {readings} DROP COLUMN thing');
     $db->exec('ALTER TABLE {readings} DROP COLUMN settles');
+    foreach (['kind', 'detail', 'detail_tries', 'detail_after', 'draft'] as $c) {
+        $db->exec('ALTER TABLE {readings} DROP COLUMN ' . $c);
+    }
     $db->run("UPDATE {meta} SET v = '3' WHERE k = 'schema'");
     Schema::migrate($db);
     $ok((int) $db->val("SELECT v FROM {meta} WHERE k = 'schema'") === Schema::VERSION, 'the storage upgrades from version 3');
@@ -169,12 +172,38 @@ try {
     $db->exec('ALTER TABLE {readings} DROP COLUMN know');
     $db->exec('ALTER TABLE {readings} DROP COLUMN thing');
     $db->exec('ALTER TABLE {readings} DROP COLUMN settles');
+    foreach (['kind', 'detail', 'detail_tries', 'detail_after', 'draft'] as $c) {
+        $db->exec('ALTER TABLE {readings} DROP COLUMN ' . $c);
+    }
     $db->run("UPDATE {meta} SET v = '4' WHERE k = 'schema'");
     Schema::migrate($db);
     $db->upsert('readings', ['email_id' => 987654], ['model' => 'check', 'line' => 'x', 'focus' => 0, 'ask' => '', 'due' => null, 'place' => '', 'why' => '[]', 'answered' => 0, 'asks' => 0, 'know' => 1, 'thing' => 'Étui rigide 📦', 'settles' => 1, 'at' => time()]);
     $kept = $db->one('SELECT know, thing, settles FROM {readings} WHERE email_id = ?', [987654]);
     $ok((int) $db->val("SELECT v FROM {meta} WHERE k = 'schema'") === Schema::VERSION && (int) $kept['know'] === 1 && (string) $kept['thing'] === 'Étui rigide 📦' && (int) $kept['settles'] === 1, 'the storage upgrades from version 4, and a reading keeps what is good to know');
     $db->run('DELETE FROM {readings} WHERE email_id = ?', [987654]);
+    // And from the version that is live today (5): travel and bookings.
+    foreach (['kind', 'detail', 'detail_tries', 'detail_after', 'draft'] as $c) {
+        $db->exec('ALTER TABLE {readings} DROP COLUMN ' . $c);
+    }
+    $db->run("UPDATE {meta} SET v = '5' WHERE k = 'schema'");
+    Schema::migrate($db);
+    $db->upsert('readings', ['email_id' => 987655], ['model' => 'check', 'line' => 'x', 'focus' => 1, 'ask' => 'x', 'due' => null, 'place' => '', 'why' => '[]', 'answered' => 0, 'asks' => 0, 'know' => 0, 'thing' => '', 'settles' => 0, 'kind' => 'travel', 'detail' => 1, 'detail_tries' => 0, 'detail_after' => 0, 'draft' => "Hi Zoé,
+
+What is the code? ✈️
+
+Thank you,
+Clay", 'at' => time()]);
+    $kept = $db->one('SELECT kind, detail, draft FROM {readings} WHERE email_id = ?', [987655]);
+    $ok((int) $db->val("SELECT v FROM {meta} WHERE k = 'schema'") === Schema::VERSION && (string) $kept['kind'] === 'travel' && (int) $kept['detail'] === 1 && (string) $kept['draft'] === "Hi Zoé,
+
+What is the code? ✈️
+
+Thank you,
+Clay", 'the storage upgrades from version 5, and a reading keeps the email written for the owner, lines and all');
+    $db->run('DELETE FROM {readings} WHERE email_id = ?', [987655]);
+    $store->put('leg', 'AA1|2026-11-20|RDU|DFW', ['fcity' => 'Raleigh/Durham', 'dep_at' => 1795000000, 'arr_at' => null]);
+    $ok($store->item('leg', 'AA1|2026-11-20|RDU|DFW') === ['fcity' => 'Raleigh/Durham', 'dep_at' => 1795000000, 'arr_at' => null], 'a travel leg is kept as written');
+    $store->remove('leg', 'AA1|2026-11-20|RDU|DFW');
 
     // Phones: where to reach one, whether it rings, and a PC saying it is in front.
     $devices = new Devices($store);

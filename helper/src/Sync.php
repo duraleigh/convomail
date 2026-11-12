@@ -66,7 +66,7 @@ final class Sync
                 }
                 if ($kind === 'sender') {
                     $data = self::mergeSender($old, $data);
-                } elseif ($kind === 'msgfix' && $old !== null) {
+                } elseif (($kind === 'msgfix' || $kind === 'cardfix') && $old !== null) {
                     // A fix to the tag and a fix to the place are kept side by side.
                     $data += $old;
                 }

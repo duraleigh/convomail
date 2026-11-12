@@ -77,6 +77,23 @@ final class FakeGoogle implements \Precis\Http
         $this->messages[$id]['payload']['parts'] = $plain === '' && $html !== null ? [$parts[1]] : $parts;
     }
 
+    /** What each attached file holds, by "message id/attachment id". */
+    public array $files = [];
+
+    /** How many times an attached file was fetched. */
+    public int $fetched = 0;
+
+    /** Attaches a file to an email already in the mailbox. */
+    public function attach(string $id, string $name, string $mime, string $bytes): void
+    {
+        $aid = 'att' . (count($this->files) + 1);
+        $this->files[$id . '/' . $aid] = $bytes;
+        $parts = $this->messages[$id]['payload']['parts'] ?? [];
+        $parts[] = ['mimeType' => $mime, 'filename' => $name, 'body' => ['attachmentId' => $aid, 'size' => strlen($bytes)]];
+        $this->messages[$id]['payload']['mimeType'] = 'multipart/mixed';
+        $this->messages[$id]['payload']['parts'] = $parts;
+    }
+
     /** @param list<string> $labels */
     public function relabel(string $id, array $labels): void
     {
@@ -192,6 +209,11 @@ final class FakeGoogle implements \Precis\Http
             usort($in, static fn (array $a, array $b): int => (int) $a['internalDate'] <=> (int) $b['internalDate']);
             return $in === [] ? $json(['error' => ['message' => 'gone']], 404) : $json(['id' => $tid, 'messages' => $in]);
         }
+        if (preg_match('~^messages/([^/?]+)/attachments/([^/?]+)$~', $rest, $m) === 1) {
+            $bytes = $this->files[$m[1] . '/' . $m[2]] ?? null;
+            $this->fetched++;
+            return $bytes === null ? $json(['error' => ['message' => 'gone']], 404) : $json(['size' => strlen($bytes), 'data' => rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=')]);
+        }
         if (str_starts_with($rest, 'messages/')) {
             $id = substr($rest, 9);
             return isset($this->messages[$id]) ? $json($this->messages[$id]) : $json(['error' => ['message' => 'gone']], 404);
@@ -249,7 +271,14 @@ final class FakeClaude implements \Psr\Http\Client\ClientInterface
         if ($this->fail !== null) {
             return $json(['type' => 'error', 'error' => ['type' => $this->fail[1], 'message' => $this->fail[2] ?? 'no']], $this->fail[0]);
         }
-        $email = (string) ($body['messages'][0]['content'] ?? '');
+        // With files attached, the email is the last thing in a list.
+        $content = $body['messages'][0]['content'] ?? '';
+        $email = '';
+        foreach (is_array($content) ? $content : [['type' => 'text', 'text' => (string) $content]] as $block) {
+            if (($block['type'] ?? '') === 'text') {
+                $email .= (string) ($block['text'] ?? '');
+            }
+        }
         $data = $this->answer !== null ? ($this->answer)($email, $body) : ['line' => 'A plain email.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'none', 'reasons' => ['Nothing is asked of you.']];
         return $json([
             'id' => 'msg_test',
@@ -329,6 +358,28 @@ final class World
     {
         $id = $this->fake->add($headers, $labels, '', $at);
         $this->fake->setBody($id, $plain, $html);
+        $this->reader->poll($this->account);
+        foreach ($this->fake->messages[$id]['payload']['headers'] as $h) {
+            if ($h['name'] === 'Message-ID') {
+                return $h['value'];
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Puts an email with words and attached files in the mailbox and lets
+     * the helper file it. Returns its Message-ID.
+     *
+     * @param list<array{0: string, 1: string, 2: string}> $files name, kind, contents
+     */
+    public function arriveWithFiles(array $headers, string $plain, array $files, ?string $html = null, ?int $at = null): string
+    {
+        $id = $this->fake->add($headers, ['INBOX', 'UNREAD'], '', $at);
+        $this->fake->setBody($id, $plain, $html);
+        foreach ($files as [$name, $mime, $bytes]) {
+            $this->fake->attach($id, $name, $mime, $bytes);
+        }
         $this->reader->poll($this->account);
         foreach ($this->fake->messages[$id]['payload']['headers'] as $h) {
             if ($h['name'] === 'Message-ID') {

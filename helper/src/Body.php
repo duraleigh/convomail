@@ -36,6 +36,68 @@ final class Body
         return mb_strlen($fromHtml) > mb_strlen($plain) ? $fromHtml : $plain;
     }
 
+    /**
+     * The files attached to a Gmail message (format=full): what each is
+     * called, what kind it is, how large, and the id Gmail fetches it by.
+     *
+     * @param array<string, mixed> $message
+     * @return list<array{name: string, mime: string, size: int, id: string}>
+     */
+    public static function attachments(array $message): array
+    {
+        $out = [];
+        $walk = static function (array $part) use (&$walk, &$out): void {
+            $name = trim((string) ($part['filename'] ?? ''));
+            if ($name !== '') {
+                $out[] = [
+                    'name' => mb_substr((string) preg_replace('~[\x00-\x1F\x7F]~', ' ', $name), 0, 120),
+                    'mime' => strtolower((string) ($part['mimeType'] ?? '')),
+                    'size' => (int) ($part['body']['size'] ?? 0),
+                    'id' => (string) ($part['body']['attachmentId'] ?? ''),
+                ];
+            }
+            foreach ($part['parts'] ?? [] as $child) {
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
+        };
+        $walk(is_array($message['payload'] ?? null) ? $message['payload'] : []);
+        return $out;
+    }
+
+    /**
+     * The links in a Gmail message's HTML: what each one says and where it
+     * leads. Only web links.
+     *
+     * @param array<string, mixed> $message
+     * @return list<array{text: string, url: string}>
+     */
+    public static function links(array $message): array
+    {
+        $plain = '';
+        $html = '';
+        self::walk($message['payload'] ?? [], $plain, $html);
+        $out = [];
+        if ($html === '' || preg_match_all('~<a\b[^>]*?\bhref\s*=\s*(["\'])(.*?)\1[^>]*>(.*?)</a>~is', $html, $all, PREG_SET_ORDER) === false) {
+            return $out;
+        }
+        foreach ($all as $m) {
+            $url = trim(html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            // A picture that is the link says what its "alt" says.
+            $inner = (string) preg_replace('~<img\b[^>]*?\balt\s*=\s*(["\'])(.*?)\1[^>]*>~is', ' $2 ', $m[3]);
+            $text = trim((string) preg_replace('~\s+~u', ' ', html_entity_decode(strip_tags($inner), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+            if ($text === '' || preg_match('~^https?://[^\s]+$~i', $url) !== 1 || strlen($url) > 2000) {
+                continue;
+            }
+            $out[] = ['text' => $text, 'url' => $url];
+            if (count($out) >= 200) {
+                break;
+            }
+        }
+        return $out;
+    }
+
     /** @param array<string, mixed> $part */
     private static function walk(array $part, string &$plain, string &$html): void
     {

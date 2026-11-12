@@ -17,7 +17,7 @@ namespace Precis;
  */
 final class Schema
 {
-    public const VERSION = 5;
+    public const VERSION = 6;
 
     public static function migrate(Db $db): void
     {
@@ -67,6 +67,18 @@ final class Schema
             $db->exec('ALTER TABLE {readings} ADD COLUMN know INT NOT NULL DEFAULT 0');
             $db->exec("ALTER TABLE {readings} ADD COLUMN thing VARCHAR(120) NOT NULL DEFAULT ''");
             $db->exec('ALTER TABLE {readings} ADD COLUMN settles INT NOT NULL DEFAULT 0');
+        }
+        if ($have < 6) {
+            // With a reading: whether the email is about travel or another
+            // booking, where its fuller reading stands (0 not needed, 1
+            // waiting, 2 done, 3 given up on), and the one kind of email the
+            // helper writes for the owner to look over: a request to whoever
+            // booked for them for the details that are missing.
+            $db->exec("ALTER TABLE {readings} ADD COLUMN kind VARCHAR(12) NOT NULL DEFAULT ''");
+            $db->exec('ALTER TABLE {readings} ADD COLUMN detail INT NOT NULL DEFAULT 0');
+            $db->exec('ALTER TABLE {readings} ADD COLUMN detail_tries INT NOT NULL DEFAULT 0');
+            $db->exec('ALTER TABLE {readings} ADD COLUMN detail_after BIGINT NOT NULL DEFAULT 0');
+            $db->exec('ALTER TABLE {readings} ADD COLUMN draft TEXT NULL');
         }
         $db->upsert('meta', ['k' => 'schema'], ['v' => (string) self::VERSION]);
     }
