@@ -91,6 +91,12 @@ class FakeMailTransport implements MailTransport {
 
   /// Makes the next this many fetchBody calls fail, as a dropped connection would.
   int failFetchBody = 0;
+
+  /// How often the connection was checked, and whether it has died without
+  /// anyone noticing (the computer slept): a check then fails, and anything
+  /// else never answers.
+  int pingCount = 0;
+  bool deadLine = false;
   final StreamController<MailboxEvent> _events = StreamController.broadcast();
 
   bool _connected = false;
@@ -116,6 +122,16 @@ class FakeMailTransport implements MailTransport {
 
   @override
   bool get isConnected => _connected;
+
+  @override
+  Future<void> ping() async {
+    pingCount++;
+    if (deadLine) {
+      deadLine = false;
+      _connected = false;
+      throw const MailTransportException('Connection lost');
+    }
+  }
 
   @override
   Future<void> connect(ServerConfig server, MailCredentials credentials) async {

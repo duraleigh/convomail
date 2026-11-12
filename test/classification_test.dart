@@ -362,7 +362,8 @@ void main() {
         expect((await contact('mailer@acme.example')).classReasons, contains('Sends codes, shipping or travel updates'));
         expect(msgs.firstWhere((m) => m.uid == boring && m.fromAddress == 'friend@x.com').timelyCheckedAt, isNotNull);
         final brief = msgs.firstWhere((m) => m.fromAddress == 'hello@dailybrief.com');
-        expect(brief.bodyFetchedAt, isNull, reason: 'an ordinary subject in Feeds is not downloaded');
+        expect(brief.bodyFetchedAt, isNotNull, reason: 'its words are fetched ahead of time, so opening it never waits on a download');
+        expect(brief.isSeen, isFalse, reason: 'and that marks nothing read');
         expect(brief.timelyCheckedAt, isNotNull);
         expect(msgs.where((m) => m.timelyCheckedAt == null && !m.isFromMe && (m.date?.isAfter(DateTime.now().subtract(const Duration(days: 29))) ?? false)), isEmpty);
       });

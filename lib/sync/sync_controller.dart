@@ -1,13 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/app_log.dart';
 import '../helper/helper_pass.dart';
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
 import '../mail/transport_factory.dart';
 import '../platform/credential_store.dart';
+import '../store/attachment_store.dart';
 import '../store/database.dart';
 import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
@@ -139,6 +142,10 @@ class SyncController {
       },
       onStatus: (s) => _ref.read(syncStatusProvider.notifier).put(s),
       onNewMessages: (ids) => unawaited(_ref.read(notificationCenterProvider).onNewMessages(ids)),
+      attachmentStore: _ref.read(attachmentStoreProvider),
+      // A phone fetches less ahead of time: it may be on mobile data.
+      wordsAheadFor: Duration(days: Platform.isAndroid ? 7 : 30),
+      wordsAheadMaxSize: Platform.isAndroid ? 1500 * 1000 : 5 * 1000 * 1000,
     );
     _syncers[account.id] = syncer;
     _runs[account.id] = syncer.run();
@@ -155,6 +162,17 @@ class SyncController {
   }
 
   AccountSyncer? syncerFor(int accountId) => _syncers[accountId];
+
+  /// The computer woke from sleep, or the phone app came back after a
+  /// while: the connections made before are very likely dead, and a dead
+  /// one can take minutes to say so. Each account starts over on fresh
+  /// connections and checks for mail at once.
+  Future<void> wake() async {
+    AppLog.current?.info('mail: back after a pause; connections are made fresh');
+    for (final id in _syncers.keys.toList()) {
+      await restartAccount(id);
+    }
+  }
 
   /// Looks for new mail on every account right now. An account that cannot
   /// be reached is passed over: its own state already says so.

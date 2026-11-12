@@ -25,6 +25,10 @@ abstract interface class MailTransport {
   Future<void> connect(ServerConfig server, MailCredentials credentials);
   Future<void> disconnect();
 
+  /// Asks the server for nothing, to learn whether the connection is still
+  /// alive. Throws when it is not.
+  Future<void> ping();
+
   Future<List<RemoteFolder>> listFolders();
 
   /// Selects a folder and returns its server-side state.

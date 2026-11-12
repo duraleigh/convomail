@@ -6,6 +6,8 @@ import '../app/app_log.dart';
 import '../domain/filing.dart';
 import '../mail/mail_transport.dart';
 import '../mail/models.dart';
+import '../store/attachment_queries.dart';
+import '../store/attachment_store.dart';
 import '../store/classification_queries.dart';
 import '../store/database.dart';
 import '../store/done_queries.dart';
@@ -81,6 +83,10 @@ class AccountSyncer {
     ClassificationService? classification,
     this.onNewMessages,
     TimelyService? timely,
+    this.attachmentStore,
+    this.wordsAheadFor = const Duration(days: 30),
+    this.wordsAheadMaxSize = 5 * 1000 * 1000,
+    this.clock = DateTime.now,
   })  : _onDemand = onDemandTransport ?? transport,
         classification = classification ?? ClassificationService(db),
         _status = SyncStatus(accountId: account.id, phase: SyncPhase.idle) {
@@ -93,6 +99,18 @@ class AccountSyncer {
   /// New messages that arrived after the first sync of a folder (local
   /// ids), for notifications. Not called for the initial download.
   final void Function(List<int> messageIds)? onNewMessages;
+
+  /// Where pictures that sit inside an email are kept; without it they are
+  /// fetched when the email is opened, as before.
+  final AttachmentStore? attachmentStore;
+
+  /// How far back, and up to what size, the words of emails are fetched
+  /// ahead of time (see [readWordsAhead]).
+  final Duration wordsAheadFor;
+  final int wordsAheadMaxSize;
+
+  /// The time now (checks move it).
+  final DateTime Function() clock;
 
   final AppDatabase db;
   final MailTransport transport;
@@ -125,6 +143,13 @@ class AccountSyncer {
   /// An on-demand connection unused for this long is replaced: servers drop
   /// quiet connections, and a dead socket would only show as a slow timeout.
   static const onDemandMaxQuiet = Duration(minutes: 10);
+
+  /// A connection quiet for longer than this is checked with a quick ping
+  /// before it is used. One that died without a word (the laptop slept,
+  /// the phone changed networks) is then replaced in a moment, instead of
+  /// the user's click waiting out a long timeout on it.
+  static const onDemandCheckAfter = Duration(seconds: 20);
+  static const onDemandCheckTimeout = Duration(seconds: 4);
 
   SyncStatus get status => _status;
 
@@ -161,7 +186,19 @@ class AccountSyncer {
     final t = _onDemand;
     final shared = identical(t, transport);
     final last = _onDemandLastUsed;
-    if (!shared && last != null && t.isConnected && DateTime.now().difference(last) > onDemandMaxQuiet) await _dropOnDemand();
+    if (!shared && last != null && t.isConnected) {
+      final quiet = clock().difference(last);
+      if (quiet > onDemandMaxQuiet) {
+        await _dropOnDemand();
+      } else if (quiet > onDemandCheckAfter) {
+        try {
+          await t.ping().timeout(onDemandCheckTimeout);
+        } catch (_) {
+          AppLog.current?.info('mail: the connection had died while quiet; a new one is made');
+          await _dropOnDemand();
+        }
+      }
+    }
     for (var attempt = 0;; attempt++) {
       final isRetry = attempt > 0;
       try {
@@ -173,7 +210,7 @@ class AccountSyncer {
           }
         }
         final result = await work(t).timeout(timeout);
-        _onDemandLastUsed = DateTime.now();
+        _onDemandLastUsed = clock();
         return result;
       } on MailTransportException catch (e) {
         if (e.isAuthFailure || isRetry) rethrow;
@@ -618,6 +655,62 @@ class AccountSyncer {
     return read;
   }
 
+  /// Emails this run already tried to fetch ahead, so one that cannot be
+  /// read is not tried again and again.
+  final Set<int> _wordsTried = {};
+
+  /// Fetches the words of recent emails before anyone opens them, a few at
+  /// a time on the sync connection, so opening an email shows it at once
+  /// instead of waiting on a download. What is in Focus goes first. The
+  /// pictures that sit inside an email come with it. Nothing is marked
+  /// read. Returns how many it fetched.
+  Future<int> readWordsAhead({int batch = 8, DateTime? now}) async {
+    final since = (now ?? DateTime.now()).subtract(wordsAheadFor);
+    final pending = [
+      for (final m in await db.messagesWithoutWords(account.id, since: since, maxSize: wordsAheadMaxSize, limit: batch + _wordsTried.length))
+        if (!_wordsTried.contains(m.id)) m,
+    ];
+    String? selected;
+    var read = 0;
+    for (final m in pending.take(batch)) {
+      if (_stopRequested) break;
+      _wordsTried.add(m.id);
+      try {
+        final folder = await db.folderById(m.folderId);
+        if (folder == null) continue;
+        if (selected != folder.path) {
+          await transport.selectFolder(folder.path);
+          selected = folder.path;
+        }
+        await db.storeBody(m.id, await transport.fetchBody(m.uid));
+        read++;
+        // The same as when an email is opened and its words arrive.
+        await classification.reclassifyMessage(m.id);
+        await timely.processMessage(m.id);
+        final store = attachmentStore;
+        if (store != null) {
+          final inside = (await db.attachmentsForMessage(m.id)).where((a) => a.isInline && a.localPath == null).toList();
+          if (inside.isNotEmpty) {
+            final parts = await transport.fetchParts(m.uid, [for (final a in inside) a.partId]);
+            for (final a in inside) {
+              final data = parts[a.partId];
+              if (data == null) continue;
+              await db.setAttachmentLocalPath(a.id, await store.save(accountId: m.accountId, messageId: m.id, partId: a.partId, fileName: a.fileName, bytes: data));
+            }
+          }
+        }
+      } on MailTransportException catch (e) {
+        if (!transport.isConnected) rethrow;
+        // Gone from the server, for instance. It is fetched when opened, if ever.
+        AppLog.current?.warn('fetching an email ahead of time failed', AppLog.scrub(e));
+      } catch (e) {
+        AppLog.current?.warn('fetching an email ahead of time failed', AppLog.scrub(e));
+      }
+    }
+    if (read > 0) AppLog.current?.info('words ahead: $read fetched');
+    return read;
+  }
+
   /// Reads a batch of recent mail for codes, deliveries and travel (spec
   /// 4.21), on the sync connection so it never competes with the user. Bodies
   /// are stored without marking anything read, and this path leaves out the
@@ -684,6 +777,12 @@ class AccountSyncer {
           }
           // Then the user's own recent mail, for Today's "Waiting on".
           if (await readSentForWaiting() > 0) continue;
+          // Then the words of everything recent, so opening an email never
+          // waits on a download. New mail is looked for between batches.
+          if (await readWordsAhead() > 0) {
+            await syncFolder(inbox.id);
+            continue;
+          }
           _emit(_status.copyWith(phase: SyncPhase.waitingForMail, folderPath: inbox.path));
           final event = await transport.idle(timeout: idleTimeout);
           if (_stopRequested) break;
@@ -733,7 +832,11 @@ class AccountSyncer {
 
   Future<void> stop() async {
     _stopRequested = true;
-    await transport.disconnect();
+    try {
+      await transport.disconnect().timeout(const Duration(seconds: 5));
+    } catch (_) {
+      // It is being let go either way.
+    }
     if (!identical(_onDemand, transport)) await _dropOnDemand();
   }
 }

@@ -74,7 +74,9 @@ class ImapTransport implements MailTransport {
     if (pending != null && !pending.isCompleted) pending.complete(const ConnectionLostEvent());
     if (c == null) return;
     try {
-      if (c.isLoggedIn) await c.logout();
+      // A connection that died (the computer slept, the phone changed
+      // networks) never answers: saying goodbye must not wait on it.
+      if (c.isLoggedIn) await c.logout().timeout(const Duration(seconds: 3));
     } catch (_) {
       // ignore: best effort
     } finally {
@@ -273,6 +275,11 @@ class ImapTransport implements MailTransport {
     if (maxUid < 1) return const {};
     final result = await _c.uidSearchMessages(searchCriteria: 'UID 1:$maxUid');
     return result.matchingSequence?.toList().toSet() ?? const {};
+  }
+
+  @override
+  Future<void> ping() async {
+    await _c.noop();
   }
 
   @override

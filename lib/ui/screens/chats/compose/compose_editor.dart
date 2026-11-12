@@ -140,7 +140,12 @@ class ComposeEditor extends StatefulWidget {
     this.onSend,
     this.onEscape,
     this.focusNode,
+    this.touch = false,
   });
+
+  /// On a phone: larger words, and the phone's own handles for moving the
+  /// cursor and picking words.
+  final bool touch;
 
   final ComposeEditorController controller;
   final bool autoFocus;
@@ -251,17 +256,28 @@ class _ComposeEditorState extends State<ComposeEditor> {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final style = EditorStyle.desktop(
-      padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
-      cursorColor: scheme.primary,
-      selectionColor: scheme.primary.withValues(alpha: 0.22),
-      textStyleConfiguration: TextStyleConfiguration(
-        text: text.bodyLarge!.copyWith(fontSize: 15, height: 1.5, color: scheme.onSurface),
-        bold: const TextStyle(fontWeight: FontWeight.w700),
-        href: TextStyle(color: scheme.primary, decoration: TextDecoration.underline),
-        code: TextStyle(fontFamily: 'Cascadia Mono', backgroundColor: scheme.surfaceContainerHigh),
-      ),
+    final words = TextStyleConfiguration(
+      text: text.bodyLarge!.copyWith(fontSize: widget.touch ? 17 : 15, height: 1.5, color: scheme.onSurface),
+      bold: const TextStyle(fontWeight: FontWeight.w700),
+      href: TextStyle(color: scheme.primary, decoration: TextDecoration.underline),
+      code: TextStyle(fontFamily: widget.touch ? 'monospace' : 'Cascadia Mono', backgroundColor: scheme.surfaceContainerHigh),
     );
+    // The editor works differently under a finger than under a mouse; it
+    // is told which it is, so a phone gets its own cursor handles.
+    final style = widget.touch
+        ? EditorStyle.mobile(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+            cursorColor: scheme.primary,
+            dragHandleColor: scheme.primary,
+            selectionColor: scheme.primary.withValues(alpha: 0.22),
+            textStyleConfiguration: words,
+          )
+        : EditorStyle.desktop(
+            padding: const EdgeInsets.fromLTRB(4, 8, 4, 12),
+            cursorColor: scheme.primary,
+            selectionColor: scheme.primary.withValues(alpha: 0.22),
+            textStyleConfiguration: words,
+          );
 
     final editor = AppFlowyEditor(
       editorState: _es,

@@ -351,7 +351,11 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
+    final phone = isCompactLayout(context, ref);
+    final touch = ref.watch(isTouchDeviceProvider);
+    // On a phone the words in the form are a size larger.
+    final theme = Theme.of(context);
+    final text = phone ? theme.textTheme.copyWith(bodyMedium: theme.textTheme.bodyLarge) : theme.textTheme;
     if (_loading || _editor == null) {
       return const SizedBox(height: 160, child: Center(child: CircularProgressIndicator()));
     }
@@ -360,7 +364,6 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     final inFlight = _sending && (progress?.inFlight ?? true);
     final showQuoteToggle = _original != null && _kind != 'forward';
     final subjectVisible = !_kind.startsWith('reply') || _showSubject || !widget.compact;
-    final phone = isCompactLayout(context, ref);
 
     final fields = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -455,13 +458,16 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       ],
     );
 
-    final editor = ComposeEditor(controller: _editor!, showToolbar: _formatting, focusNode: _editorFocus, onAttachFiles: _addFiles, onSend: _send, onEscape: _close);
+    final editor = ComposeEditor(controller: _editor!, showToolbar: _formatting, focusNode: _editorFocus, onAttachFiles: _addFiles, onSend: _send, onEscape: _close, touch: touch);
 
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.header != null) widget.header!,
-        Padding(padding: EdgeInsets.fromLTRB(widget.compact ? 8 : 12, 0, widget.compact ? 8 : 12, 0), child: fields),
+        Padding(
+          padding: EdgeInsets.fromLTRB(widget.compact ? 8 : 12, 0, widget.compact ? 8 : 12, 0),
+          child: phone ? Theme(data: theme.copyWith(textTheme: text), child: fields) : fields,
+        ),
         if (widget.compact && !widget.fill)
           ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 180, maxHeight: 340),

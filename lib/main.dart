@@ -245,10 +245,37 @@ class PrecisApp extends ConsumerStatefulWidget {
 }
 
 class _PrecisAppState extends ConsumerState<PrecisApp> {
+  Timer? _pulse;
+  DateTime _lastPulse = DateTime.now();
+  AppLifecycleListener? _life;
+
+  /// Called every few seconds, and when the app comes back to the front.
+  /// A long gap since the last call means the computer slept or the phone
+  /// held the app still: mail connections are made fresh, and everything
+  /// is brought up to date.
+  void _beat() {
+    final now = DateTime.now();
+    final gap = now.difference(_lastPulse);
+    _lastPulse = now;
+    if (gap < const Duration(seconds: 75)) return;
+    unawaited(ref.read(syncControllerProvider).wake().catchError((Object _) {}));
+    unawaited(ref.read(helperProvider.notifier).syncNow().catchError((Object _) {}));
+    unawaited(ref.read(waitingSendsProvider).sendNow());
+  }
+
+  @override
+  void dispose() {
+    _pulse?.cancel();
+    _life?.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
     if (widget.startSync) {
+      _pulse = Timer.periodic(const Duration(seconds: 15), (_) => _beat());
+      _life = AppLifecycleListener(onResume: _beat);
       ref.read(syncControllerProvider).start();
       ref.read(scheduleServiceProvider).start();
       // Keeping in step with the helper, when this device follows one.

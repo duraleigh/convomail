@@ -10,6 +10,27 @@ import 'thread_queries.dart';
 
 /// Database operations used by the sync engine and account setup.
 extension SyncQueries on AppDatabase {
+  /// Emails whose words are not on this device yet: what is in Focus first
+  /// (whatever its age), then the newest since [since]. Emails larger than
+  /// [maxSize] are left for when they are opened.
+  Future<List<Message>> messagesWithoutWords(int accountId, {required DateTime since, required int maxSize, int limit = 12}) async {
+    const inFocus = '(m.done_at IS NULL AND EXISTS (SELECT 1 FROM helper_readings r WHERE r.message_id = m.message_id AND r.focus = 1 AND r.answered = 0))';
+    final rows = await customSelect(
+      '''
+      SELECT m.* FROM messages m
+      JOIN folders f ON f.id = m.folder_id
+      WHERE m.account_id = ? AND m.is_deleted = 0 AND m.is_draft = 0
+        AND m.body_fetched_at IS NULL AND m.size <= ?
+        AND f.role NOT IN ('junk', 'trash', 'drafts')
+        AND (COALESCE(m.date, m.internal_date) >= ? OR $inFocus)
+      ORDER BY $inFocus DESC, COALESCE(m.date, m.internal_date) DESC
+      LIMIT ?
+      ''',
+      variables: [Variable.withInt(accountId), Variable.withInt(maxSize), Variable.withInt(since.millisecondsSinceEpoch ~/ 1000), Variable.withInt(limit)],
+    ).get();
+    return [for (final r in rows) messages.map(r.data)];
+  }
+
   // ---- identity and groups -------------------------------------------------
 
   /// Builds the resolver from every account/identity address (me) and the

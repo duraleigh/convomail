@@ -12,6 +12,7 @@ import '../store/sync_queries.dart';
 import '../store/thread_queries.dart';
 import '../sync/attachment_service.dart';
 import '../sync/sync_controller.dart';
+import 'app_log.dart';
 import 'search_state.dart';
 import 'settings.dart';
 
@@ -55,7 +56,9 @@ final messageBodyProvider = FutureProvider.family<Message, int>((ref, messageId)
   if (m.bodyFetchedAt != null) return m;
   final syncer = ref.read(syncControllerProvider).syncerFor(m.accountId);
   if (syncer == null) throw StateError('This account is not connected. The message body will load when sync resumes.');
+  final began = DateTime.now();
   await syncer.fetchBody(messageId);
+  AppLog.current?.info('open: an email\'s words were not here yet; fetching them took ${DateTime.now().difference(began).inMilliseconds} ms (${m.size ~/ 1000} KB)');
   // storeBody updated the row; the stream above delivers it on the next
   // build. Return the fresh row now so the first render has the body.
   return (await ref.read(databaseProvider).messageById(messageId))!;
