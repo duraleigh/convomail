@@ -14,6 +14,10 @@ import 'people_queries.dart';
 /// every device: `{"on": bool, "from": "22:00", "to": "07:00"}`.
 const kQuietHours = 'alerts.quiet';
 
+/// The setting that says how clock times are shown, the same on every
+/// device: '24' for 15:00, anything else for 3:00 PM.
+const kClockFormat = 'time.format';
+
 /// One change as it goes up to the helper: set ([data]) or gone ([deleted]),
 /// or an action ([op]).
 class HelperEntry {
@@ -456,6 +460,8 @@ extension HelperQueries on AppDatabase {
         if (k == 'quiet') await putSetting(kQuietHours, deleted ? '' : jsonEncode({'on': data['on'] == true, 'from': data['from'], 'to': data['to']}));
         // The sentence on Today, dismissed on another device.
         if (k == 'day') await putSetting(kDayDismissed, deleted ? '' : '${(data['dismissed'] as num?)?.toInt() ?? ''}');
+        // 12-hour or 24-hour clock, chosen on another device.
+        if (k == 'clock') await putSetting(kClockFormat, deleted ? '' : (data['h24'] == true ? '24' : '12'));
         return const {};
       case 'msgfix':
         // What the user set on one email on another device: Focus or not,

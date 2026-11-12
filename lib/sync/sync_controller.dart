@@ -156,6 +156,14 @@ class SyncController {
 
   AccountSyncer? syncerFor(int accountId) => _syncers[accountId];
 
+  /// Looks for new mail on every account right now. An account that cannot
+  /// be reached is passed over: its own state already says so.
+  Future<void> checkNow() async {
+    await Future.wait<void>([
+      for (final s in _syncers.values.toList()) s.checkInbox().catchError((Object _) {}),
+    ]);
+  }
+
   /// Registers an externally created syncer without running its loop.
   /// Tests use this to route row actions through a fake server.
   @visibleForTesting

@@ -529,13 +529,20 @@ class MailEmailPane extends ConsumerWidget {
             ],
             const SizedBox(width: 4),
             // Answering happens right here, under the email.
-            if (item.person)
+            if (item.person) ...[
               IconButton(
                 key: const ValueKey('mail-reply'),
                 tooltip: 'Reply',
                 icon: const Icon(Icons.reply_rounded),
                 onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(item.id, rowKey: item.rowKey)),
               ),
+              IconButton(
+                key: const ValueKey('mail-reply-all'),
+                tooltip: 'Reply all',
+                icon: const Icon(Icons.reply_all_rounded),
+                onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(item.id, rowKey: item.rowKey, all: true)),
+              ),
+            ],
           ],
         ),
       ),

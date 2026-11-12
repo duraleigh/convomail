@@ -1,9 +1,12 @@
 import 'package:convomail/app/compose_state.dart';
 import 'package:convomail/app/destinations.dart';
 import 'package:convomail/app/mail_state.dart';
+import 'package:convomail/app/settings_navigation.dart';
+import 'package:convomail/app/time_format.dart';
 import 'package:convomail/domain/classifier.dart';
 import 'package:convomail/domain/email_pile.dart';
 import 'package:convomail/domain/piles.dart';
+import 'package:convomail/helper/helper_sync.dart';
 import 'package:convomail/mail/models.dart';
 import 'package:convomail/mail/transport_factory.dart';
 import 'package:convomail/main.dart';
@@ -26,6 +29,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/fake_mail_transport.dart';
@@ -330,8 +334,9 @@ void main() {
   group('screens', () {
     late InMemorySettingsStore settings;
 
-    Widget app(Destination opensOn) => ProviderScope(
+    Widget app(Destination opensOn, {List<Override> more = const []}) => ProviderScope(
           overrides: [
+            ...more,
             settingsStoreProvider.overrideWith((ref) => settings),
             databaseProvider.overrideWith((ref) => db),
             credentialStoreProvider.overrideWith((ref) => InMemoryCredentialStore()),
@@ -342,11 +347,11 @@ void main() {
           child: const PrecisApp(startSync: false),
         );
 
-    Future<ProviderContainer> pumpApp(WidgetTester tester, Destination opensOn) async {
+    Future<ProviderContainer> pumpApp(WidgetTester tester, Destination opensOn, {List<Override> more = const []}) async {
       tester.view.physicalSize = const Size(1500, 950);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      await tester.pumpWidget(app(opensOn));
+      await tester.pumpWidget(app(opensOn, more: more));
       await tester.pumpAndSettle();
       return ProviderScope.containerOf(tester.element(find.byType(AppShell)));
     }
@@ -392,9 +397,18 @@ void main() {
       await tester.tap(find.widgetWithText(TextButton, 'Forward'));
       await tester.pumpAndSettle();
       expect(find.textContaining('Forward · Spring dates'), findsOneWidget);
-      await tester.ensureVisible(find.byTooltip('Reply all'));
+      // Reply all under the email is a button with its name on it.
+      await tester.ensureVisible(find.widgetWithText(TextButton, 'Reply all'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Reply all'));
+      await tester.tap(find.widgetWithText(TextButton, 'Reply all'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Reply all · Spring dates'), findsOneWidget);
+      // And it sits at the top of the email too, next to Reply.
+      await tester.tap(find.byTooltip('Close (Esc)'));
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(find.byKey(const ValueKey('mail-reply-all'))).dx, greaterThan(tester.getTopLeft(find.byKey(const ValueKey('mail-reply'))).dx));
+      expect((tester.getCenter(find.byKey(const ValueKey('mail-reply-all'))).dy - tester.getCenter(find.byKey(const ValueKey('mail-reply'))).dy).abs(), lessThan(1));
+      await tester.tap(find.byKey(const ValueKey('mail-reply-all')));
       await tester.pumpAndSettle();
       expect(find.textContaining('Reply all · Spring dates'), findsOneWidget);
 
@@ -722,6 +736,82 @@ void main() {
       await teardown(tester);
     });
 
+    testWidgets('an email opened from Today has a way back: "Back to Today" shows until you go somewhere yourself', (tester) async {
+      await tester.runAsync(filled);
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      final c = await pumpApp(tester, Destination.today);
+      expect(find.byKey(const ValueKey('back-to-today')), findsNothing);
+      await tester.tap(find.byKey(ValueKey('needs-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.focus);
+      expect(find.byKey(const ValueKey('back-to-today')), findsOneWidget);
+      expect(find.text('Back to Today'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('back-to-today')));
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.today);
+      expect(find.byKey(const ValueKey('back-to-today')), findsNothing);
+      // Going to Focus by the rail is not coming from Today.
+      c.read(destinationProvider.notifier).select(Destination.focus);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('back-to-today')), findsNothing);
+      await teardown(tester);
+    });
+
+    testWidgets('the clock: 3:00 PM or 15:00, one setting, everywhere a time is written, the assistant\'s own words included', (tester) async {
+      addTearDown(() => use24Hour = false);
+      await tester.runAsync(filled);
+      await tester.runAsync(() => reading('<bank@x>', 'The bank wants a call before 3:00 PM.', focus: true, ask: 'Call the bank by 3 PM.', due: DateTime.now().add(const Duration(days: 1))));
+      await tester.runAsync(() => helperSays('day', 'today', {'text': 'The bank wants a call by 3:00 p.m. and Renee is waiting.', 'at': DateTime.now().millisecondsSinceEpoch ~/ 1000 - 60, 'after': 2}));
+      final bank = (await tester.runAsync(() => message('<bank@x>')))!;
+      final c = await pumpApp(tester, Destination.today);
+      expect(find.text('Call the bank by 3 PM.'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'The bank wants a call by 3:00 p.m. and Renee is waiting.');
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-by-${bank.id}'))).data, matches(RegExp(r'^by tomorrow \d{1,2}:\d\d [AP]M$')));
+
+      // Chosen in Settings, Appearance.
+      c.read(settingsSectionProvider.notifier).select(SettingsSection.appearance);
+      c.read(destinationProvider.notifier).select(Destination.settings);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('15:00'));
+      await tester.pumpAndSettle();
+      expect(await tester.runAsync(() => db.getSetting(kClockFormat)), '24');
+      final noted = await tester.runAsync(() => db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'pref' AND k = 'clock'").get());
+      expect(noted!.single.read<String>('data'), '{"h24":true}', reason: 'the other devices are told');
+
+      c.read(destinationProvider.notifier).select(Destination.today);
+      await tester.pumpAndSettle();
+      expect(find.text('Call the bank by 15:00.'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'The bank wants a call by 15:00 and Renee is waiting.');
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-why-${bank.id}'))).data, 'The bank wants a call before 15:00.');
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-by-${bank.id}'))).data, matches(RegExp(r'^by tomorrow \d\d:\d\d$')));
+      expect(find.textContaining(RegExp(r'\d [AP]M')), findsNothing, reason: 'no 12-hour time is left anywhere on Today');
+
+      // Chosen on another device: this one follows, with the page already open.
+      await tester.runAsync(() => helperSays('pref', 'clock', {'h24': false}));
+      await tester.pumpAndSettle();
+      expect(find.text('Call the bank by 3 PM.'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-by-${bank.id}'))).data, matches(RegExp(r'^by tomorrow \d{1,2}:\d\d [AP]M$')));
+      await teardown(tester);
+    });
+
+    testWidgets('"Up to date" on Today is a button: it checks mail and the helper right now', (tester) async {
+      await tester.runAsync(filled);
+      final helper = _InStepHelper();
+      await pumpApp(tester, Destination.today, more: [helperProvider.overrideWith(() => helper)]);
+      final pill = find.byKey(const ValueKey('today-up-to-date'));
+      expect(pill, findsOneWidget);
+      expect(find.descendant(of: pill, matching: find.textContaining('Up to date · 3:05 PM')), findsOneWidget);
+      expect(find.byTooltip('Check for new mail now'), findsOneWidget);
+      final before = helper.rounds;
+      await tester.tap(pill);
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(helper.rounds, greaterThan(before), reason: 'the helper was asked right away');
+      expect(find.byKey(const ValueKey('today-checking')), findsNothing, reason: 'it settles back');
+      expect(find.descendant(of: pill, matching: find.textContaining('Up to date')), findsOneWidget);
+      await teardown(tester);
+    });
+
     testWidgets('Today lists what needs you, straight from Focus', (tester) async {
       await tester.runAsync(filled);
       await pumpApp(tester, Destination.today);
@@ -730,4 +820,17 @@ void main() {
       await teardown(tester);
     });
   });
+}
+
+/// A helper this device is in step with, that counts how often it is asked.
+class _InStepHelper extends HelperSync {
+  int rounds = 0;
+
+  @override
+  HelperLink build() => HelperLink(loaded: true, address: 'https://helper.test', deviceId: 1, deviceName: 'This PC', inStepAt: DateTime(2026, 11, 12, 15, 5));
+
+  @override
+  Future<void> syncNow() async {
+    rounds++;
+  }
 }

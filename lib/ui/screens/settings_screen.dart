@@ -6,7 +6,9 @@ import '../../app/layout.dart';
 import '../../app/settings.dart';
 import '../../app/settings_navigation.dart';
 import '../../app/shortcuts.dart';
+import '../../app/time_format.dart';
 import '../../store/database.dart';
+import '../../store/helper_queries.dart';
 import '../shell/compact_shell.dart';
 import '../shell/split_pane.dart';
 import '../theme/tokens.dart';
@@ -182,6 +184,28 @@ class _AppearanceDetail extends ConsumerWidget {
             ],
           ),
         ),
+        const SizedBox(height: AppSpace.xl),
+        Text('Clock', style: text.labelSmall!.copyWith(letterSpacing: 1)),
+        const SizedBox(height: AppSpace.sm),
+        SizedBox(
+          width: 360,
+          child: ConnectedButtonGroup<bool>(
+            key: const ValueKey('clock-format'),
+            selected: ref.watch(clock24Provider).value ?? false,
+            onSelected: (h24) async {
+              final db = ref.read(databaseProvider);
+              await db.putSetting(kClockFormat, h24 ? '24' : '12');
+              // The same on every device.
+              await db.noteForHelper('pref', 'clock', {'h24': h24});
+            },
+            items: const [
+              ButtonGroupItem(value: false, label: '3:00 PM', icon: Icons.schedule_rounded),
+              ButtonGroupItem(value: true, label: '15:00', icon: Icons.schedule_rounded),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpace.sm),
+        Text('How times are written everywhere in Précis, on every device, and in alerts on your phone.', style: text.bodySmall!.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant)),
       ],
     );
   }

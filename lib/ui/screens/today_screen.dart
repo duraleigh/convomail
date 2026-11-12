@@ -11,6 +11,7 @@ import '../../app/destinations.dart';
 import '../../app/mail_state.dart';
 import '../../app/people_state.dart';
 import '../../app/settings_navigation.dart';
+import '../../app/time_format.dart';
 import '../../app/timely_state.dart';
 import '../../helper/helper_sync.dart';
 import '../../store/database.dart';
@@ -19,6 +20,7 @@ import '../../store/helper_queries.dart';
 import '../../store/mail_queries.dart';
 import '../../store/planner_queries.dart';
 import '../../sync/calendar_sync.dart';
+import '../../sync/sync_controller.dart';
 import '../../sync/waiting_sends.dart';
 import '../theme/tokens.dart';
 import '../widgets/reading_line.dart';
@@ -30,9 +32,10 @@ import 'mail/mail_widgets.dart' show openMail, putOffFocusMail;
 
 /// Today's calendar events, in the calendars the user shows.
 final todayEventsProvider = StreamProvider<List<PlannerEvent>>((ref) {
-  final now = DateTime.now();
-  final start = DateTime(now.year, now.month, now.day);
-  return watchShownEvents(ref, start, start.add(const Duration(days: 1)));
+  // The day is asked for, not remembered: with Précis left open overnight
+  // the card moves on to the new day by itself.
+  final start = ref.watch(todayDateProvider);
+  return watchShownEvents(ref, start, DateTime(start.year, start.month, start.day + 1));
 });
 
 final waitingOnProvider = StreamProvider<List<WaitingItem>>((ref) => ref.watch(databaseProvider).watchWaitingOn(accountId: ref.watch(accountScopeProvider)));
@@ -271,40 +274,83 @@ class _WaitingToSend extends ConsumerWidget {
   }
 }
 
-/// "Up to date · 8:02 AM": this PC is in step with the helper, and when it
-/// last checked. Shown only while the PC follows a helper.
-class _UpToDate extends ConsumerWidget {
+/// "Up to date · 8:02 AM": this device is in step with the helper, and when
+/// it last checked. Shown only while the device follows a helper. Clicking
+/// it checks everything right now: new mail, the helper, the calendar.
+class _UpToDate extends ConsumerStatefulWidget {
   const _UpToDate();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_UpToDate> createState() => _UpToDateState();
+}
+
+class _UpToDateState extends ConsumerState<_UpToDate> {
+  bool _busy = false;
+
+  Future<void> _check() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    final helper = ref.read(helperProvider.notifier);
+    final mail = ref.read(syncControllerProvider);
+    final calendar = ref.read(calendarSyncProvider);
+    try {
+      // New mail and the calendar first, then the helper, so what it says
+      // about the mail that just came in arrives in the same round.
+      await Future.wait<void>([
+        mail.checkNow(),
+        calendar.syncNow().then<void>((_) {}).catchError((Object _) {}),
+        helper.syncNow().catchError((Object _) {}),
+      ]);
+      await helper.syncNow();
+    } catch (_) {
+      // What went wrong shows where it always does (the pill turns red).
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final link = ref.watch(helperProvider);
     final at = link.inStepAt;
     if (!link.connected || at == null) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final behind = link.error != null;
-    return Container(
-      key: const ValueKey('today-up-to-date'),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppShapes.full)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: behind ? scheme.error : const Color(0xFF81C784), shape: BoxShape.circle)),
-          const SizedBox(width: 8),
-          Text('${behind ? 'Last in step' : 'Up to date'} · ${_clock(at)}', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
-        ],
+    return Tooltip(
+      message: 'Check for new mail now',
+      child: Material(
+        key: const ValueKey('today-up-to-date'),
+        color: scheme.surfaceContainerHigh,
+        borderRadius: BorderRadius.circular(AppShapes.full),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _busy ? null : _check,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_busy)
+                  const SizedBox(key: ValueKey('today-checking'), width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2))
+                else
+                  Container(width: 8, height: 8, decoration: BoxDecoration(color: behind ? scheme.error : const Color(0xFF81C784), shape: BoxShape.circle)),
+                const SizedBox(width: 8),
+                Text(_busy ? 'Checking…' : '${behind ? 'Last in step' : 'Up to date'} · ${_clock(at)}', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
+                if (!_busy) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.refresh_rounded, size: 14, color: scheme.onSurfaceVariant),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-String _clock(DateTime t) {
-  final l = t.toLocal();
-  final h = l.hour % 12 == 0 ? 12 : l.hour % 12;
-  return '$h:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'AM' : 'PM'}';
-}
+String _clock(DateTime t) => clockTime(t.toLocal());
 
 /// The one sentence at the top of the page, written by the assistant from
 /// the lines below it, with a small star so it is plain who wrote it, and
@@ -335,7 +381,7 @@ class _Sentence extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(s.text, key: const ValueKey('today-sentence-text'), style: text.titleMedium!.copyWith(height: 1.35, fontWeight: FontWeight.w500)),
+                  Text(timesInText(s.text), key: const ValueKey('today-sentence-text'), style: text.titleMedium!.copyWith(height: 1.35, fontWeight: FontWeight.w500)),
                   const SizedBox(height: 4),
                   Text(
                     'Written ${sameDay ? _clock(s.at) : 'on ${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][s.at.month - 1]} ${s.at.day} at ${_clock(s.at)}'}${s.after > 0 ? ', after ${s.after} new email${s.after == 1 ? '' : 's'}' : ''}',
@@ -397,7 +443,7 @@ class _NeedsYou extends ConsumerWidget {
             onTap: () {
               ref.read(openMailProvider('focus').notifier).open(i.id);
               openMail(ref, i);
-              ref.read(destinationProvider.notifier).select(Destination.focus);
+              ref.read(destinationProvider.notifier).select(Destination.focus, fromToday: true);
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 9),
@@ -478,7 +524,7 @@ class _NeedsYou extends ConsumerWidget {
             alignment: Alignment.centerLeft,
             child: TextButton(
               key: const ValueKey('needs-more'),
-              onPressed: () => ref.read(destinationProvider.notifier).select(Destination.focus),
+              onPressed: () => ref.read(destinationProvider.notifier).select(Destination.focus, fromToday: true),
               child: Text('${items.length - 8} more in Focus'),
             ),
           ),
@@ -519,7 +565,7 @@ class _WaitingOn extends ConsumerWidget {
               ref.read(expandedMessagesProvider.notifier).expand(w.message.id);
               final thread = w.message.threadKey;
               if (thread == null || thread.isEmpty) {
-                openRow(ref.read, w.rowKey);
+                openRow(ref.read, w.rowKey, fromToday: true);
               } else {
                 ref.read(openThreadProvider.notifier).open(thread);
               }
@@ -590,10 +636,7 @@ class _WaitingOn extends ConsumerWidget {
 class _Schedule extends ConsumerWidget {
   const _Schedule();
 
-  static String _time(DateTime t) {
-    final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    return '$h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'AM' : 'PM'}';
-  }
+  static String _time(DateTime t) => clockTime(t);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -721,7 +764,7 @@ class _Later extends ConsumerWidget {
             onTap: () {
               ref.read(openMailProvider('focus').notifier).open(i.id);
               openMail(ref, i);
-              ref.read(destinationProvider.notifier).select(Destination.focus);
+              ref.read(destinationProvider.notifier).select(Destination.focus, fromToday: true);
             },
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -744,7 +787,7 @@ class _Later extends ConsumerWidget {
         for (final r in rows)
           InkWell(
             key: ValueKey('later-row-${r.rowKey}'),
-            onTap: () => openRow(ref.read, r.rowKey),
+            onTap: () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(
@@ -766,7 +809,7 @@ class _Later extends ConsumerWidget {
         for (final r in reminders)
           InkWell(
             key: ValueKey('later-reminder-${r.id}'),
-            onTap: r.rowKey == null ? null : () => openRow(ref.read, r.rowKey),
+            onTap: r.rowKey == null ? null : () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
               child: Row(

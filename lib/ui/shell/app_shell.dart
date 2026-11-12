@@ -165,14 +165,35 @@ class _AppShellState extends ConsumerState<AppShell> {
                 children: [
                   _Rail(destination: destination),
                   Expanded(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 200),
-                      switchInCurve: Curves.easeOut,
-                      switchOutCurve: Curves.easeIn,
-                      // Chats, Feed and Noise share one layout, so its widths
-                      // and state carry across, and switching does not fade
-                      // the whole pane.
-                      child: KeyedSubtree(key: ValueKey(destination.isList ? Destination.chats : destination), child: _content(destination)),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Got here by clicking something on Today: one click back.
+                        if (ref.watch(cameFromTodayProvider) && destination != Destination.today)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.fromLTRB(4, 6, 0, 0),
+                              child: TextButton.icon(
+                                key: const ValueKey('back-to-today'),
+                                onPressed: () => ref.read(destinationProvider.notifier).select(Destination.today),
+                                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                                label: const Text('Back to Today'),
+                              ),
+                            ),
+                          ),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            switchInCurve: Curves.easeOut,
+                            switchOutCurve: Curves.easeIn,
+                            // Chats, Feed and Noise share one layout, so its widths
+                            // and state carry across, and switching does not fade
+                            // the whole pane.
+                            child: KeyedSubtree(key: ValueKey(destination.isList ? Destination.chats : destination), child: _content(destination)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

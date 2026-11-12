@@ -34,7 +34,26 @@ class DestinationNotifier extends Notifier<Destination> {
 
   @override
   Destination build() => _initial;
-  void select(Destination d) => state = d;
+
+  /// Goes to [d]. [fromToday] says the user got here by clicking something
+  /// on Today, so the way back is offered; going anywhere any other way
+  /// takes that offer away.
+  void select(Destination d, {bool fromToday = false}) {
+    ref.read(cameFromTodayProvider.notifier).set(fromToday && d != Destination.today);
+    state = d;
+  }
+}
+
+/// Whether the screen showing was reached by clicking something on Today
+/// (so "Back to Today" is offered above it).
+final cameFromTodayProvider = NotifierProvider<CameFromToday, bool>(CameFromToday.new);
+
+class CameFromToday extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool v) {
+    if (state != v) state = v;
+  }
 }
 
 /// Which list the shared layout shows: the people on Chats, or the senders

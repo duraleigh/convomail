@@ -108,6 +108,9 @@ object Alerts {
 
     fun setRing(context: Context, ring: Boolean) = prefs(context).edit().putBoolean("ring", ring).apply()
 
+    /** How alerts write a time: 15:00 when true, 3:00 PM when not. */
+    fun setClock24(context: Context, h24: Boolean) = prefs(context).edit().putBoolean("h24", h24).apply()
+
     private fun channels(context: Context) {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = context.getSystemService(NotificationManager::class.java)
@@ -139,7 +142,8 @@ object Alerts {
         val mid = data["mid"] ?: ""
         val uid = data["uid"] ?: ""
         val who = data["who"] ?: ""
-        val ask = data["ask"] ?: ""
+        val h24 = prefs(context).getBoolean("h24", false)
+        val ask = timesInText(data["ask"] ?: "", h24)
         val by = data["by"]?.toLongOrNull()
         val quiet = data["quiet"] == "1"
         val channel = if (quiet) QUIET else if (kind == "reminder") REMINDERS else NEEDS_YOU
@@ -149,7 +153,7 @@ object Alerts {
             "due" -> if (who.isEmpty()) "Due within the hour" else "$who · due within the hour"
             else -> who.ifEmpty { "Précis" }
         }
-        val text = if (by != null && kind != "reminder") "$ask · by ${clock(by)}" else ask
+        val text = if (by != null && kind != "reminder") "$ask · by ${clock(by, h24)}" else ask
 
         val open = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -195,7 +199,24 @@ object Alerts {
         }
     }
 
-    private fun clock(epochSeconds: Long): String = SimpleDateFormat("h:mm a", Locale.US).format(Date(epochSeconds * 1000))
+    private fun clock(epochSeconds: Long, h24: Boolean): String = SimpleDateFormat(if (h24) "HH:mm" else "h:mm a", Locale.US).format(Date(epochSeconds * 1000))
+
+    private val twelve = Regex("\\b(1[0-2]|0?[1-9])(?::([0-5]\\d))?\\s?(?:([AaPp])[Mm]\\b|([AaPp])\\.[Mm]\\.)")
+    private val twentyFour = Regex("(?<![\\d:.])(0\\d|1[3-9]|2[0-3]):([0-5]\\d)(?![\\d:])(?!\\s?[AaPp]\\.?[Mm])")
+
+    /** The clock times inside the assistant's words, written the way the user reads the clock. */
+    fun timesInText(text: String, h24: Boolean): String = if (h24) {
+        twelve.replace(text) { m ->
+            var h = m.groupValues[1].toInt() % 12
+            if ((m.groupValues[3] + m.groupValues[4]).lowercase() == "p") h += 12
+            "%02d:%s".format(h, m.groupValues[2].ifEmpty { "00" })
+        }
+    } else {
+        twentyFour.replace(text) { m ->
+            val h = m.groupValues[1].toInt()
+            "%d:%s %s".format(if (h % 12 == 0) 12 else h % 12, m.groupValues[2], if (h < 12) "AM" else "PM")
+        }
+    }
 
     /** Tomorrow at 8 in the morning, by this phone's clock, in seconds. */
     private fun tomorrowMorning(): Long = Calendar.getInstance().apply {

@@ -192,6 +192,12 @@ class AccountSyncer {
     }
   }
 
+  /// Looks in the inbox for new mail right now, because the user asked.
+  Future<void> checkInbox() async {
+    final inbox = (await db.foldersForAccount(account.id)).where((f) => f.role == FolderRole.inbox.name).firstOrNull;
+    if (inbox != null) await _requestFolderSync(inbox.id);
+  }
+
   /// Syncs a folder from outside the sync flow. While [run] is active its
   /// connection is not ours to use, so the loop does the work: this wakes it
   /// and waits briefly. The sync still happens if the wait runs out.

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/time_format.dart';
 import '../../../store/database.dart';
 import '../../../store/planner_queries.dart';
 
@@ -12,8 +13,7 @@ abstract final class SnoozeChoice {
 String describeSnooze(DateTime t) {
   final now = DateTime.now();
   final sameDay = t.year == now.year && t.month == now.month && t.day == now.day;
-  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-  final time = '$h:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'AM' : 'PM'}';
+  final time = clockTime(t);
   if (sameDay) return 'today $time';
   final tomorrow = DateTime(now.year, now.month, now.day + 1);
   if (t.year == tomorrow.year && t.month == tomorrow.month && t.day == tomorrow.day) return 'tomorrow $time';

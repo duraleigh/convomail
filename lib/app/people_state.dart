@@ -58,7 +58,7 @@ class SelectedRowNotifier extends Notifier<String?> {
 /// Opens a row from anywhere (a toast, a line on Today), on Feed or Noise
 /// when it belongs there and on Chats otherwise. [read] is `ref.read`. A null key
 /// just goes to Chats.
-Future<void> openRow(T Function<T>(ProviderListenable<T>) read, String? key) async {
+Future<void> openRow(T Function<T>(ProviderListenable<T>) read, String? key, {bool fromToday = false}) async {
   var destination = Destination.chats;
   if (key != null) {
     final db = read(databaseProvider);
@@ -74,7 +74,7 @@ Future<void> openRow(T Function<T>(ProviderListenable<T>) read, String? key) asy
       null => Destination.chats,
     };
   }
-  read(destinationProvider.notifier).select(destination);
+  read(destinationProvider.notifier).select(destination, fromToday: fromToday);
   if (key != null) read(selectedRowProvider.notifier).select(key);
 }
 

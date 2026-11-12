@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
+import '../../../app/time_format.dart';
 import '../../../app/timely_state.dart';
 import '../../../store/database.dart';
 import '../../../store/timely_queries.dart';
@@ -111,8 +112,7 @@ class _TimelyLine extends ConsumerWidget {
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     final label = diff == 0 ? 'Today' : (diff == 1 ? 'Tomorrow' : (diff > 1 && diff < 7 ? days[t.weekday - 1] : '${months[t.month - 1]} ${t.day}'));
     if (!withTime || (t.hour == 0 && t.minute == 0)) return label;
-    final hour = t.hour % 12 == 0 ? 12 : t.hour % 12;
-    return '$label $hour:${t.minute.toString().padLeft(2, '0')} ${t.hour < 12 ? 'AM' : 'PM'}';
+    return '$label ${clockTime(t)}';
   }
 
   String _subtitle(DateTime now) {

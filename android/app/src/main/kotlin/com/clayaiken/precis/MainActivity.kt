@@ -72,6 +72,10 @@ class MainActivity : FlutterActivity() {
                     Alerts.setRing(app, call.argument<Boolean>("ring") ?: true)
                     result.success(null)
                 }
+                "alertsClock" -> {
+                    Alerts.setClock24(app, call.argument<Boolean>("h24") ?: false)
+                    result.success(null)
+                }
                 "alertsWaiting" -> result.success(Alerts.waiting(app))
                 "alertsClearWaiting" -> {
                     Alerts.clearWaiting(app)

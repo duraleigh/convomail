@@ -1,7 +1,9 @@
+// ignore_for_file: prefer_initializing_formals
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
 
+import '../app/time_format.dart';
 import '../domain/email_pile.dart';
 import '../domain/piles.dart';
 import 'database.dart';
@@ -9,22 +11,31 @@ import 'helper_queries.dart';
 
 /// What the assistant said about one email.
 class Reading {
-  const Reading({required this.line, required this.focus, required this.ask, this.due, this.why = const [], this.answered = false});
+  const Reading({required String line, required this.focus, required String ask, this.due, List<String> why = const [], this.answered = false})
+      : _line = line,
+        _ask = ask,
+        _why = why;
+
+  // The assistant's own words. Any clock time in them is shown the way the
+  // user reads the clock (12-hour or 24-hour), worked out when read.
+  final String _line;
+  final String _ask;
+  final List<String> _why;
 
   /// One sentence saying what the email is.
-  final String line;
+  String get line => timesInText(_line);
 
   /// Whether the assistant thinks it needs the user.
   final bool focus;
 
   /// What is asked, as a short instruction; empty when nothing is.
-  final String ask;
+  String get ask => timesInText(_ask);
 
   /// When it is needed by, if the email says.
   final DateTime? due;
 
   /// Up to three plain reasons.
-  final List<String> why;
+  List<String> get why => [for (final w in _why) timesInText(w)];
 
   /// The user has answered the email since.
   final bool answered;

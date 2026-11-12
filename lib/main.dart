@@ -17,10 +17,12 @@ import 'app/onboarding.dart';
 import 'app/people_state.dart';
 import 'app/settings.dart';
 import 'app/settings_navigation.dart';
+import 'app/time_format.dart';
 import 'app/version.dart';
 import 'helper/device_join.dart';
 import 'helper/helper_sync.dart';
 import 'helper/sending_sync.dart';
+import 'platform/android_bridge.dart';
 import 'platform/mailto_registration.dart';
 import 'platform/phone_alerts.dart';
 import 'platform/single_instance.dart';
@@ -260,9 +262,25 @@ class _PrecisAppState extends ConsumerState<PrecisApp> {
     }
   }
 
+  /// Every widget on screen is drawn again: a time written anywhere follows
+  /// the clock setting the moment it changes.
+  static void _drawAgain(Element e) {
+    e.markNeedsBuild();
+    e.visitChildren(_drawAgain);
+  }
+
+  void _clockChanged(bool h24) {
+    if (use24Hour == h24) return;
+    use24Hour = h24;
+    if (Platform.isAndroid) unawaited(ref.read(androidBridgeProvider).setClock24(h24).catchError((Object _) {}));
+    if (mounted) context.visitChildElements(_drawAgain);
+  }
+
   @override
   Widget build(BuildContext context) {
     final settings = ref.watch(settingsProvider);
+    ref.listen(clock24Provider, (_, next) => _clockChanged(next.value ?? false));
+    final h24 = ref.watch(clock24Provider).value ?? false;
     return MaterialApp(
       title: 'Précis',
       debugShowCheckedModeBanner: false,
@@ -271,7 +289,11 @@ class _PrecisAppState extends ConsumerState<PrecisApp> {
       themeMode: settings.themeMode,
       home: const AppShell(),
       // The see-through frame holds every screen, onboarding included.
-      builder: (context, child) => ref.watch(windowChromeProvider) ? WindowFrame(child: child!) : child!,
+      builder: (context, child) => MediaQuery(
+        // Time pickers follow the same clock setting.
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: h24),
+        child: ref.watch(windowChromeProvider) ? WindowFrame(child: child!) : child!,
+      ),
     );
   }
 }

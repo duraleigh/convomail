@@ -8,6 +8,7 @@ import '../../../app/account_scope.dart';
 import '../../../app/compose_state.dart';
 import '../../../app/conversation_state.dart';
 import '../../../app/search_state.dart';
+import '../../../app/time_format.dart';
 import '../../../store/classification_queries.dart';
 import '../../../store/database.dart';
 import '../../../sync/classification_service.dart';
@@ -183,11 +184,11 @@ class MessageCard extends ConsumerWidget {
               icon: const Icon(Icons.reply_rounded, size: 18),
               label: const Text('Reply'),
             ),
-            IconButton(
-              tooltip: 'Reply all',
+            TextButton.icon(
+              key: ValueKey('card-reply-all-${message.id}'),
               onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.reply(message.id, rowKey: _rowKey, all: true)),
               icon: const Icon(Icons.reply_all_rounded, size: 18),
-              visualDensity: VisualDensity.compact,
+              label: const Text('Reply all'),
             ),
             TextButton.icon(
               onPressed: () => ref.read(replyRequestProvider.notifier).open(ComposeRequest.forward(message.id, rowKey: _rowKey)),
@@ -460,8 +461,7 @@ class _MessageDetails extends StatelessWidget {
     final l = t.toLocal();
     const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-    final hour = l.hour % 12 == 0 ? 12 : l.hour % 12;
-    return '${days[l.weekday - 1]}, ${months[l.month - 1]} ${l.day}, ${l.year} at $hour:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'AM' : 'PM'}';
+    return '${days[l.weekday - 1]}, ${months[l.month - 1]} ${l.day}, ${l.year} at ${clockTime(l)}';
   }
 
   @override

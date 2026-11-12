@@ -4,6 +4,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../app/app_log.dart';
+import '../app/time_format.dart';
 import '../domain/html_sanitizer.dart';
 import '../helper/helper_pass.dart';
 import '../mail/mail_sender.dart';
@@ -259,8 +260,7 @@ class SendService {
     final l = t.toLocal();
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final h = l.hour % 12 == 0 ? 12 : l.hour % 12;
-    return '${days[l.weekday - 1]}, ${months[l.month - 1]} ${l.day}, ${l.year} at $h:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'AM' : 'PM'}';
+    return '${days[l.weekday - 1]}, ${months[l.month - 1]} ${l.day}, ${l.year} at ${clockTime(l)}';
   }
 
   static String _esc(String s) => const HtmlEscape(HtmlEscapeMode.element).convert(s);

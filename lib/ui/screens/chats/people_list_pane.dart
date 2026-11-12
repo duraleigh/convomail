@@ -11,6 +11,7 @@ import '../../../app/destinations.dart';
 import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../app/settings_navigation.dart';
+import '../../../app/time_format.dart';
 import '../../../app/timely_state.dart';
 import '../../../domain/classifier.dart';
 import '../../../domain/filing.dart';
@@ -875,20 +876,13 @@ String relativeTime(DateTime? t, {DateTime? now}) {
   final today = DateTime(n.year, n.month, n.day);
   final day = DateTime(local.year, local.month, local.day);
   final diff = today.difference(day).inDays;
-  if (diff == 0) return TimeOfDay.fromDateTime(local).format2();
+  if (diff == 0) return clockTime(local);
   if (diff == 1) return 'Yesterday';
   if (diff < 7) return const ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][local.weekday - 1];
   if (local.year == n.year) return '${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][local.month - 1]} ${local.day}';
   return '${local.month}/${local.day}/${local.year % 100}';
 }
 
-extension on TimeOfDay {
-  String format2() {
-    final h = hourOfPeriod == 0 ? 12 : hourOfPeriod;
-    final m = minute.toString().padLeft(2, '0');
-    return '$h:$m ${period == DayPeriod.am ? 'AM' : 'PM'}';
-  }
-}
 
 /// Avatar for a row: stacked for groups, tonal circle otherwise.
 Widget rowAvatar(PeopleRow row, {double size = 40}) {

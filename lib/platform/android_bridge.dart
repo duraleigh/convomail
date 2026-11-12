@@ -42,6 +42,9 @@ class AndroidBridge {
   Future<void> stopAlerts() => _channel.invokeMethod<void>('alertsStop');
   Future<void> setRing(bool ring) => _channel.invokeMethod<void>('alertsRing', {'ring': ring});
 
+  /// Tells the phone's alerts how to write a time: 15:00 or 3:00 PM.
+  Future<void> setClock24(bool h24) => _channel.invokeMethod<void>('alertsClock', {'h24': h24});
+
   /// Done and Later pressed on alerts while the phone had no signal, in
   /// the helper's words, waiting to be sent.
   Future<List<Map<String, Object?>>> waitingChanges() async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/mail_state.dart';
+import '../../app/time_format.dart';
 import '../../domain/classifier.dart' show Bucket;
 import '../../domain/email_pile.dart';
 import '../../domain/piles.dart';
@@ -69,8 +70,7 @@ String dueLabel(DateTime due, {DateTime? now}) {
   final n = now ?? DateTime.now();
   final l = due.toLocal();
   final days = DateTime(l.year, l.month, l.day).difference(DateTime(n.year, n.month, n.day)).inDays;
-  final hour = l.hour % 12 == 0 ? 12 : l.hour % 12;
-  final time = '$hour:${l.minute.toString().padLeft(2, '0')} ${l.hour < 12 ? 'AM' : 'PM'}';
+  final time = clockTime(l);
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const week = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   return switch (days) {
