@@ -904,7 +904,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('know-${statement.id}')), findsNothing);
       expect(find.byKey(ValueKey('know-${older.id}')), findsNothing);
-      expect(find.textContaining('The assistant is told to leave things like this off'), findsOneWidget);
+      expect(find.textContaining('to learn what kind of thing does not belong here'), findsOneWidget);
       var noted = await tester.runAsync(() => db.customSelect("SELECT k, data FROM helper_outbox WHERE kind = 'msgfix'").get());
       expect([for (final n in noted!) '${n.read<String>('k')} ${n.read<String>('data')}'], ['<daily-1@x> {"know":false}']);
       expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNull, reason: 'turned down is not the same as done');
@@ -929,13 +929,39 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('know-${statement.id}')), findsOneWidget);
 
-      // Dismiss: done.
+      // Dismiss: off the card, and that is all. Not done (the check mark does that), and nothing is taught.
+      await tester.runAsync(() => db.delete(db.helperOutbox).go());
       await tester.tap(find.byKey(ValueKey('know-line-${statement.id}')), buttons: kSecondaryButton);
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const ValueKey('menu-dismiss')));
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('know-${statement.id}')), findsNothing);
+      expect(find.byKey(ValueKey('know-${older.id}')), findsNothing, reason: 'the older word on the same thing does not come back in its place');
+      expect(find.textContaining('It is not marked done'), findsOneWidget);
+      expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNull);
+      expect(find.byKey(const ValueKey('today-done')), findsOneWidget);
+      noted = await tester.runAsync(() => db.customSelect("SELECT k, data FROM helper_outbox WHERE kind = 'msgfix'").get());
+      expect([for (final n in noted!) '${n.read<String>('k')} ${n.read<String>('data')}'], ['<daily-1@x> {"off":true}']);
+      // Undo puts it back; dismissed again for the rest of this check.
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsOneWidget);
+      // The check mark on the item is what marks it done.
+      await tester.tap(find.byKey(ValueKey('know-done-${statement.id}')));
+      await tester.pumpAndSettle();
       expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNotNull);
+
+      // Dismiss on Needs you: off Needs you and out of Focus, not done; Undo brings it back.
+      await tester.tap(find.byKey(ValueKey('needs-${bank.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu-dismiss')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('needs-${bank.id}')), findsNothing);
+      expect((await tester.runAsync(() => message('<bank@x>')))!.doneAt, isNull);
+      expect([for (final i in (await tester.runAsync(() => db.watchFocus().first))!) i.messageId], isNot(contains('<bank@x>')));
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('needs-${bank.id}')), findsOneWidget);
 
       // Needs you has the same menu; a press and hold opens it too. "Does not belong here" is "this does not need me".
       await tester.longPress(find.byKey(ValueKey('needs-${renee.id}')));

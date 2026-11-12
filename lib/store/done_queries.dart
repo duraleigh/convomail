@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../domain/quoted_mail.dart';
 import 'database.dart';
+import 'helper_queries.dart';
 import 'mail_queries.dart';
 
 /// An email the user is waiting on an answer to.
@@ -95,9 +96,12 @@ extension DoneQueries on AppDatabase {
       // user asked for something; without one (or with it off), the plain
       // rule does, as before.
       final read = await readingsShown();
+      final off = await dismissedIds();
       final out = <WaitingItem>[];
       for (final r in rows) {
         final m = messages.map(r.data);
+        // Dismissed from the card: off it, not done.
+        if (off.contains(m.messageId ?? '')) continue;
         final said = read ? r.readNullable<bool>('h_asks') : null;
         if (!(said ?? _asks(m))) continue;
         out.add(WaitingItem(

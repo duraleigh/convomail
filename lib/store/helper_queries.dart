@@ -22,6 +22,10 @@ const kClockFormat = 'time.format';
 /// the same on every device: a JSON list of "kind|sender".
 const kFyiOff = 'fyi.off';
 
+/// The setting that lists the emails dismissed from Today's cards (by
+/// Message-ID, newest last): off the card, not done, nothing taught.
+const kDismissed = 'today.dismissed';
+
 /// One change as it goes up to the helper: set ([data]) or gone ([deleted]),
 /// or an action ([op]).
 class HelperEntry {
@@ -298,6 +302,29 @@ extension HelperQueries on AppDatabase {
     );
   }
 
+  /// The emails dismissed from Today's cards, by Message-ID.
+  Future<Set<String>> dismissedIds() async => decodeFyiOff(await getSetting(kDismissed));
+
+  Future<void> _markDismissed(String messageId, bool off) async {
+    final list = decodeFyiOff(await getSetting(kDismissed)).toList();
+    final had = list.remove(messageId);
+    if (off) list.add(messageId);
+    if (off == had && !off) return;
+    // The newest two thousand are plenty: older mail is on no card.
+    await putSetting(kDismissed, jsonEncode(list.length > 2000 ? list.sublist(list.length - 2000) : list));
+  }
+
+  /// "Dismiss" on a Today item ([off] true), or that taken back: the email
+  /// leaves the card (and Focus) without being marked done, and nothing is
+  /// taught. Every device hears of it.
+  Future<void> setDismissed(int id, bool off) async {
+    final m = await (select(messages)..where((t) => t.id.equals(id))).getSingleOrNull();
+    final mid = m?.messageId;
+    if (mid == null || mid.isEmpty) return;
+    await _markDismissed(mid, off);
+    await noteForHelper('msgfix', mid, {'off': off});
+  }
+
   /// What the user said does not belong under FYI: "kind|sender" pairs.
   static Set<String> decodeFyiOff(String? json) {
     if (json == null || json.isEmpty) return const {};
@@ -505,6 +532,8 @@ extension HelperQueries on AppDatabase {
           await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(laterUntil: later, focusFix: focus, pileFix: pile));
         }
         // "Does not belong here" said on another device (or taken back).
+        // Dismissed from a Today card on another device (or brought back).
+        if (data['off'] is bool) await _markDismissed(k, data['off'] == true);
         if (data['know'] is bool) await (update(helperReadings)..where((r) => r.messageId.equals(k))).write(HelperReadingsCompanion(know: Value(data['know'] == true)));
         if (data['asks'] is bool) await (update(helperReadings)..where((r) => r.messageId.equals(k) & r.sent.equals(true))).write(HelperReadingsCompanion(asks: Value(data['asks'] == true)));
         return const {};

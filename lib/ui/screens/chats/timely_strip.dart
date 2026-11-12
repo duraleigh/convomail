@@ -151,7 +151,7 @@ class _TimelyLine extends ConsumerWidget {
   List<MenuChoice> _menu(BuildContext context, WidgetRef ref) {
     final db = ref.read(databaseProvider);
     return [
-      MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.dismissTimely(item.id)),
+      MenuChoice('dismiss', kDismiss, Icons.close_rounded, () => db.dismissTimely(item.id)),
       if (item.contactKey.isNotEmpty)
         MenuChoice('reject', kReject, Icons.block_rounded, () {
           db.setFyiOff(item.type, item.contactKey, true);

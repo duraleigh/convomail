@@ -71,7 +71,7 @@ final class Day
             }
             // Put off until later, or turned down: not on the page now.
             $fix = $this->store->item('msgfix', (string) $r['message_id']) ?? [];
-            if ((int) ($fix['later'] ?? 0) > $now || ($fix['know'] ?? null) === false) {
+            if ((int) ($fix['later'] ?? 0) > $now || ($fix['know'] ?? null) === false || ($fix['off'] ?? null) === true) {
                 continue;
             }
             $feed[] = ['id' => (int) $r['id'], 'name' => trim((string) $r['from_name']) !== '' ? trim((string) $r['from_name']) : (string) $r['from_addr'], 'line' => (string) $r['line'], 'thing' => (string) $r['thing'], 'at' => (int) $r['at']];

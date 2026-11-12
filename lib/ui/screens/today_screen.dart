@@ -688,7 +688,7 @@ class _Schedule extends ConsumerWidget {
           ItemMenu(
             key: ValueKey('today-event-${e.id}'),
             choices: () => [
-              MenuChoice('dismiss', kDismiss, Icons.check_rounded, () {
+              MenuChoice('dismiss', kDismiss, Icons.close_rounded, () {
                 final db = ref.read(databaseProvider);
                 db.setEventDismissed(e.id, true);
                 sayDone(context, 'Taken off Schedule. Your calendar is not changed.', undo: () => db.setEventDismissed(e.id, false));
@@ -743,7 +743,7 @@ class _Schedule extends ConsumerWidget {
 List<MenuChoice> _needsMenu(BuildContext context, WidgetRef ref, MailItem i) {
   final db = ref.read(databaseProvider);
   return [
-    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([i.id], true)),
+    MenuChoice('dismiss', kDismiss, Icons.close_rounded, () => _dismiss(context, db, i.id, 'Needs you')),
     MenuChoice('later', kLater, Icons.snooze_rounded, () => putOffFocusMail(context, ref, i)),
     MenuChoice('reject', kReject, Icons.block_rounded, () {
       db.setFocusFix(i.id, false);
@@ -756,11 +756,11 @@ List<MenuChoice> _needsMenu(BuildContext context, WidgetRef ref, MailItem i) {
 List<MenuChoice> _knowMenu(BuildContext context, WidgetRef ref, MailItem i) {
   final db = ref.read(databaseProvider);
   return [
-    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([i.id], true)),
+    MenuChoice('dismiss', kDismiss, Icons.close_rounded, () => _dismiss(context, db, i.id, 'Good to know')),
     MenuChoice('later', kLater, Icons.snooze_rounded, () => putOffFocusMail(context, ref, i, place: 'Good to know')),
     MenuChoice('reject', kReject, Icons.block_rounded, () {
       db.setWorthKnowing(i.id, false);
-      sayDone(context, 'Taken off Good to know. The assistant is told to leave things like this off.', undo: () => db.setWorthKnowing(i.id, true));
+      sayDone(context, 'Taken off Good to know. The assistant is shown it, to learn what kind of thing does not belong here.', undo: () => db.setWorthKnowing(i.id, true));
     }),
   ];
 }
@@ -769,7 +769,7 @@ List<MenuChoice> _knowMenu(BuildContext context, WidgetRef ref, MailItem i) {
 List<MenuChoice> _waitingMenu(BuildContext context, WidgetRef ref, WaitingItem w) {
   final db = ref.read(databaseProvider);
   return [
-    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([w.message.id], true)),
+    MenuChoice('dismiss', kDismiss, Icons.close_rounded, () => _dismiss(context, db, w.message.id, 'Waiting on')),
     MenuChoice('reject', kReject, Icons.block_rounded, () {
       db.setWaitingOn(w.message.id, false);
       sayDone(context, 'Taken off Waiting on. The assistant is told you are not waiting on mail like this.', undo: () => db.setWaitingOn(w.message.id, true));
@@ -784,8 +784,15 @@ List<MenuChoice> _laterMailMenu(BuildContext context, WidgetRef ref, MailItem i)
   return [
     MenuChoice('back', 'Bring back now', Icons.undo_rounded, () => db.setLaterUntil(i.id, null)),
     MenuChoice('later', kLater, Icons.snooze_rounded, () => putOffFocusMail(context, ref, i, place: know ? 'Good to know' : 'Focus')),
-    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([i.id], true)),
+    MenuChoice('dismiss', kDismiss, Icons.close_rounded, () => _dismiss(context, db, i.id, 'Later')),
   ];
+}
+
+/// Dismiss: off the card, not marked done (the check mark on the item does
+/// that), and nothing is taught.
+void _dismiss(BuildContext context, AppDatabase db, int messageId, String card) {
+  db.setDismissed(messageId, true);
+  sayDone(context, 'Taken off $card. It is not marked done.', undo: () => db.setDismissed(messageId, false));
 }
 
 /// "Good to know": what came that matters though nothing is asked. An
@@ -961,9 +968,6 @@ class _Later extends ConsumerWidget {
         for (final r in reminders)
           InkWell(
             key: ValueKey('later-reminder-${r.id}'),
-            onTapDown: (d) => lastPressAt = d.globalPosition,
-            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, [MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => ref.read(databaseProvider).setReminderDone(r.id, true))]),
-            onLongPress: () => showItemMenu(context, lastPressAt, [MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => ref.read(databaseProvider).setReminderDone(r.id, true))]),
             onTap: r.rowKey == null ? null : () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),

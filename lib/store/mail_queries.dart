@@ -74,6 +74,7 @@ class MailItem {
     this.senderChosen,
     this.countsTowardUnread = false,
     this.laterUntil,
+    this.dismissed = false,
   });
 
   final int id;
@@ -113,9 +114,12 @@ class MailItem {
   /// "Later": put off by the user until this time.
   final DateTime? laterUntil;
 
+  /// Dismissed from Today's cards: off them (and out of Focus), not done.
+  final bool dismissed;
+
   /// Whether this email needs the user: they said so, or the assistant did
   /// and the user has not answered it or said otherwise.
-  bool get needsYou => doneAt == null && (focusFix == 'yes' || (focusFix != 'no' && reading != null && reading!.focus && !reading!.answered && (person || pile != FeedsPile.noise)));
+  bool get needsYou => !dismissed && doneAt == null && (focusFix == 'yes' || (focusFix != 'no' && reading != null && reading!.focus && !reading!.answered && (person || pile != FeedsPile.noise)));
 
   /// Whether the user has put this email off and its time has not come yet.
   bool putOffAt(DateTime now) => laterUntil != null && laterUntil!.isAfter(now);
@@ -149,7 +153,7 @@ extension MailQueries on AppDatabase {
     WHERE m.is_deleted = 0 AND m.is_from_me = 0 AND m.is_draft = 0
   ''';
 
-  MailItem _mailItem(QueryRow r, {required bool assistantOn}) {
+  MailItem _mailItem(QueryRow r, {required bool assistantOn, Set<String> off = const {}}) {
     DateTime? t(String k) {
       final v = r.readNullable<int>(k);
       return v == null ? null : DateTime.fromMillisecondsSinceEpoch(v * 1000);
@@ -209,6 +213,7 @@ extension MailQueries on AppDatabase {
       senderWhy: r.readNullable<String>('sender_why') ?? '',
       focusFix: r.readNullable<String>('focus_fix'),
       laterUntil: t('later_until'),
+      dismissed: off.contains(r.readNullable<String>('message_id') ?? ''),
       senderChosen: FeedsPile.parse(r.readNullable<String>('chosen')),
       countsTowardUnread: r.readNullable<bool>('counts') ?? false,
     );
@@ -226,7 +231,8 @@ extension MailQueries on AppDatabase {
       readsFrom: {messages, folders, contacts, helperVerdicts, helperReadings, messageRowAssignments, settings, helperState},
     ).watch().asyncMap((rows) async {
       final on = await readingsShown();
-      return [for (final r in rows) _mailItem(r, assistantOn: on)];
+      final off = await dismissedIds();
+      return [for (final r in rows) _mailItem(r, assistantOn: on, off: off)];
     });
   }
 
@@ -254,18 +260,23 @@ extension MailQueries on AppDatabase {
   /// delivery that has arrived replaces "out for delivery").
   Stream<List<MailItem>> watchGoodToKnow({int? accountId, required DateTime since}) => _watchMail(
         // One put off until later comes back when its time is up, whatever day it came.
-        'AND m.done_at IS NULL AND r.know = 1 AND (COALESCE(m.date, m.internal_date) >= ? OR m.later_until IS NOT NULL)',
+        'AND r.message_id IS NOT NULL AND (COALESCE(m.date, m.internal_date) >= ? OR m.later_until IS NOT NULL)',
         [Variable.withInt(since.millisecondsSinceEpoch ~/ 1000)],
         accountId: accountId,
         limit: 80,
       ).map((items) {
         final seen = <String>{};
         final now = DateTime.now();
-        return [
-          for (final i in items)
-            if (i.reading != null && i.reading!.know && !i.needsYou && !i.putOffAt(now) && (i.person || i.pile != FeedsPile.noise))
-              if (seen.add(i.reading!.thing.isEmpty ? 'id:${i.id}' : '${i.senderKey}|${i.reading!.thing.toLowerCase()}')) i,
-        ];
+        final out = <MailItem>[];
+        for (final i in items) {
+          final r = i.reading;
+          if (r == null) continue;
+          // The newest word on a thing stands for it, shown or not: taking
+          // it off the card never brings an older one back in its place.
+          final newest = seen.add(r.thing.isEmpty ? 'id:${i.id}' : '${i.senderKey}|${r.thing.toLowerCase()}');
+          if (newest && r.know && i.doneAt == null && !i.dismissed && !i.needsYou && !i.putOffAt(now) && (i.person || i.pile != FeedsPile.noise)) out.add(i);
+        }
+        return out;
       });
 
   /// Focus emails the user put off until later, soonest back first.
@@ -273,7 +284,7 @@ extension MailQueries on AppDatabase {
         final now = DateTime.now();
         return [
           for (final i in items)
-            if ((i.needsYou || (i.reading?.know ?? false)) && i.putOffAt(now)) i,
+            if (!i.dismissed && (i.needsYou || (i.reading?.know ?? false)) && i.putOffAt(now)) i,
         ]..sort((a, b) => a.laterUntil!.compareTo(b.laterUntil!));
       });
 
@@ -300,7 +311,7 @@ extension MailQueries on AppDatabase {
         '${_select.replaceFirst("JOIN folders f ON f.id = m.folder_id AND f.role = 'inbox'", 'JOIN folders f ON f.id = m.folder_id').replaceFirst('WHERE m.is_deleted = 0 AND m.is_from_me = 0 AND m.is_draft = 0', 'WHERE m.id = ?')} LIMIT 1',
         variables: [Variable.withInt(id)],
         readsFrom: {messages, folders, contacts, helperVerdicts, helperReadings, messageRowAssignments, settings, helperState},
-      ).watch().asyncMap((rows) async => rows.isEmpty ? null : _mailItem(rows.first, assistantOn: await readingsShown()));
+      ).watch().asyncMap((rows) async => rows.isEmpty ? null : _mailItem(rows.first, assistantOn: await readingsShown(), off: await dismissedIds()));
 
   /// The user's own word on one email: true puts it in Focus, false is
   /// "Not Focus", null leaves it to the assistant again. Told to the helper
@@ -314,22 +325,14 @@ extension MailQueries on AppDatabase {
   }
 
   /// "Does not belong here" on Good to know ([worth] false), or that taken
-  /// back (true). This email, and what the same sender sent under the same
-  /// name, leave the card at once. The helper is told, and the assistant is
-  /// shown it from then on, so the like is not put there again.
+  /// back (true). This one email leaves the card; nothing else from its
+  /// sender is touched. The helper is told, and the assistant is shown it
+  /// from then on, to learn what kind of thing does not belong there.
   Future<void> setWorthKnowing(int id, bool worth) async {
     final m = await (select(messages)..where((t) => t.id.equals(id))).getSingleOrNull();
     final mid = m?.messageId;
     if (m == null || mid == null || mid.isEmpty) return;
-    final r = await (select(helperReadings)..where((r) => r.messageId.equals(mid))).getSingleOrNull();
     await (update(helperReadings)..where((r) => r.messageId.equals(mid))).write(HelperReadingsCompanion(know: Value(worth)));
-    if (!worth && r != null && r.thing.isNotEmpty) {
-      await customUpdate(
-        'UPDATE helper_readings SET know = 0 WHERE know = 1 AND lower(thing) = lower(?) AND message_id IN (SELECT message_id FROM messages WHERE from_contact_key = ? AND is_from_me = 0)',
-        variables: [Variable.withString(r.thing), Variable.withString(m.fromContactKey)],
-        updates: {helperReadings},
-      );
-    }
     await noteForHelper('msgfix', mid, {'know': worth});
   }
 

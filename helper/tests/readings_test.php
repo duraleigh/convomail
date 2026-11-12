@@ -367,7 +367,7 @@ return [
         same(2, count($day->lines()['feed']));
     },
 
-    '"does not belong here": the item leaves every device, the assistant is shown what you turned down, and the same thing from the same sender stays off' => function () use ($person, $renee): void {
+    '"does not belong here": that one item leaves every device and the assistant is shown what you turned down; nothing else from the sender is touched' => function () use ($person, $renee): void {
         $w = new World();
         $person($w);
         $w->assistantOn();
@@ -388,11 +388,17 @@ return [
         $day = new \Precis\Day($w->store, $w->readings);
         same(2, count($day->lines()['feed']));
 
-        // Turned down on a device: gone for every device, and so is the same thing from the same sender.
+        // Turned down on a device: that one is gone for every device. The other one from the same sender is not touched.
         $w->sync->push(1, [['kind' => 'msgfix', 'k' => $a, 'data' => ['know' => false]]]);
         $w->readings->fixed($a);
-        same([false, false], [$w->reading($a)['know'], $w->reading($b)['know']]);
-        same(0, count($day->lines()['feed']), 'and The Lede no longer has it to speak of');
+        same([false, true], [$w->reading($a)['know'], $w->reading($b)['know']]);
+        same(1, count($day->lines()['feed']), 'and The Lede no longer has the one turned down to speak of');
+        // Dismissed on a device: off the page too, and that is neither done nor a lesson.
+        $w->sync->push(1, [['kind' => 'msgfix', 'k' => $b, 'data' => ['off' => true]]]);
+        $w->readings->fixed($b);
+        same(0, count($day->lines()['feed']));
+        same(true, $w->reading($b)['know']);
+        same(null, $w->store->item('done', $b));
 
         // The next one from that sender: the assistant is shown what was turned down, in its own earlier words.
         $w->later(60);
@@ -406,8 +412,10 @@ return [
         check(strpos($shown, 'NOT worth knowing') < strpos($shown, 'Text (the first part only):'), 'before the email, which stays the last thing read');
         check(!str_contains($shown, 'WORDS-OF-THE-EMAIL'), 'never the turned-down email\'s own words');
         check(str_contains((string) json_encode($all[count($all) - 1]['body']['system']), 'They outrank your own view'));
-        // The stand-in assistant still says "good to know": the owner's word holds all the same.
-        same(false, $w->reading($c)['know']);
+        check(str_contains((string) json_encode($all[count($all) - 1]['body']['system']), 'never about who sent it'), 'it is told the lesson is the kind of thing, not the sender');
+        check(substr_count($shown, 'NOT worth knowing') === 1, 'what was only dismissed is no lesson');
+        // No rule blocks the sender: the assistant decides, having been shown.
+        same(true, $w->reading($c)['know']);
 
         // "This does not need me" is a lesson too, and mail from anyone is shown it.
         $mid = $w->arriveWith($renee + ['Message-ID' => '<yn@x>'], 'Yes or no?');
