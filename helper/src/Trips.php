@@ -166,6 +166,12 @@ final class Trips
 
     // ---- the reading ------------------------------------------------------------------------------
 
+    /** How many emails are waiting for their fuller reading now. */
+    public function waiting(): int
+    {
+        return (int) $this->store->db->val('SELECT COUNT(*) FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE r.detail = ? AND r.detail_after <= ? AND e.gone = 0', [self::WANTED, $this->store->now()]);
+    }
+
     /**
      * Reads the emails waiting for it, oldest first (a booking before the
      * changes to it), for at most [$seconds]. Returns how many were read.

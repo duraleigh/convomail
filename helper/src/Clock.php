@@ -58,8 +58,12 @@ final class Clock
         if ($this->readings !== null) {
             $out['queued'] = $this->readings->plan();
             $left = $seconds - (microtime(true) - $started);
+            // When travel or a booking is waiting for its fuller reading,
+            // it is left its share of the minute, so a busy inbox never
+            // keeps a trip waiting.
+            $tripsWaiting = $this->trips !== null && $this->trips->waiting() > 0;
             if ($left > 5) {
-                $out['read'] = $this->readings->work($left - 4);
+                $out['read'] = $this->readings->work($tripsWaiting ? max(5.0, $left - 24) : $left - 4);
             }
             // Travel and bookings are read in full, attachments included.
             $left = $seconds - (microtime(true) - $started);
