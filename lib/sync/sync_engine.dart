@@ -711,6 +711,43 @@ class AccountSyncer {
     return read;
   }
 
+  /// Lists the files of emails whose words are not on this device, without
+  /// fetching the emails: the mail server is asked only what each email is
+  /// made of. So the Attachments page shows every file in the mailbox, old
+  /// mail and sent mail included, at almost no cost. A file itself is
+  /// fetched when it is opened. Returns how many emails it listed.
+  Future<int> listAttachmentsAhead({int batch = 60}) async {
+    final pending = await db.messagesWithUnlistedAttachments(account.id, limit: batch);
+    if (pending.isEmpty) return 0;
+    final byFolder = <int, List<Message>>{};
+    for (final m in pending) {
+      byFolder.putIfAbsent(m.folderId, () => []).add(m);
+    }
+    var listed = 0;
+    for (final entry in byFolder.entries) {
+      if (_stopRequested) break;
+      final folder = await db.folderById(entry.key);
+      var lists = const <int, List<RemoteAttachment>>{};
+      if (folder != null) {
+        try {
+          await transport.selectFolder(folder.path);
+          lists = await transport.fetchAttachmentLists([for (final m in entry.value) m.uid]);
+        } on MailTransportException catch (e) {
+          if (!transport.isConnected) rethrow;
+          AppLog.current?.warn('listing the files of some emails failed', AppLog.scrub(e));
+        }
+      }
+      // One the server said nothing about (gone, say) is marked asked, so
+      // it is not asked about again and again.
+      for (final m in entry.value) {
+        await db.storeAttachmentList(m.id, lists[m.uid] ?? const []);
+        listed++;
+      }
+    }
+    if (listed > 0) AppLog.current?.info('attachments: the files of $listed emails were listed');
+    return listed;
+  }
+
   /// Reads a batch of recent mail for codes, deliveries and travel (spec
   /// 4.21), on the sync connection so it never competes with the user. Bodies
   /// are stored without marking anything read, and this path leaves out the
@@ -780,6 +817,11 @@ class AccountSyncer {
           // Then the words of everything recent, so opening an email never
           // waits on a download. New mail is looked for between batches.
           if (await readWordsAhead() > 0) {
+            await syncFolder(inbox.id);
+            continue;
+          }
+          // Then the list of files in older mail, for the Attachments page.
+          if (await listAttachmentsAhead() > 0) {
             await syncFolder(inbox.id);
             continue;
           }

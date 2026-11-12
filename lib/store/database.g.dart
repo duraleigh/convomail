@@ -3059,6 +3059,17 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _attachmentsListedAtMeta =
+      const VerificationMeta('attachmentsListedAt');
+  @override
+  late final GeneratedColumn<DateTime> attachmentsListedAt =
+      GeneratedColumn<DateTime>(
+        'attachments_listed_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
   static const VerificationMeta _providerThreadIdMeta = const VerificationMeta(
     'providerThreadId',
   );
@@ -3234,6 +3245,7 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
     bodyText,
     bodyHtml,
     bodyFetchedAt,
+    attachmentsListedAt,
     providerThreadId,
     threadKey,
     imagesAllowed,
@@ -3446,6 +3458,15 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         bodyFetchedAt.isAcceptableOrUnknown(
           data['body_fetched_at']!,
           _bodyFetchedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('attachments_listed_at')) {
+      context.handle(
+        _attachmentsListedAtMeta,
+        attachmentsListedAt.isAcceptableOrUnknown(
+          data['attachments_listed_at']!,
+          _attachmentsListedAtMeta,
         ),
       );
     }
@@ -3669,6 +3690,10 @@ class $MessagesTable extends Messages with TableInfo<$MessagesTable, Message> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}body_fetched_at'],
       ),
+      attachmentsListedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}attachments_listed_at'],
+      ),
       providerThreadId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}provider_thread_id'],
@@ -3768,6 +3793,10 @@ class Message extends DataClass implements Insertable<Message> {
   final String? bodyHtml;
   final DateTime? bodyFetchedAt;
 
+  /// When the list of this email's files was asked of the mail server
+  /// without fetching the email itself (for the Attachments page).
+  final DateTime? attachmentsListedAt;
+
   /// Provider thread id (Gmail X-GM-THRID) when available (spec 4.20).
   final String? providerThreadId;
 
@@ -3841,6 +3870,7 @@ class Message extends DataClass implements Insertable<Message> {
     this.bodyText,
     this.bodyHtml,
     this.bodyFetchedAt,
+    this.attachmentsListedAt,
     this.providerThreadId,
     this.threadKey,
     required this.imagesAllowed,
@@ -3902,6 +3932,9 @@ class Message extends DataClass implements Insertable<Message> {
     }
     if (!nullToAbsent || bodyFetchedAt != null) {
       map['body_fetched_at'] = Variable<DateTime>(bodyFetchedAt);
+    }
+    if (!nullToAbsent || attachmentsListedAt != null) {
+      map['attachments_listed_at'] = Variable<DateTime>(attachmentsListedAt);
     }
     if (!nullToAbsent || providerThreadId != null) {
       map['provider_thread_id'] = Variable<String>(providerThreadId);
@@ -3986,6 +4019,9 @@ class Message extends DataClass implements Insertable<Message> {
       bodyFetchedAt: bodyFetchedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(bodyFetchedAt),
+      attachmentsListedAt: attachmentsListedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(attachmentsListedAt),
       providerThreadId: providerThreadId == null && nullToAbsent
           ? const Value.absent()
           : Value(providerThreadId),
@@ -4057,6 +4093,9 @@ class Message extends DataClass implements Insertable<Message> {
       bodyText: serializer.fromJson<String?>(json['bodyText']),
       bodyHtml: serializer.fromJson<String?>(json['bodyHtml']),
       bodyFetchedAt: serializer.fromJson<DateTime?>(json['bodyFetchedAt']),
+      attachmentsListedAt: serializer.fromJson<DateTime?>(
+        json['attachmentsListedAt'],
+      ),
       providerThreadId: serializer.fromJson<String?>(json['providerThreadId']),
       threadKey: serializer.fromJson<String?>(json['threadKey']),
       imagesAllowed: serializer.fromJson<bool>(json['imagesAllowed']),
@@ -4103,6 +4142,7 @@ class Message extends DataClass implements Insertable<Message> {
       'bodyText': serializer.toJson<String?>(bodyText),
       'bodyHtml': serializer.toJson<String?>(bodyHtml),
       'bodyFetchedAt': serializer.toJson<DateTime?>(bodyFetchedAt),
+      'attachmentsListedAt': serializer.toJson<DateTime?>(attachmentsListedAt),
       'providerThreadId': serializer.toJson<String?>(providerThreadId),
       'threadKey': serializer.toJson<String?>(threadKey),
       'imagesAllowed': serializer.toJson<bool>(imagesAllowed),
@@ -4147,6 +4187,7 @@ class Message extends DataClass implements Insertable<Message> {
     Value<String?> bodyText = const Value.absent(),
     Value<String?> bodyHtml = const Value.absent(),
     Value<DateTime?> bodyFetchedAt = const Value.absent(),
+    Value<DateTime?> attachmentsListedAt = const Value.absent(),
     Value<String?> providerThreadId = const Value.absent(),
     Value<String?> threadKey = const Value.absent(),
     bool? imagesAllowed,
@@ -4194,6 +4235,9 @@ class Message extends DataClass implements Insertable<Message> {
     bodyFetchedAt: bodyFetchedAt.present
         ? bodyFetchedAt.value
         : this.bodyFetchedAt,
+    attachmentsListedAt: attachmentsListedAt.present
+        ? attachmentsListedAt.value
+        : this.attachmentsListedAt,
     providerThreadId: providerThreadId.present
         ? providerThreadId.value
         : this.providerThreadId,
@@ -4261,6 +4305,9 @@ class Message extends DataClass implements Insertable<Message> {
       bodyFetchedAt: data.bodyFetchedAt.present
           ? data.bodyFetchedAt.value
           : this.bodyFetchedAt,
+      attachmentsListedAt: data.attachmentsListedAt.present
+          ? data.attachmentsListedAt.value
+          : this.attachmentsListedAt,
       providerThreadId: data.providerThreadId.present
           ? data.providerThreadId.value
           : this.providerThreadId,
@@ -4323,6 +4370,7 @@ class Message extends DataClass implements Insertable<Message> {
           ..write('bodyText: $bodyText, ')
           ..write('bodyHtml: $bodyHtml, ')
           ..write('bodyFetchedAt: $bodyFetchedAt, ')
+          ..write('attachmentsListedAt: $attachmentsListedAt, ')
           ..write('providerThreadId: $providerThreadId, ')
           ..write('threadKey: $threadKey, ')
           ..write('imagesAllowed: $imagesAllowed, ')
@@ -4369,6 +4417,7 @@ class Message extends DataClass implements Insertable<Message> {
     bodyText,
     bodyHtml,
     bodyFetchedAt,
+    attachmentsListedAt,
     providerThreadId,
     threadKey,
     imagesAllowed,
@@ -4414,6 +4463,7 @@ class Message extends DataClass implements Insertable<Message> {
           other.bodyText == this.bodyText &&
           other.bodyHtml == this.bodyHtml &&
           other.bodyFetchedAt == this.bodyFetchedAt &&
+          other.attachmentsListedAt == this.attachmentsListedAt &&
           other.providerThreadId == this.providerThreadId &&
           other.threadKey == this.threadKey &&
           other.imagesAllowed == this.imagesAllowed &&
@@ -4457,6 +4507,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
   final Value<String?> bodyText;
   final Value<String?> bodyHtml;
   final Value<DateTime?> bodyFetchedAt;
+  final Value<DateTime?> attachmentsListedAt;
   final Value<String?> providerThreadId;
   final Value<String?> threadKey;
   final Value<bool> imagesAllowed;
@@ -4498,6 +4549,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.bodyText = const Value.absent(),
     this.bodyHtml = const Value.absent(),
     this.bodyFetchedAt = const Value.absent(),
+    this.attachmentsListedAt = const Value.absent(),
     this.providerThreadId = const Value.absent(),
     this.threadKey = const Value.absent(),
     this.imagesAllowed = const Value.absent(),
@@ -4540,6 +4592,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     this.bodyText = const Value.absent(),
     this.bodyHtml = const Value.absent(),
     this.bodyFetchedAt = const Value.absent(),
+    this.attachmentsListedAt = const Value.absent(),
     this.providerThreadId = const Value.absent(),
     this.threadKey = const Value.absent(),
     this.imagesAllowed = const Value.absent(),
@@ -4584,6 +4637,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Expression<String>? bodyText,
     Expression<String>? bodyHtml,
     Expression<DateTime>? bodyFetchedAt,
+    Expression<DateTime>? attachmentsListedAt,
     Expression<String>? providerThreadId,
     Expression<String>? threadKey,
     Expression<bool>? imagesAllowed,
@@ -4626,6 +4680,8 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       if (bodyText != null) 'body_text': bodyText,
       if (bodyHtml != null) 'body_html': bodyHtml,
       if (bodyFetchedAt != null) 'body_fetched_at': bodyFetchedAt,
+      if (attachmentsListedAt != null)
+        'attachments_listed_at': attachmentsListedAt,
       if (providerThreadId != null) 'provider_thread_id': providerThreadId,
       if (threadKey != null) 'thread_key': threadKey,
       if (imagesAllowed != null) 'images_allowed': imagesAllowed,
@@ -4670,6 +4726,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     Value<String?>? bodyText,
     Value<String?>? bodyHtml,
     Value<DateTime?>? bodyFetchedAt,
+    Value<DateTime?>? attachmentsListedAt,
     Value<String?>? providerThreadId,
     Value<String?>? threadKey,
     Value<bool>? imagesAllowed,
@@ -4712,6 +4769,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
       bodyText: bodyText ?? this.bodyText,
       bodyHtml: bodyHtml ?? this.bodyHtml,
       bodyFetchedAt: bodyFetchedAt ?? this.bodyFetchedAt,
+      attachmentsListedAt: attachmentsListedAt ?? this.attachmentsListedAt,
       providerThreadId: providerThreadId ?? this.providerThreadId,
       threadKey: threadKey ?? this.threadKey,
       imagesAllowed: imagesAllowed ?? this.imagesAllowed,
@@ -4812,6 +4870,11 @@ class MessagesCompanion extends UpdateCompanion<Message> {
     if (bodyFetchedAt.present) {
       map['body_fetched_at'] = Variable<DateTime>(bodyFetchedAt.value);
     }
+    if (attachmentsListedAt.present) {
+      map['attachments_listed_at'] = Variable<DateTime>(
+        attachmentsListedAt.value,
+      );
+    }
     if (providerThreadId.present) {
       map['provider_thread_id'] = Variable<String>(providerThreadId.value);
     }
@@ -4884,6 +4947,7 @@ class MessagesCompanion extends UpdateCompanion<Message> {
           ..write('bodyText: $bodyText, ')
           ..write('bodyHtml: $bodyHtml, ')
           ..write('bodyFetchedAt: $bodyFetchedAt, ')
+          ..write('attachmentsListedAt: $attachmentsListedAt, ')
           ..write('providerThreadId: $providerThreadId, ')
           ..write('threadKey: $threadKey, ')
           ..write('imagesAllowed: $imagesAllowed, ')
@@ -20838,6 +20902,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> bodyText,
   Value<String?> bodyHtml,
   Value<DateTime?> bodyFetchedAt,
+  Value<DateTime?> attachmentsListedAt,
   Value<String?> providerThreadId,
   Value<String?> threadKey,
   Value<bool> imagesAllowed,
@@ -20880,6 +20945,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> bodyText,
   Value<String?> bodyHtml,
   Value<DateTime?> bodyFetchedAt,
+  Value<DateTime?> attachmentsListedAt,
   Value<String?> providerThreadId,
   Value<String?> threadKey,
   Value<bool> imagesAllowed,
@@ -21168,6 +21234,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<DateTime> get bodyFetchedAt => $composableBuilder(
     column: $table.bodyFetchedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get attachmentsListedAt => $composableBuilder(
+    column: $table.attachmentsListedAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -21543,6 +21614,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get attachmentsListedAt => $composableBuilder(
+    column: $table.attachmentsListedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get providerThreadId => $composableBuilder(
     column: $table.providerThreadId,
     builder: (column) => ColumnOrderings(column),
@@ -21754,6 +21830,11 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get bodyFetchedAt => $composableBuilder(
     column: $table.bodyFetchedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get attachmentsListedAt => $composableBuilder(
+    column: $table.attachmentsListedAt,
     builder: (column) => column,
   );
 
@@ -22049,6 +22130,7 @@ class $$MessagesTableTableManager
                 Value<String?> bodyText = const Value.absent(),
                 Value<String?> bodyHtml = const Value.absent(),
                 Value<DateTime?> bodyFetchedAt = const Value.absent(),
+                Value<DateTime?> attachmentsListedAt = const Value.absent(),
                 Value<String?> providerThreadId = const Value.absent(),
                 Value<String?> threadKey = const Value.absent(),
                 Value<bool> imagesAllowed = const Value.absent(),
@@ -22090,6 +22172,7 @@ class $$MessagesTableTableManager
                 bodyText: bodyText,
                 bodyHtml: bodyHtml,
                 bodyFetchedAt: bodyFetchedAt,
+                attachmentsListedAt: attachmentsListedAt,
                 providerThreadId: providerThreadId,
                 threadKey: threadKey,
                 imagesAllowed: imagesAllowed,
@@ -22133,6 +22216,7 @@ class $$MessagesTableTableManager
                 Value<String?> bodyText = const Value.absent(),
                 Value<String?> bodyHtml = const Value.absent(),
                 Value<DateTime?> bodyFetchedAt = const Value.absent(),
+                Value<DateTime?> attachmentsListedAt = const Value.absent(),
                 Value<String?> providerThreadId = const Value.absent(),
                 Value<String?> threadKey = const Value.absent(),
                 Value<bool> imagesAllowed = const Value.absent(),
@@ -22174,6 +22258,7 @@ class $$MessagesTableTableManager
                 bodyText: bodyText,
                 bodyHtml: bodyHtml,
                 bodyFetchedAt: bodyFetchedAt,
+                attachmentsListedAt: attachmentsListedAt,
                 providerThreadId: providerThreadId,
                 threadKey: threadKey,
                 imagesAllowed: imagesAllowed,

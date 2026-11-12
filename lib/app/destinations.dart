@@ -10,6 +10,7 @@ enum Destination {
   chats('Chats', Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded),
   feed('Feed', Icons.rss_feed_rounded, Icons.rss_feed_rounded),
   noise('Noise', Icons.volume_off_outlined, Icons.volume_off_rounded),
+  attachments('Attachments', Icons.attach_file_rounded, Icons.attach_file_rounded),
   settings('Settings', Icons.settings_outlined, Icons.settings_rounded);
 
   const Destination(this.label, this.icon, this.selectedIcon);
@@ -18,7 +19,7 @@ enum Destination {
   final IconData selectedIcon;
 
   /// Rail destinations, in order. Settings is pinned to the bottom of the rail.
-  static const List<Destination> rail = [today, focus, chats, feed, noise];
+  static const List<Destination> rail = [today, focus, chats, feed, noise, attachments];
 
   /// Chats is the list of people with the open conversation. (Focus, Feed
   /// and Noise are lists of emails, each with its own screen.)

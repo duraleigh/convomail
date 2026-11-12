@@ -49,6 +49,10 @@ abstract interface class MailTransport {
 
   Future<RemoteMessageBody> fetchBody(int uid);
 
+  /// The list of files each of these emails (in the selected folder)
+  /// carries, without fetching the emails themselves.
+  Future<Map<int, List<RemoteAttachment>>> fetchAttachmentLists(List<int> uids);
+
   /// Bulk-mail header signals for already-known messages (backfill after
   /// the schema upgrade that introduced them). Missing uids are omitted.
   Future<Map<int, BulkSignals>> fetchSignals(List<int> uids);

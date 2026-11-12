@@ -415,21 +415,54 @@ extension SyncQueries on AppDatabase {
         snippet: snippet.isEmpty ? const Value.absent() : Value(snippet),
         hasAttachments: Value(body.attachments.any((a) => !a.isInline)),
       ));
-      await (delete(attachments)..where((a) => a.messageId.equals(messageDbId))).go();
-      for (final a in body.attachments) {
-        await into(attachments).insert(AttachmentsCompanion.insert(
-          messageId: messageDbId,
-          partId: a.partId,
-          fileName: Value(a.fileName),
-          mimeType: Value(a.mimeType),
-          size: Value(a.size),
-          contentId: Value(a.contentId),
-          isInline: Value(a.isInline),
-        ));
-      }
+      await _replaceAttachments(messageDbId, body.attachments);
     });
     await refreshDirtyRows();
   }
+
+  /// Writes an email's list of files again. A file already downloaded
+  /// stays downloaded.
+  Future<void> _replaceAttachments(int messageDbId, List<RemoteAttachment> list) async {
+    final had = {for (final a in await (select(attachments)..where((a) => a.messageId.equals(messageDbId))).get()) a.partId: a.localPath};
+    await (delete(attachments)..where((a) => a.messageId.equals(messageDbId))).go();
+    for (final a in list) {
+      await into(attachments).insert(AttachmentsCompanion.insert(
+        messageId: messageDbId,
+        partId: a.partId,
+        fileName: Value(a.fileName),
+        mimeType: Value(a.mimeType),
+        size: Value(a.size),
+        contentId: Value(a.contentId),
+        isInline: Value(a.isInline),
+        localPath: Value(had[a.partId]),
+      ));
+    }
+  }
+
+  /// Emails said to carry files whose files are not listed yet: their words
+  /// are not on this device, and the list has not been asked for. Newest
+  /// first.
+  Future<List<Message>> messagesWithUnlistedAttachments(int accountId, {int limit = 60}) async {
+    final rows = await customSelect(
+      '''
+      SELECT m.* FROM messages m
+      JOIN folders f ON f.id = m.folder_id
+      WHERE m.account_id = ? AND m.is_deleted = 0 AND m.is_draft = 0 AND m.has_attachments = 1
+        AND m.body_fetched_at IS NULL AND m.attachments_listed_at IS NULL
+        AND f.role NOT IN ('junk', 'trash', 'drafts')
+      ORDER BY COALESCE(m.date, m.internal_date) DESC
+      LIMIT ?
+      ''',
+      variables: [Variable.withInt(accountId), Variable.withInt(limit)],
+    ).get();
+    return [for (final r in rows) messages.map(r.data)];
+  }
+
+  /// Keeps the list of an email's files, learned without fetching the email.
+  Future<void> storeAttachmentList(int messageDbId, List<RemoteAttachment> list) => transaction(() async {
+        await _replaceAttachments(messageDbId, list);
+        await (update(messages)..where((m) => m.id.equals(messageDbId))).write(MessagesCompanion(attachmentsListedAt: Value(DateTime.now())));
+      });
 
   static String _snippetFrom(String text) {
     final collapsed = text.replaceAll(RegExp(r'\s+'), ' ').trim();

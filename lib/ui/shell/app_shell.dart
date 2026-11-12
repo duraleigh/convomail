@@ -19,6 +19,7 @@ import '../../store/mail_queries.dart';
 import '../../sync/notification_center.dart';
 import '../../sync/schedule_service.dart';
 import '../../sync/waiting_sends.dart';
+import '../screens/attachments_screen.dart';
 import '../screens/chats_screen.dart';
 import '../screens/feed_screen.dart';
 import '../screens/focus_screen.dart';
@@ -211,6 +212,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         Destination.chats => const ChatsScreen(),
         Destination.feed => const FeedScreen(),
         Destination.noise => const NoiseScreen(),
+        Destination.attachments => const AttachmentsScreen(),
         Destination.settings => const SettingsScreen(),
       };
 }

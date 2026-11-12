@@ -127,7 +127,7 @@ void main() {
     await _teardown(tester);
   });
 
-  testWidgets('the rail is Today, Focus, Chats, Feed, Noise; Boards and Planner are gone', (tester) async {
+  testWidgets('the rail is Today, Focus, Chats, Feed, Noise, Attachments; Boards and Planner are gone', (tester) async {
     tester.view.physicalSize = const Size(1400, 900);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -135,7 +135,7 @@ void main() {
     await tester.pumpWidget(_app(InMemorySettingsStore()));
     await tester.pumpAndSettle();
 
-    expect(Destination.rail, [Destination.today, Destination.focus, Destination.chats, Destination.feed, Destination.noise]);
+    expect(Destination.rail, [Destination.today, Destination.focus, Destination.chats, Destination.feed, Destination.noise, Destination.attachments]);
     expect(find.text('Boards'), findsNothing);
     expect(find.text('Planner'), findsNothing);
     expect(find.text('People'), findsNothing);

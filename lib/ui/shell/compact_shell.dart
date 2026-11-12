@@ -59,7 +59,7 @@ class CompactShell extends ConsumerWidget {
     // The screen itself says when it is showing something full screen, so
     // the bar is hidden exactly when a Back arrow is on screen, never otherwise.
     final detail = page == CompactPage.main && (destination == Destination.today ? ref.watch(openThreadProvider) != null : ref.watch(compactDetailProvider));
-    final underMore = page != CompactPage.main || destination == Destination.noise || destination == Destination.settings;
+    final underMore = page != CompactPage.main || destination == Destination.noise || destination == Destination.attachments || destination == Destination.settings;
     final index = underMore ? tabs.length : tabs.indexOf(destination);
     final focusCount = ref.watch(focusMailProvider).value?.length ?? 0;
     final feedNew = ref.watch(feedsHasNewProvider) && destination != Destination.feed;
@@ -190,6 +190,7 @@ class _MorePage extends ConsumerWidget {
       children: [
         Padding(padding: const EdgeInsets.fromLTRB(24, 14, 12, 6), child: Text('More', style: text.headlineMedium)),
         row('noise', Destination.noise.icon, 'Noise', 'Promotions and notices kept out of your way.', () => onGo(Destination.noise)),
+        row('attachments', Destination.attachments.icon, 'Attachments', 'Every file sent to you or by you, to search and sort.', () => onGo(Destination.attachments)),
         row('done', Icons.check_circle_outline_rounded, 'Done', 'What you marked done today.', () => ref.read(compactPageProvider.notifier).show(CompactPage.done)),
         row('sent', Icons.send_outlined, 'Sent', 'The people you wrote to, newest first.', () {
           onGo(Destination.chats);

@@ -140,6 +140,10 @@ class Messages extends Table {
   TextColumn get bodyText => text().nullable()();
   TextColumn get bodyHtml => text().nullable()();
   DateTimeColumn get bodyFetchedAt => dateTime().nullable()();
+
+  /// When the list of this email's files was asked of the mail server
+  /// without fetching the email itself (for the Attachments page).
+  DateTimeColumn get attachmentsListedAt => dateTime().nullable()();
   /// Provider thread id (Gmail X-GM-THRID) when available (spec 4.20).
   TextColumn get providerThreadId => text().nullable()();
 
@@ -910,6 +914,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await _createHeldTriggers();
           }
           if (from < 25) {
+            await m.addColumn(messages, messages.attachmentsListedAt);
             if (from >= 21) {
               await m.addColumn(helperReadings, helperReadings.know);
               await m.addColumn(helperReadings, helperReadings.thing);

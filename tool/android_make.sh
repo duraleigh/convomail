@@ -32,13 +32,19 @@ fi
 echo "=== make starts $(date)"
 # One file for the chips nearly every phone has (arm64). Always made the
 # same way, so each new version installs over the last.
-flutter build apk "--$MODE" --split-per-abi --target-platform android-arm64 2>&1 | grep -v '^\s*$' | tail -80
-echo "=== make exit: ${PIPESTATUS[0]} at $(date)"
 OUT="build/app/outputs/flutter-apk/app-arm64-v8a-$MODE.apk"
-if [ -f "$OUT" ]; then
+# What an earlier make left behind is removed first, so a make that fails
+# can never hand back an old app as if it were new.
+rm -f "$OUT" "$WIN/build/android/Precis.apk"
+flutter build apk "--$MODE" --split-per-abi --target-platform android-arm64 2>&1 | grep -v '^\s*$' | tail -80
+CODE="${PIPESTATUS[0]}"
+echo "=== make exit: $CODE at $(date)"
+if [ "$CODE" = "0" ] && [ -f "$OUT" ]; then
   mkdir -p "$WIN/build/android"
   cp "$OUT" "$WIN/build/android/Precis.apk"
   ls -la "$WIN/build/android/"
   echo "MADE"
+else
+  echo "NOT-MADE"
 fi
 echo MAKE-DONE

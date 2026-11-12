@@ -123,6 +123,18 @@ class FakeMailTransport implements MailTransport {
   @override
   bool get isConnected => _connected;
 
+  /// How many times the lists of files were asked for.
+  int attachmentListCalls = 0;
+
+  @override
+  Future<Map<int, List<RemoteAttachment>>> fetchAttachmentLists(List<int> uids) async {
+    attachmentListCalls++;
+    return {
+      for (final uid in uids)
+        if (_sel.messages.containsKey(uid)) uid: _sel.bodies[uid]?.attachments ?? const [],
+    };
+  }
+
   @override
   Future<void> ping() async {
     pingCount++;

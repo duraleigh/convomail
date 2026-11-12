@@ -304,11 +304,25 @@ class ImapTransport implements MailTransport {
     return partsFromMime(m, partIds);
   }
 
+  @override
+  Future<Map<int, List<RemoteAttachment>>> fetchAttachmentLists(List<int> uids) async {
+    _requireSelected();
+    if (uids.isEmpty) return const {};
+    final result = await _c.uidFetchMessages(MessageSequence.fromIds(uids, isUid: true), '(UID BODYSTRUCTURE)');
+    return {
+      for (final m in result.messages)
+        if (m.uid != null) m.uid!: attachmentsFromMime(m),
+    };
+  }
+
   static Map<String, Uint8List> partsFromMime(MimeMessage m, List<String> partIds) {
     final out = <String, Uint8List>{};
     for (final id in partIds) {
       try {
-        final bytes = m.getPart(id)?.decodeContentBinary();
+        // An email that is nothing but one file has no parts under it: the
+        // file is the email itself, and the server calls it part 1.
+        final part = m.getPart(id) ?? (id == '1' && (m.parts?.isEmpty ?? true) ? m : null);
+        final bytes = part?.decodeContentBinary();
         if (bytes != null) out[id] = bytes;
       } catch (_) {
         // Unknown or undecodable part: skip it.
@@ -319,6 +333,16 @@ class ImapTransport implements MailTransport {
 
   /// Body and attachment list of a parsed MIME message.
   static RemoteMessageBody bodyFromMime(MimeMessage m) {
+    String? calendar;
+    try {
+      calendar = m.getPartWithMediaSubtype(MediaSubtype.textCalendar)?.decodeContentText();
+    } catch (_) {}
+    return RemoteMessageBody(text: m.decodeTextPlainPart(), html: m.decodeTextHtmlPart(), attachments: attachmentsFromMime(m), calendar: calendar);
+  }
+
+  /// The files an email carries, from the email itself or from the server's
+  /// description of it (which names every part without sending any).
+  static List<RemoteAttachment> attachmentsFromMime(MimeMessage m) {
     final attachments = <RemoteAttachment>[];
     for (final info in m.findContentInfo(disposition: ContentDisposition.attachment)) {
       attachments.add(RemoteAttachment(
@@ -341,11 +365,7 @@ class ImapTransport implements MailTransport {
         isInline: true,
       ));
     }
-    String? calendar;
-    try {
-      calendar = m.getPartWithMediaSubtype(MediaSubtype.textCalendar)?.decodeContentText();
-    } catch (_) {}
-    return RemoteMessageBody(text: m.decodeTextPlainPart(), html: m.decodeTextHtmlPart(), attachments: attachments, calendar: calendar);
+    return attachments;
   }
 
   @override
