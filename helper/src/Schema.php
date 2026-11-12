@@ -17,7 +17,7 @@ namespace Precis;
  */
 final class Schema
 {
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     public static function migrate(Db $db): void
     {
@@ -59,6 +59,14 @@ final class Schema
             $db->exec('CREATE TABLE {alerts} (k VARCHAR(420) NOT NULL PRIMARY KEY, at BIGINT NOT NULL, cleared INT NOT NULL DEFAULT 0)' . $tail);
             // The addresses the owner sends from, each kept locked, for every device.
             $db->exec('CREATE TABLE {vault} (k VARCHAR(320) NOT NULL PRIMARY KEY, v ' . ($db->driver === 'mysql' ? 'MEDIUMTEXT' : 'TEXT') . ' NOT NULL, at BIGINT NOT NULL)' . $tail);
+        }
+        if ($have < 5) {
+            // With a reading: whether the email is good to know though it
+            // asks nothing, a few words naming what it is about, and, for
+            // an email the owner sent, whether it settled what was asked.
+            $db->exec('ALTER TABLE {readings} ADD COLUMN know INT NOT NULL DEFAULT 0');
+            $db->exec("ALTER TABLE {readings} ADD COLUMN thing VARCHAR(120) NOT NULL DEFAULT ''");
+            $db->exec('ALTER TABLE {readings} ADD COLUMN settles INT NOT NULL DEFAULT 0');
         }
         $db->upsert('meta', ['k' => 'schema'], ['v' => (string) self::VERSION]);
     }

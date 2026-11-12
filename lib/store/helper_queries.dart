@@ -493,6 +493,8 @@ extension HelperQueries on AppDatabase {
           readAt: Value(_time(data['at'])),
           sent: Value(data['sent'] == true),
           asks: Value(data['asks'] == true),
+          know: Value(data['know'] == true),
+          thing: Value((data['thing'] as String?) ?? ''),
         ));
         return const {};
       case 'day':

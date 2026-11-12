@@ -659,6 +659,13 @@ class HelperReadings extends Table {
   /// For an email the user sent: it asked its recipient for something.
   BoolColumn get asks => boolean().withDefault(const Constant(false))();
 
+  /// Good to know though nothing is asked: an answer the user was waiting
+  /// for, a delivery that arrived, a notice about their own accounts.
+  BoolColumn get know => boolean().withDefault(const Constant(false))();
+
+  /// A few words naming what the email is about ("Amazon hard case").
+  TextColumn get thing => text().withDefault(const Constant(''))();
+
   @override
   Set<Column> get primaryKey => {messageId};
 }
@@ -717,7 +724,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 24;
+  int get schemaVersion => 25;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -901,6 +908,15 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
               await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
             }
             await _createHeldTriggers();
+          }
+          if (from < 25) {
+            if (from >= 21) {
+              await m.addColumn(helperReadings, helperReadings.know);
+              await m.addColumn(helperReadings, helperReadings.thing);
+            }
+            // Readings now say what is good to know and name what an email
+            // is about; those already taken in are taken in again.
+            if (from >= 20) await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
           }
         },
         beforeOpen: (details) async {

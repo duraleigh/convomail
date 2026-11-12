@@ -247,6 +247,126 @@ return [
         same(false, $w->reading('<late@x>')['focus']);
     },
 
+    'your answer does what was asked: the email is done on every device; an answer that only asks back, or puts it off, is not called done' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        $w->claude->answer = static function (string $shown): array {
+            if (str_contains($shown, 'Kind: sent by the owner')) {
+                return str_contains($shown, 'Yes, March 14 works')
+                    ? ['line' => 'You said yes to March 14.', 'asks' => false, 'ask' => '', 'settles' => true, 'reasons' => ['You gave the answer.']]
+                    : ['line' => 'You asked Renee which room.', 'asks' => true, 'ask' => 'Which room.', 'settles' => str_contains($shown, 'no thread here'), 'reasons' => ['You asked a question back.']];
+            }
+            return ['line' => 'Renee asks for a yes or no.', 'thing' => 'Charlotte, March 14', 'needs_owner' => true, 'ask' => 'Say yes or no to March 14.', 'due' => '', 'place' => 'none', 'know' => true, 'reasons' => ['It asks you a question.']];
+        };
+        $answer = static function (World $w, string $to, string $words, string $mid): void {
+            $gid = (string) $w->store->db->val('SELECT gmail_id FROM {emails} WHERE message_id = ?', [$to]);
+            $reply = $w->fake->add(['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'Re: Spring dates', 'In-Reply-To' => $to, 'Message-ID' => $mid], ['SENT']);
+            $w->fake->messages[$reply]['threadId'] = $w->fake->messages[$gid]['threadId'];
+            $w->fake->setBody($reply, $words);
+            $w->reader->poll($w->account);
+            $w->readings->plan();
+            $w->readings->work();
+        };
+        $first = $w->arriveWith($renee + ['Message-ID' => '<first@x>'], 'Yes or no on March 14?');
+        $second = $w->arriveWith(['From' => 'Renee Calloway <renee@booking.example>', 'To' => 'me@example.com', 'Subject' => 'Summer', 'Message-ID' => '<second@x>'], 'Yes or no on June 2?');
+        $w->readings->plan();
+        $w->readings->work();
+        same(true, $w->reading($first)['focus']);
+        same(false, $w->reading($first)['know'], 'what needs you is not also "good to know"');
+        same('Charlotte, March 14', $w->reading($first)['thing']);
+
+        // An answer that only asks back: it stops needing the owner, and is not done.
+        $w->later(600);
+        $answer($w, $second, 'Which room would it be in?', '<back@me>');
+        same(true, $w->reading($second)['answered']);
+        same(null, $w->store->item('done', $second), 'asking back does not finish it');
+        $shown = (string) array_values(array_filter($w->claude->readings(), static fn (array $r): bool => str_contains((string) $r['body']['messages'][0]['content'], 'Which room would it be in?')))[0]['body']['messages'][0]['content'];
+        check(str_contains($shown, 'This email answers one that asked the owner: Say yes or no to March 14.'), 'the assistant is told what was asked, in its own earlier words');
+
+        // An answer that does what was asked: done, everywhere, as if Done had been pressed.
+        $w->later(600);
+        $answer($w, $first, 'Yes, March 14 works for us.', '<yes@me>');
+        same(['at' => $w->clock->now], $w->store->item('done', $first));
+        same(true, $w->reading($first)['answered']);
+        same(0, $w->readings->status()['focus']);
+        // A new email with nothing asked before it: "settles" from the assistant means nothing.
+        $id = $w->fake->add(['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'New', 'Message-ID' => '<new@me>'], ['SENT']);
+        $w->fake->setBody($id, 'A question with no thread here?');
+        $w->reader->poll($w->account);
+        $w->readings->plan();
+        $w->readings->work();
+        same(0, (int) $w->store->db->val('SELECT r.settles FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE e.message_id = ?', ['<new@me>']));
+    },
+
+    'good to know: an answer you were waiting for, named for what it is; The Lede is written only from what Today lists' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->readings->setZone(-300);
+        $w->assistantOn();
+        $day = new \Precis\Day($w->store, $w->readings);
+        $w->claude->answer = static function (string $shown): array {
+            if (str_contains($shown, 'Needs them (')) {
+                return ['sentence' => 'Your hard case was delivered to the front door, and Renee sent the signed copy.'];
+            }
+            if (str_contains($shown, 'Kind: sent by the owner')) {
+                return ['line' => 'You asked Renee for the signed copy.', 'asks' => true, 'ask' => 'The signed copy.', 'settles' => false, 'reasons' => ['You asked for a document.']];
+            }
+            if (str_contains($shown, 'Here is the signed copy')) {
+                return ['line' => 'Renee sent the signed copy.', 'thing' => 'Signed contract', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'none', 'know' => true, 'reasons' => ['It is the answer you were waiting for.']];
+            }
+            if (str_contains($shown, 'out for delivery')) {
+                return ['line' => 'Your hard case is out for delivery today.', 'thing' => 'Amazon hard case', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'know' => true, 'reasons' => ['It arrives today.']];
+            }
+            if (str_contains($shown, 'was delivered')) {
+                return ['line' => 'Your hard case was delivered and left at the front door.', 'thing' => 'Amazon hard case', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'know' => true, 'reasons' => ['It has arrived.']];
+            }
+            return ['line' => 'A sale.', 'thing' => 'Sale', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'noise', 'know' => true, 'reasons' => ['It is a sale.']];
+        };
+        // The owner asks for something; the answer comes back in the same conversation.
+        $id = $w->fake->add(['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'The contract', 'Message-ID' => '<ask@me>'], ['SENT']);
+        $w->fake->setBody($id, 'Can you send the signed copy?');
+        $w->reader->poll($w->account);
+        $w->readings->plan();
+        $w->readings->work();
+        $w->later(600);
+        $got = $w->fake->add(['From' => 'Renee Calloway <renee@booking.example>', 'To' => 'me@example.com', 'Subject' => 'Re: The contract', 'In-Reply-To' => '<ask@me>', 'Message-ID' => '<got@x>'], ['INBOX', 'UNREAD']);
+        $w->fake->messages[$got]['threadId'] = $w->fake->messages[$id]['threadId'];
+        $w->fake->setBody($got, 'Here is the signed copy.');
+        $shop = ['From' => 'Amazon.com <ship@amazon.example>', 'To' => 'me@example.com', 'List-Unsubscribe' => '<mailto:u@amazon.example>'];
+        $w->arriveWith($shop + ['Subject' => 'Out for delivery', 'Message-ID' => '<out@x>'], 'Your package is out for delivery.');
+        $w->later(600);
+        $w->arriveWith($shop + ['Subject' => 'Delivered', 'Message-ID' => '<here@x>'], 'Your package was delivered. It was left at the front door.');
+        $w->arriveWith(['From' => 'Shop <deals@shop.example>', 'To' => 'me@example.com', 'Subject' => 'Sale', 'Message-ID' => '<sale@x>', 'List-Unsubscribe' => '<mailto:u@shop.example>'], 'Everything is on sale.');
+        $w->reader->poll($w->account);
+        $w->readings->plan();
+        $w->readings->work();
+
+        $shown = (string) array_values(array_filter($w->claude->readings(), static fn (array $r): bool => str_contains((string) $r['body']['messages'][0]['content'], 'Here is the signed copy')))[0]['body']['messages'][0]['content'];
+        check(str_contains($shown, 'The owner was waiting for this, from an email they sent: The signed copy.'));
+        $r = $w->reading('<got@x>');
+        same([true, 'Signed contract', false], [$r['know'], $r['thing'], $r['focus']]);
+        same([true, 'Amazon hard case'], [$w->reading('<here@x>')['know'], $w->reading('<here@x>')['thing']]);
+        same(false, $w->reading('<sale@x>')['know'] ?? false, 'Noise is never "good to know", whatever the assistant says');
+
+        // The Lede is written from those lines only: each with its time, newest first.
+        $w->later(1300);
+        check($day->refresh());
+        $all = $w->claude->readings();
+        $shown = (string) $all[count($all) - 1]['body']['messages'][0]['content'];
+        check(str_contains($shown, 'Good to know, came today, newest first (3):'));
+        $delivered = strpos($shown, 'Your hard case was delivered and left at the front door.');
+        $out = strpos($shown, 'Your hard case is out for delivery today.');
+        check($delivered !== false && $out !== false && $delivered < $out, 'the latest word on the delivery comes first');
+        check(str_contains($shown, 'Amazon.com (Amazon hard case):'), 'named for what it is');
+        check(str_contains($shown, 'Renee Calloway (Signed contract): Renee sent the signed copy.'));
+        check(!str_contains($shown, 'A sale.'));
+        check(str_contains((string) json_encode($all[count($all) - 1]['body']['system']), 'Only the latest line about a thing is true now'));
+        // Marked done on a device: it leaves the page, and so The Lede's lines.
+        $w->sync->push(1, [['kind' => 'done', 'k' => '<got@x>', 'data' => ['at' => $w->clock->now]]]);
+        same(2, count($day->lines()['feed']));
+    },
+
     'a deadline set earlier in a thread is found: the earlier emails are shown as background, new words only' => function () use ($person, $renee): void {
         $w = new World();
         $person($w);
@@ -364,7 +484,7 @@ return [
         check(str_contains($shown, 'To: Renee Calloway'));
         check(str_contains($shown, 'Can you send the signed copy?') && !str_contains($shown, 'HER-OLD-WORDS'), 'only what the owner wrote this time');
         check(str_contains((string) json_encode($asked['body']['system']), 'SENT to someone'), 'its own instructions');
-        same(['line', 'asks', 'ask', 'reasons'], $asked['body']['output_config']['format']['schema']['required']);
+        same(['line', 'asks', 'ask', 'settles', 'reasons'], $asked['body']['output_config']['format']['schema']['required']);
         $r = $w->reading('<ask@me>');
         same([true, true, 'The signed copy.', false], [$r['sent'], $r['asks'], $r['ask'], $r['focus']]);
         $r = $w->reading('<thanks@me>');
@@ -472,7 +592,7 @@ return [
                 return ['sentence' => "Renee needs your yes or no by 3:00 PM,\n and your subscription renews Friday."];
             }
             return str_contains($shown, 'Daily #')
-                ? ['line' => 'Your subscription renews Friday.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'reasons' => ['About your account.']]
+                ? ['line' => 'Your subscription renews Friday.', 'thing' => 'Pollstar subscription.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'know' => true, 'reasons' => ['About your account.']]
                 : ['line' => 'Renee asks for a yes or no on March 14.', 'needs_owner' => true, 'ask' => 'Say yes or no to Charlotte, March 14.', 'due' => gmdate('Y-m-d\TH:i', (new World())->clock->now - 5 * 3600 + 5 * 3600), 'place' => 'none', 'reasons' => ['It asks you.']];
         };
         // Nothing below it: no sentence, and the assistant is not asked.
@@ -495,8 +615,8 @@ return [
         check(str_contains($shown, 'From Renee Calloway'));
         check(str_contains($shown, 'Say yes or no to Charlotte, March 14.'));
         check(str_contains($shown, '(needed by '));
-        check(str_contains($shown, 'Arrived today, worth knowing (1):'));
-        check(str_contains($shown, 'Pollstar Daily: Your subscription renews Friday.'));
+        check(str_contains($shown, 'Good to know, came today, newest first (1):'));
+        check(preg_match('~^- \d\d:\d\d, Pollstar Daily \(Pollstar subscription\): Your subscription renews Friday\.$~m', $shown) === 1, 'when it came, who from, what it is, and the line');
         check(!str_contains($shown, 'SECRET'), 'only the assistant\'s own lines are shown, never an email\'s words');
         check(str_contains((string) json_encode($sent['body']['system']), 'ONE sentence'));
         $item = $w->store->item('day', 'today');

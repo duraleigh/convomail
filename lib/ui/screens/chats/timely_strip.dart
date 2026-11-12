@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/conversation_state.dart';
+import '../../../app/mail_state.dart';
 import '../../../app/people_state.dart';
 import '../../../app/search_state.dart';
 import '../../../app/time_format.dart';
@@ -161,6 +162,8 @@ class _TimelyLine extends ConsumerWidget {
     final url = item.actionUrl;
     final uri = url == null ? null : Uri.tryParse(url);
     final canLaunch = uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+    // A sign-in code is known by who sent it; everything else by what it is.
+    final thing = item.type == 'code' || item.messageId == null ? '' : (ref.watch(mailItemProvider(item.messageId!)).value?.reading?.thing ?? '');
     return InkWell(
       key: ValueKey('timely-${item.id}'),
       onTap: () => _open(ref),
@@ -174,8 +177,15 @@ class _TimelyLine extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge),
-                  Text(_subtitle(DateTime.now()), maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall!.copyWith(fontSize: 11.5, color: scheme.onSurfaceVariant)),
+                  // Named for what it is ("Amazon hard case") when the
+                  // assistant has said; who sent it then goes beside.
+                  Text(thing.isEmpty ? item.title : thing, key: ValueKey('timely-title-${item.id}'), maxLines: 1, overflow: TextOverflow.ellipsis, style: text.labelLarge),
+                  Text(
+                    [_subtitle(DateTime.now()), if (thing.isNotEmpty && item.title.isNotEmpty) item.title].where((s) => s.isNotEmpty).join(' · '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: text.bodySmall!.copyWith(fontSize: 11.5, color: scheme.onSurfaceVariant),
+                  ),
                 ],
               ),
             ),

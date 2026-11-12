@@ -48,7 +48,9 @@ final class Readings
 
         For the email you are given, report these things.
 
-        line: One sentence, at most 140 characters, that says what this email is or what it tells the owner, so that the owner often does not need to open it. State the fact, not the subject line. Good: "Check-in moved to 4:00 PM on Friday." "Renee needs your yes or no on Charlotte, March 14." "Phone bill paid, $84.12." Write it to the owner as "you". Plain words. No greeting, no "This email", no quotation marks around the whole line.
+        line: One sentence, at most 140 characters, that says what this email is or what it tells the owner, so that the owner often does not need to open it. State the fact, not the subject line. Good: "Check-in moved to 4:00 PM on Friday." "Renee needs your yes or no on Charlotte, March 14." "Phone bill paid, $84.12." Write it to the owner as "you". Plain words. No greeting, no "This email", no quotation marks around the whole line. For a delivery, name the thing and say where it stands now; when it has arrived, say so and say where it was left if the email says. Good: "Your hard case was delivered and left at the front door." "Your hard case is out for delivery today."
+
+        thing: A few words, at most 40 characters, that name what this email is about, the way a list would name it: the item, the bill, the trip, the matter. Good: "Amazon hard case" "Phone bill" "Flight to Denver" "Charlotte, March 14" "Credit report alert". Never the sender's name alone when the email says what the thing is. No full stop.
 
         needs_owner: true only when the email asks the owner personally to do, decide, answer, sign, pay or fix something, or when something of the owner's has failed or will lapse unless they act (a failed payment, an account on hold, a document waiting for a signature, a real deadline that is theirs). False for anything sent to a list, for offers and "act now" marketing, routine notices, receipts, shipping updates, sign-in codes, newsletters, thanks, FYIs, and a reply that simply closes a conversation. When the owner was only copied (Cc), it is false unless they are asked by name. When the owner has already answered this email, it is false. When in doubt, false: a wrong "true" wastes the owner's attention.
 
@@ -57,6 +59,8 @@ final class Readings
         due: When needs_owner is true and the email states, or clearly implies, when it is needed by, that moment as local time written YYYY-MM-DDTHH:MM, worked out from the day the email was sent. A day with no time is 17:00 on that day. The deadline may have been set in an earlier email of the same thread: when earlier emails are shown and one of them sets a deadline that still applies to what is asked now, use it, and say in a reason where it came from ("The deadline was set in the email of November 3."). Otherwise an empty string. Never invent one.
 
         place: Only for email that is not from a person. "feed" when it is worth the owner knowing: something about their own accounts, orders, bills, trips, bookings, appointments, security or documents, or a notice from a service they use that tells them something specific about their own business. "noise" when it is advertising, a sale or an offer, a nudge to buy, upgrade or come back, social-network chatter, a general newsletter or digest, a survey or review request, or a product announcement. For email from a person, "none".
+
+        know: true when needs_owner is false and the email still tells the owner something about their own business that they would want to know today. That is: an answer to something the owner asked for (when the lines above the text say the owner was waiting for it, and this email gives that answer or says it cannot be given, know is true and the line says what the answer is); a decision, a result or a change of plan from a person; a security, fraud or credit notice about the owner's own accounts; a delivery that is arriving today, has arrived, or could not be made; money that moved when it was not expected to; a booking or appointment that changed or was cancelled. False for routine receipts and statements, an order merely placed or shipped, sign-in codes, newsletters, offers, thanks that close a conversation, and anything that is "noise". When in doubt, false.
 
         reasons: One to three short plain sentences, each at most 110 characters, that tell the owner why you answered as you did, written to them as "you". Good: "It asks you to pick a time." "A payment failed and will be tried again Thursday." "It is a sale sent to a list." No scores, no percentages, no technical words.
 
@@ -79,6 +83,8 @@ final class Readings
 
         ask: When asks is true, what the owner is waiting for, as a few words of at most 90 characters naming the thing awaited. Good: "The signed contract." "A yes or no on March 14." When asks is false, an empty string.
 
+        settles: Only when the lines above the text say that this email answers one that asked the owner for something. true when what the owner wrote does what was asked: it gives the answer, the decision, the yes or the no, sends what was wanted, or says the thing is done. false when the owner only asks something back, says they will do it or answer later, or in any other way leaves the thing still to be done by them. When nothing is said to have been asked of the owner, false. When in doubt, false.
+
         reasons: One or two short plain sentences, each at most 110 characters, telling the owner why you answered as you did, written to them as "you". No scores, no technical words.
 
         Who is meant. Everything in your report must come from the words under "Text". The Subject line is the name of the whole conversation, not part of what this email says: never take a name from it to say who "he", "she", "they" or "it" is. When the words do not say who is meant, keep the email's own word. A report that leaves a name out is right; one with a guessed name is wrong.
@@ -92,9 +98,10 @@ final class Readings
             'line' => ['type' => 'string'],
             'asks' => ['type' => 'boolean'],
             'ask' => ['type' => 'string'],
+            'settles' => ['type' => 'boolean'],
             'reasons' => ['type' => 'array', 'items' => ['type' => 'string']],
         ],
-        'required' => ['line', 'asks', 'ask', 'reasons'],
+        'required' => ['line', 'asks', 'ask', 'settles', 'reasons'],
         'additionalProperties' => false,
     ];
 
@@ -107,13 +114,15 @@ final class Readings
         'type' => 'object',
         'properties' => [
             'line' => ['type' => 'string'],
+            'thing' => ['type' => 'string'],
             'needs_owner' => ['type' => 'boolean'],
             'ask' => ['type' => 'string'],
             'due' => ['type' => 'string'],
             'place' => ['type' => 'string', 'enum' => ['feed', 'noise', 'none']],
+            'know' => ['type' => 'boolean'],
             'reasons' => ['type' => 'array', 'items' => ['type' => 'string']],
         ],
-        'required' => ['line', 'needs_owner', 'ask', 'due', 'place', 'reasons'],
+        'required' => ['line', 'thing', 'needs_owner', 'ask', 'due', 'place', 'know', 'reasons'],
         'additionalProperties' => false,
     ];
 
@@ -559,8 +568,33 @@ final class Readings
             $this->failed($id, (int) $e['read_tries']);
             return false;
         }
-        $this->keep($id, $model, $ctx['mine'] ? self::normalizeSent($answer['data']) : self::normalize($answer['data'], $ctx));
+        $reading = $ctx['mine'] ? self::normalizeSent($answer['data']) : self::normalize($answer['data'], $ctx);
+        // "Settles" means something only when there was something to settle.
+        $reading['settles'] = ($reading['settles'] ?? false) && $ctx['target'] !== null;
+        $this->keep($id, $model, $reading);
+        if ($reading['settles']) {
+            $this->settle((string) $ctx['target']);
+        }
         return true;
+    }
+
+    /**
+     * The owner's answer did what an email asked of them: that email is
+     * finished, on every device, as if the owner had pressed Done. An
+     * answer that only asks back or puts it off never comes here: the
+     * email just stops needing them, and is not called done.
+     */
+    private function settle(string $messageId): void
+    {
+        if ($messageId === '' || $this->store->item('done', $messageId) !== null) {
+            return;
+        }
+        $this->store->put('done', $messageId, ['at' => $this->store->now()]);
+        $id = $this->store->db->val('SELECT e.id FROM {emails} e JOIN {readings} r ON r.email_id = e.id WHERE e.message_id = ? LIMIT 1', [$messageId]);
+        if ($id !== null) {
+            $this->store->db->run('UPDATE {readings} SET answered = 1 WHERE email_id = ?', [(int) $id]);
+            $this->publish((int) $id);
+        }
     }
 
     private function failed(int $id, int $tries): void
@@ -639,6 +673,23 @@ final class Readings
         // Has the other side answered since? (For the owner's own email: has the recipient.)
         $answered = $threadId !== '' && $db->val('SELECT 1 FROM {emails} WHERE thread_id = ? AND is_from_me = ? AND at > ? LIMIT 1', [$threadId, $mine ? 0 : 1, (int) $e['at']]) !== null;
 
+        // What this email answers, from the assistant's own earlier readings
+        // (never an email's words). For one the owner sent: the email in the
+        // same conversation that asked the owner for something. For one that
+        // came in: what the owner was waiting for from an email they sent.
+        $replyTo = (string) ($e['in_reply_to'] ?? '');
+        $target = null;
+        $awaited = null;
+        if ($mine && $threadId !== '') {
+            $target = $db->one("SELECT t.message_id, r.ask FROM {emails} t JOIN {readings} r ON r.email_id = t.id
+                WHERE t.thread_id = ? AND t.is_from_me = 0 AND t.gone = 0 AND t.message_id <> '' AND t.at < ? AND r.focus = 1 AND r.ask <> ''
+                ORDER BY CASE WHEN t.message_id = ? THEN 0 ELSE 1 END, t.at DESC LIMIT 1", [$threadId, (int) $e['at'], $replyTo]);
+        } elseif (!$mine && ($threadId !== '' || $replyTo !== '')) {
+            $awaited = $db->one("SELECT r.ask FROM {emails} s JOIN {readings} r ON r.email_id = s.id
+                WHERE s.is_from_me = 1 AND s.gone = 0 AND s.at < ? AND r.asks = 1 AND r.ask <> '' AND ((s.message_id <> '' AND s.message_id = ?) OR (s.thread_id <> '' AND s.thread_id = ?))
+                ORDER BY CASE WHEN s.message_id = ? THEN 0 ELSE 1 END, s.at DESC LIMIT 1", [(int) $e['at'], $replyTo, $threadId, $replyTo]);
+        }
+
         $owner = (string) $db->val('SELECT email FROM {accounts} WHERE id = ?', [$accountId]);
         $ownerName = '';
         $others = [];
@@ -667,8 +718,11 @@ final class Readings
                 'Sent: ' . $local((int) $e['at']),
                 'Subject: ' . (string) $e['subject'],
                 'The recipient has already answered this email: ' . ($answered ? 'yes' : 'no'),
-                'Text (only what the owner wrote this time):',
             );
+            if ($target !== null) {
+                $lines[] = 'This email answers one that asked the owner: ' . (string) $target['ask'];
+            }
+            $lines[] = 'Text (only what the owner wrote this time):';
         } else {
             $role = 'not listed';
             foreach (['to' => 'in To', 'cc' => 'only copied (Cc)'] as $field => $says) {
@@ -688,6 +742,9 @@ final class Readings
                 'Subject: ' . (string) $e['subject'],
                 'The owner has already answered this email: ' . ($answered ? 'yes' : 'no'),
             );
+            if ($awaited !== null) {
+                $lines[] = 'The owner was waiting for this, from an email they sent: ' . (string) $awaited['ask'];
+            }
             if ($earlier !== []) {
                 array_push($lines, 'Earlier in this thread (background only, oldest first; new words of each, trimmed):', '"""', implode("\n\n", $earlier), '"""');
             }
@@ -709,6 +766,8 @@ final class Readings
             'zone' => $zone,
             'chars' => mb_strlen($text),
             'earlier' => count($earlier),
+            // The email (by Message-ID) this one of the owner's answers, when it asked the owner for something.
+            'target' => $target === null ? null : (string) $target['message_id'],
             // For the check on guessed names: the Subject, and every word the assistant was shown apart from it.
             'subject' => (string) $e['subject'],
             'shown' => $text . "\n" . implode("\n", $earlier) . "\n" . (string) $e['from_name'] . ' ' . (string) $e['from_addr'] . ' ' . $ownerName . ' ' . implode(' ', $people),
@@ -783,7 +842,10 @@ final class Readings
                 $why[] = $r;
             }
         }
-        return ['line' => $clean($data['line'] ?? '', 200), 'focus' => $focus, 'ask' => $ask, 'due' => $due, 'place' => $place, 'why' => $why, 'asks' => false];
+        // Good to know: never what already needs the owner, never Noise.
+        $know = ($data['know'] ?? false) === true && !$focus && $place !== 'noise';
+        return ['line' => $clean($data['line'] ?? '', 200), 'focus' => $focus, 'ask' => $ask, 'due' => $due, 'place' => $place, 'why' => $why, 'asks' => false,
+            'know' => $know, 'thing' => rtrim($clean($data['thing'] ?? '', 60), '.'), 'settles' => false];
     }
 
     /**
@@ -807,7 +869,8 @@ final class Readings
                 $why[] = $r;
             }
         }
-        return ['line' => $clean($data['line'] ?? '', 200), 'focus' => false, 'ask' => $asks ? $clean($data['ask'] ?? '', 120) : '', 'due' => null, 'place' => '', 'why' => $why, 'asks' => $asks];
+        return ['line' => $clean($data['line'] ?? '', 200), 'focus' => false, 'ask' => $asks ? $clean($data['ask'] ?? '', 120) : '', 'due' => null, 'place' => '', 'why' => $why, 'asks' => $asks,
+            'know' => false, 'thing' => '', 'settles' => ($data['settles'] ?? false) === true];
     }
 
     /**
@@ -829,6 +892,9 @@ final class Readings
             'why' => Store::json($r['why']),
             'answered' => 0,
             'asks' => (int) ($r['asks'] ?? false),
+            'know' => (int) ($r['know'] ?? false),
+            'thing' => (string) ($r['thing'] ?? ''),
+            'settles' => (int) ($r['settles'] ?? false),
             'at' => $this->store->now(),
         ]);
         $db->run('UPDATE {emails} SET read_state = ? WHERE id = ?', [self::READ, $emailId]);
@@ -852,7 +918,7 @@ final class Readings
     /** Writes the reading into the stream devices follow. */
     public function publish(int $emailId): void
     {
-        $r = $this->store->db->one('SELECT e.message_id, e.is_from_me, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.asks, r.at FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE r.email_id = ?', [$emailId]);
+        $r = $this->store->db->one('SELECT e.message_id, e.is_from_me, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.asks, r.know, r.thing, r.at FROM {readings} r JOIN {emails} e ON e.id = r.email_id WHERE r.email_id = ?', [$emailId]);
         if ($r === null || (string) $r['message_id'] === '') {
             return;
         }
@@ -866,8 +932,9 @@ final class Readings
             'why' => array_values(array_map('strval', Store::decode((string) $r['why']))),
             'answered' => (int) $r['answered'] === 1,
             'at' => (int) $r['at'],
-            // An email the owner sent: whether it asked for something.
-        ] + ((int) $r['is_from_me'] === 1 ? ['sent' => true, 'asks' => (int) $r['asks'] === 1] : []));
+            // An email the owner sent: whether it asked for something. One
+            // that came in: whether it is good to know, and what it is about.
+        ] + ((int) $r['is_from_me'] === 1 ? ['sent' => true, 'asks' => (int) $r['asks'] === 1] : ['know' => (int) $r['know'] === 1, 'thing' => (string) $r['thing']]));
     }
 
     /**

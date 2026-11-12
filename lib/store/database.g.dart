@@ -17673,6 +17673,29 @@ class $HelperReadingsTable extends HelperReadings
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _knowMeta = const VerificationMeta('know');
+  @override
+  late final GeneratedColumn<bool> know = GeneratedColumn<bool>(
+    'know',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("know" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _thingMeta = const VerificationMeta('thing');
+  @override
+  late final GeneratedColumn<String> thing = GeneratedColumn<String>(
+    'thing',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     messageId,
@@ -17685,6 +17708,8 @@ class $HelperReadingsTable extends HelperReadings
     readAt,
     sent,
     asks,
+    know,
+    thing,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -17760,6 +17785,18 @@ class $HelperReadingsTable extends HelperReadings
         asks.isAcceptableOrUnknown(data['asks']!, _asksMeta),
       );
     }
+    if (data.containsKey('know')) {
+      context.handle(
+        _knowMeta,
+        know.isAcceptableOrUnknown(data['know']!, _knowMeta),
+      );
+    }
+    if (data.containsKey('thing')) {
+      context.handle(
+        _thingMeta,
+        thing.isAcceptableOrUnknown(data['thing']!, _thingMeta),
+      );
+    }
     return context;
   }
 
@@ -17809,6 +17846,14 @@ class $HelperReadingsTable extends HelperReadings
         DriftSqlType.bool,
         data['${effectivePrefix}asks'],
       )!,
+      know: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}know'],
+      )!,
+      thing: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}thing'],
+      )!,
     );
   }
 
@@ -17838,6 +17883,13 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
 
   /// For an email the user sent: it asked its recipient for something.
   final bool asks;
+
+  /// Good to know though nothing is asked: an answer the user was waiting
+  /// for, a delivery that arrived, a notice about their own accounts.
+  final bool know;
+
+  /// A few words naming what the email is about ("Amazon hard case").
+  final String thing;
   const HelperReading({
     required this.messageId,
     required this.line,
@@ -17849,6 +17901,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     this.readAt,
     required this.sent,
     required this.asks,
+    required this.know,
+    required this.thing,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -17867,6 +17921,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     }
     map['sent'] = Variable<bool>(sent);
     map['asks'] = Variable<bool>(asks);
+    map['know'] = Variable<bool>(know);
+    map['thing'] = Variable<String>(thing);
     return map;
   }
 
@@ -17884,6 +17940,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           : Value(readAt),
       sent: Value(sent),
       asks: Value(asks),
+      know: Value(know),
+      thing: Value(thing),
     );
   }
 
@@ -17903,6 +17961,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       readAt: serializer.fromJson<DateTime?>(json['readAt']),
       sent: serializer.fromJson<bool>(json['sent']),
       asks: serializer.fromJson<bool>(json['asks']),
+      know: serializer.fromJson<bool>(json['know']),
+      thing: serializer.fromJson<String>(json['thing']),
     );
   }
   @override
@@ -17919,6 +17979,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       'readAt': serializer.toJson<DateTime?>(readAt),
       'sent': serializer.toJson<bool>(sent),
       'asks': serializer.toJson<bool>(asks),
+      'know': serializer.toJson<bool>(know),
+      'thing': serializer.toJson<String>(thing),
     };
   }
 
@@ -17933,6 +17995,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     Value<DateTime?> readAt = const Value.absent(),
     bool? sent,
     bool? asks,
+    bool? know,
+    String? thing,
   }) => HelperReading(
     messageId: messageId ?? this.messageId,
     line: line ?? this.line,
@@ -17944,6 +18008,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     readAt: readAt.present ? readAt.value : this.readAt,
     sent: sent ?? this.sent,
     asks: asks ?? this.asks,
+    know: know ?? this.know,
+    thing: thing ?? this.thing,
   );
   HelperReading copyWithCompanion(HelperReadingsCompanion data) {
     return HelperReading(
@@ -17957,6 +18023,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
       readAt: data.readAt.present ? data.readAt.value : this.readAt,
       sent: data.sent.present ? data.sent.value : this.sent,
       asks: data.asks.present ? data.asks.value : this.asks,
+      know: data.know.present ? data.know.value : this.know,
+      thing: data.thing.present ? data.thing.value : this.thing,
     );
   }
 
@@ -17972,7 +18040,9 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           ..write('answered: $answered, ')
           ..write('readAt: $readAt, ')
           ..write('sent: $sent, ')
-          ..write('asks: $asks')
+          ..write('asks: $asks, ')
+          ..write('know: $know, ')
+          ..write('thing: $thing')
           ..write(')'))
         .toString();
   }
@@ -17989,6 +18059,8 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
     readAt,
     sent,
     asks,
+    know,
+    thing,
   );
   @override
   bool operator ==(Object other) =>
@@ -18003,7 +18075,9 @@ class HelperReading extends DataClass implements Insertable<HelperReading> {
           other.answered == this.answered &&
           other.readAt == this.readAt &&
           other.sent == this.sent &&
-          other.asks == this.asks);
+          other.asks == this.asks &&
+          other.know == this.know &&
+          other.thing == this.thing);
 }
 
 class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
@@ -18017,6 +18091,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
   final Value<DateTime?> readAt;
   final Value<bool> sent;
   final Value<bool> asks;
+  final Value<bool> know;
+  final Value<String> thing;
   final Value<int> rowid;
   const HelperReadingsCompanion({
     this.messageId = const Value.absent(),
@@ -18029,6 +18105,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     this.readAt = const Value.absent(),
     this.sent = const Value.absent(),
     this.asks = const Value.absent(),
+    this.know = const Value.absent(),
+    this.thing = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   HelperReadingsCompanion.insert({
@@ -18042,6 +18120,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     this.readAt = const Value.absent(),
     this.sent = const Value.absent(),
     this.asks = const Value.absent(),
+    this.know = const Value.absent(),
+    this.thing = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : messageId = Value(messageId);
   static Insertable<HelperReading> custom({
@@ -18055,6 +18135,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     Expression<DateTime>? readAt,
     Expression<bool>? sent,
     Expression<bool>? asks,
+    Expression<bool>? know,
+    Expression<String>? thing,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -18068,6 +18150,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
       if (readAt != null) 'read_at': readAt,
       if (sent != null) 'sent': sent,
       if (asks != null) 'asks': asks,
+      if (know != null) 'know': know,
+      if (thing != null) 'thing': thing,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -18083,6 +18167,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     Value<DateTime?>? readAt,
     Value<bool>? sent,
     Value<bool>? asks,
+    Value<bool>? know,
+    Value<String>? thing,
     Value<int>? rowid,
   }) {
     return HelperReadingsCompanion(
@@ -18096,6 +18182,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
       readAt: readAt ?? this.readAt,
       sent: sent ?? this.sent,
       asks: asks ?? this.asks,
+      know: know ?? this.know,
+      thing: thing ?? this.thing,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -18133,6 +18221,12 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
     if (asks.present) {
       map['asks'] = Variable<bool>(asks.value);
     }
+    if (know.present) {
+      map['know'] = Variable<bool>(know.value);
+    }
+    if (thing.present) {
+      map['thing'] = Variable<String>(thing.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -18152,6 +18246,8 @@ class HelperReadingsCompanion extends UpdateCompanion<HelperReading> {
           ..write('readAt: $readAt, ')
           ..write('sent: $sent, ')
           ..write('asks: $asks, ')
+          ..write('know: $know, ')
+          ..write('thing: $thing, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -30739,6 +30835,8 @@ typedef $$HelperReadingsTableCreateCompanionBuilder =
       Value<DateTime?> readAt,
       Value<bool> sent,
       Value<bool> asks,
+      Value<bool> know,
+      Value<String> thing,
       Value<int> rowid,
     });
 typedef $$HelperReadingsTableUpdateCompanionBuilder =
@@ -30753,6 +30851,8 @@ typedef $$HelperReadingsTableUpdateCompanionBuilder =
       Value<DateTime?> readAt,
       Value<bool> sent,
       Value<bool> asks,
+      Value<bool> know,
+      Value<String> thing,
       Value<int> rowid,
     });
 
@@ -30812,6 +30912,16 @@ class $$HelperReadingsTableFilterComposer
 
   ColumnFilters<bool> get asks => $composableBuilder(
     column: $table.asks,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get know => $composableBuilder(
+    column: $table.know,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get thing => $composableBuilder(
+    column: $table.thing,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -30874,6 +30984,16 @@ class $$HelperReadingsTableOrderingComposer
     column: $table.asks,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get know => $composableBuilder(
+    column: $table.know,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get thing => $composableBuilder(
+    column: $table.thing,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$HelperReadingsTableAnnotationComposer
@@ -30914,6 +31034,12 @@ class $$HelperReadingsTableAnnotationComposer
 
   GeneratedColumn<bool> get asks =>
       $composableBuilder(column: $table.asks, builder: (column) => column);
+
+  GeneratedColumn<bool> get know =>
+      $composableBuilder(column: $table.know, builder: (column) => column);
+
+  GeneratedColumn<String> get thing =>
+      $composableBuilder(column: $table.thing, builder: (column) => column);
 }
 
 class $$HelperReadingsTableTableManager
@@ -30959,6 +31085,8 @@ class $$HelperReadingsTableTableManager
                 Value<DateTime?> readAt = const Value.absent(),
                 Value<bool> sent = const Value.absent(),
                 Value<bool> asks = const Value.absent(),
+                Value<bool> know = const Value.absent(),
+                Value<String> thing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperReadingsCompanion(
                 messageId: messageId,
@@ -30971,6 +31099,8 @@ class $$HelperReadingsTableTableManager
                 readAt: readAt,
                 sent: sent,
                 asks: asks,
+                know: know,
+                thing: thing,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -30985,6 +31115,8 @@ class $$HelperReadingsTableTableManager
                 Value<DateTime?> readAt = const Value.absent(),
                 Value<bool> sent = const Value.absent(),
                 Value<bool> asks = const Value.absent(),
+                Value<bool> know = const Value.absent(),
+                Value<String> thing = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => HelperReadingsCompanion.insert(
                 messageId: messageId,
@@ -30997,6 +31129,8 @@ class $$HelperReadingsTableTableManager
                 readAt: readAt,
                 sent: sent,
                 asks: asks,
+                know: know,
+                thing: thing,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

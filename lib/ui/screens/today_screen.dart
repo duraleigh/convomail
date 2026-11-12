@@ -26,6 +26,7 @@ import '../theme/tokens.dart';
 import '../widgets/reading_line.dart';
 import '../widgets/tonal_avatar.dart';
 import 'chats/later_dialogs.dart';
+import 'chats/people_list_pane.dart' show relativeTime;
 import 'chats/thread_view_panel.dart';
 import 'chats/timely_strip.dart';
 import 'mail/mail_widgets.dart' show openMail, putOffFocusMail;
@@ -103,7 +104,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     return LayoutBuilder(
       builder: (context, box) {
         final two = box.maxWidth >= 860;
-        final left = [const _NeedsYou(), const _WaitingOn()];
+        final left = [const _NeedsYou(), const _GoodToKnow(), const _WaitingOn()];
         final right = [const _Schedule(), const _Fyi(), const _Later(), const _Done()];
         return Stack(
           children: [
@@ -717,6 +718,83 @@ class _Schedule extends ConsumerWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+/// "Good to know": what came that matters though nothing is asked. An
+/// answer you were waiting for, a delivery that arrived, a notice about
+/// your own accounts. Everything The Lede speaks of that is not under
+/// "Needs you" is a line here (or under FYI).
+class _GoodToKnow extends ConsumerWidget {
+  const _GoodToKnow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final shown = ref.watch(readingsShownProvider).value ?? false;
+    // What FYI already lists is not listed twice.
+    final inFyi = {for (final t in timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now())) t.messageId};
+    final items = [
+      for (final i in ref.watch(goodToKnowProvider).value ?? const <MailItem>[])
+        if (!inFyi.contains(i.id)) i,
+    ];
+    if (!shown) return const SizedBox.shrink();
+    return _Section(
+      id: 'good-to-know',
+      icon: Icons.lightbulb_outline_rounded,
+      color: const Color(0xFFFFD54F),
+      title: 'Good to know',
+      count: items.length,
+      empty: 'Nothing new. Answers you were waiting for, and news about your own orders, accounts and bookings, show here.',
+      children: [
+        for (final i in items.take(10))
+          InkWell(
+            key: ValueKey('know-${i.id}'),
+            onTap: () {
+              openMail(ref, i);
+              if (i.person) {
+                unawaited(openRow(ref.read, i.rowKey, fromToday: true));
+              } else {
+                ref.read(openMailProvider('feed').notifier).open(i.id);
+                ref.read(destinationProvider.notifier).select(Destination.feed, fromToday: true);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(i.line, key: ValueKey('know-line-${i.id}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text(
+                          [i.senderName, if (i.reading!.thing.isNotEmpty) i.reading!.thing, relativeTime(i.at)].join(' · '),
+                          key: ValueKey('know-from-${i.id}'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    key: ValueKey('know-done-${i.id}'),
+                    tooltip: 'Done',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => ref.read(databaseProvider).setMessagesDone([i.id], true),
+                    icon: const Icon(Icons.check_rounded, size: 20),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (items.length > 10) Padding(padding: const EdgeInsets.only(top: 4), child: Text('and ${items.length - 10} more', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant))),
       ],
     );
   }

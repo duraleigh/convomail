@@ -159,9 +159,22 @@ try {
     $db->exec('ALTER TABLE {devices} DROP COLUMN front_at');
     $db->exec('DROP TABLE {alerts}');
     $db->exec('DROP TABLE {vault}');
+    $db->exec('ALTER TABLE {readings} DROP COLUMN know');
+    $db->exec('ALTER TABLE {readings} DROP COLUMN thing');
+    $db->exec('ALTER TABLE {readings} DROP COLUMN settles');
     $db->run("UPDATE {meta} SET v = '3' WHERE k = 'schema'");
     Schema::migrate($db);
     $ok((int) $db->val("SELECT v FROM {meta} WHERE k = 'schema'") === Schema::VERSION, 'the storage upgrades from version 3');
+    // And from the version that is live today (4): only the newest step runs.
+    $db->exec('ALTER TABLE {readings} DROP COLUMN know');
+    $db->exec('ALTER TABLE {readings} DROP COLUMN thing');
+    $db->exec('ALTER TABLE {readings} DROP COLUMN settles');
+    $db->run("UPDATE {meta} SET v = '4' WHERE k = 'schema'");
+    Schema::migrate($db);
+    $db->upsert('readings', ['email_id' => 987654], ['model' => 'check', 'line' => 'x', 'focus' => 0, 'ask' => '', 'due' => null, 'place' => '', 'why' => '[]', 'answered' => 0, 'asks' => 0, 'know' => 1, 'thing' => 'Étui rigide 📦', 'settles' => 1, 'at' => time()]);
+    $kept = $db->one('SELECT know, thing, settles FROM {readings} WHERE email_id = ?', [987654]);
+    $ok((int) $db->val("SELECT v FROM {meta} WHERE k = 'schema'") === Schema::VERSION && (int) $kept['know'] === 1 && (string) $kept['thing'] === 'Étui rigide 📦' && (int) $kept['settles'] === 1, 'the storage upgrades from version 4, and a reading keeps what is good to know');
+    $db->run('DELETE FROM {readings} WHERE email_id = ?', [987654]);
 
     // Phones: where to reach one, whether it rings, and a PC saying it is in front.
     $devices = new Devices($store);

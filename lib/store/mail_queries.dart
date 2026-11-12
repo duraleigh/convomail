@@ -11,7 +11,7 @@ import 'helper_queries.dart';
 
 /// What the assistant said about one email.
 class Reading {
-  const Reading({required String line, required this.focus, required String ask, this.due, List<String> why = const [], this.answered = false})
+  const Reading({required String line, required this.focus, required String ask, this.due, List<String> why = const [], this.answered = false, this.know = false, this.thing = ''})
       : _line = line,
         _ask = ask,
         _why = why;
@@ -39,6 +39,12 @@ class Reading {
 
   /// The user has answered the email since.
   final bool answered;
+
+  /// Good to know though nothing is asked of the user.
+  final bool know;
+
+  /// A few words naming what the email is about ("Amazon hard case").
+  final String thing;
 }
 
 /// One email as the Focus, Feed and Noise lists show it: who, what, when,
@@ -133,7 +139,7 @@ extension MailQueries on AppDatabase {
            COALESCE(NULLIF(c.user_label, ''), NULLIF(c.display_name, ''), NULLIF(m.from_name, ''), m.from_address) AS who,
            c.feeds_pile AS chosen, COALESCE(m.feeds_category, c.feeds_category) AS tag, c.class_reasons AS sender_why, c.counts_toward_unread AS counts,
            v.pile AS hpile,
-           r.message_id AS rid, r.line, r.focus, r.ask, r.due, r.why, r.answered,
+           r.message_id AS rid, r.line, r.focus, r.ask, r.due, r.why, r.answered, r.know, r.thing,
            (SELECT MIN(a.row_key) FROM message_row_assignments a WHERE a.message_id = m.id) AS row_key
     FROM messages m
     JOIN folders f ON f.id = m.folder_id AND f.role = 'inbox'
@@ -165,6 +171,8 @@ extension MailQueries on AppDatabase {
         due: t('due'),
         why: why,
         answered: r.readNullable<bool>('answered') ?? false,
+        know: r.readNullable<bool>('know') ?? false,
+        thing: r.readNullable<String>('thing') ?? '',
       );
     }
     final tag = r.readNullable<String>('tag');
@@ -237,6 +245,26 @@ extension MailQueries on AppDatabase {
             for (final i in items)
               if (i.inFocus) i,
           ]);
+
+  /// "Good to know" on Today: emails since [since] that the assistant says
+  /// matter to the user though nothing is asked (an answer they were
+  /// waiting for, a delivery that arrived, a notice about their accounts).
+  /// Not what needs them, not Noise, not what is done. Newest first; of
+  /// several from one sender about the same thing, only the newest (a
+  /// delivery that has arrived replaces "out for delivery").
+  Stream<List<MailItem>> watchGoodToKnow({int? accountId, required DateTime since}) => _watchMail(
+        'AND m.done_at IS NULL AND r.know = 1 AND COALESCE(m.date, m.internal_date) >= ?',
+        [Variable.withInt(since.millisecondsSinceEpoch ~/ 1000)],
+        accountId: accountId,
+        limit: 80,
+      ).map((items) {
+        final seen = <String>{};
+        return [
+          for (final i in items)
+            if (i.reading != null && i.reading!.know && !i.needsYou && (i.person || i.pile != FeedsPile.noise))
+              if (seen.add(i.reading!.thing.isEmpty ? 'id:${i.id}' : '${i.senderKey}|${i.reading!.thing.toLowerCase()}')) i,
+        ];
+      });
 
   /// Focus emails the user put off until later, soonest back first.
   Stream<List<MailItem>> watchFocusLater({int? accountId}) => _watchMail('AND m.later_until IS NOT NULL AND m.done_at IS NULL', const [], accountId: accountId, limit: 200).map((items) {

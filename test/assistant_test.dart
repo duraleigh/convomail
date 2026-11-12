@@ -130,6 +130,31 @@ void main() {
   Future<Map<String, MailItem>> other() async => {for (final i in await db.watchOtherMail().first) i.messageId!: i};
 
   group('the lists', () {
+    test('good to know: the newest word on one thing only; never Noise, never what needs you, never what is done', () async {
+      await assistantOn();
+      Future<void> says(String id, String line, {bool focus = false, String thing = ''}) =>
+          helperSays('read', id, {'line': line, 'focus': focus, 'ask': focus ? 'Answer.' : '', 'why': <String>[], 'answered': false, 'at': 1, 'know': true, 'thing': thing});
+      await helperSays('sort', '<daily-1@x>', {'cls': 'feeds', 'cat': 'Delivery', 'pile': 'feed'});
+      await helperSays('sort', '<daily-2@x>', {'cls': 'feeds', 'cat': 'Delivery', 'pile': 'feed'});
+      await says('<daily-1@x>', 'Your hard case was delivered and left at the front door.', thing: 'Amazon hard case');
+      await says('<daily-2@x>', 'Your hard case is out for delivery.', thing: 'amazon hard case');
+      await says('<flash-1@x>', 'A sale.', thing: 'Sale');
+      await says('<renee@x>', 'Renee needs a yes or no.', focus: true, thing: 'Charlotte');
+      final since = DateTime.now().subtract(const Duration(days: 3));
+      var list = await db.watchGoodToKnow(since: since).first;
+      expect([for (final i in list) i.messageId], ['<daily-1@x>'], reason: 'the delivery, once: arrived replaces out for delivery');
+      expect(list.single.reading!.thing, 'Amazon hard case');
+      expect(await db.watchGoodToKnow(since: DateTime.now().subtract(const Duration(hours: 1))).first, isEmpty, reason: 'only what came since then');
+      // Done takes it off; the older word on the same thing does not come back in its place for long: it is its own email.
+      await db.setMessagesDone([(await message('<daily-1@x>')).id, (await message('<daily-2@x>')).id], true);
+      expect(await db.watchGoodToKnow(since: since).first, isEmpty);
+      // With the assistant off there is nothing to show.
+      await db.setMessagesDone([(await message('<daily-1@x>')).id], false);
+      await db.putSetting('helper.assistantOn', '0');
+      list = await db.watchGoodToKnow(since: since).first;
+      expect(list, isEmpty);
+    });
+
     test('one sender, two emails, two places: Feed or Noise is settled for each email', () async {
       await assistantOn();
       await helperSays('sort', '<daily-1@x>', {'cls': 'feeds', 'cat': 'Newsletter', 'pile': 'noise'});
@@ -809,6 +834,37 @@ void main() {
       expect(helper.rounds, greaterThan(before), reason: 'the helper was asked right away');
       expect(find.byKey(const ValueKey('today-checking')), findsNothing, reason: 'it settles back');
       expect(find.descendant(of: pill, matching: find.textContaining('Up to date')), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('Good to know on Today: what matters though nothing is asked, named for what it is; a click opens it with a way back; Done takes it off', (tester) async {
+      await tester.runAsync(filled);
+      await tester.runAsync(() => helperSays('sort', '<daily-1@x>', {'cls': 'feeds', 'cat': 'Delivery', 'pile': 'feed'}));
+      await tester.runAsync(() => helperSays('read', '<daily-1@x>', {'line': 'Your hard case was delivered at 15:10 and left at the front door.', 'focus': false, 'ask': '', 'why': <String>[], 'answered': false, 'at': 1, 'know': true, 'thing': 'Amazon hard case'}));
+      final parcel = (await tester.runAsync(() => message('<daily-1@x>')))!;
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      final c = await pumpApp(tester, Destination.today);
+      expect(find.byKey(const ValueKey('today-good-to-know')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('today-good-to-know')), matching: find.text('Good to know')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('know-line-${parcel.id}'))).data, 'Your hard case was delivered at 3:10 PM and left at the front door.');
+      expect(tester.widget<Text>(find.byKey(ValueKey('know-from-${parcel.id}'))).data, startsWith('Pollstar Daily · Amazon hard case · '));
+      expect(find.byKey(ValueKey('know-${renee.id}')), findsNothing, reason: 'what needs you is under Needs you, not here too');
+      expect(tester.getTopLeft(find.byKey(const ValueKey('today-good-to-know'))).dy, greaterThan(tester.getTopLeft(find.byKey(const ValueKey('today-needs-you'))).dy), reason: 'right under Needs you');
+
+      // A click opens the email where it lives, and offers the way back.
+      await tester.tap(find.byKey(ValueKey('know-line-${parcel.id}')));
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.feed);
+      expect(c.read(openMailProvider('feed')), parcel.id);
+      await tester.tap(find.byKey(const ValueKey('back-to-today')));
+      await tester.pumpAndSettle();
+
+      // Done: off the card.
+      await tester.tap(find.byKey(ValueKey('know-done-${parcel.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${parcel.id}')), findsNothing);
+      expect(find.textContaining('Nothing new. Answers you were waiting for'), findsOneWidget);
+      expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNotNull);
       await teardown(tester);
     });
 
