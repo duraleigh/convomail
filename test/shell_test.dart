@@ -85,7 +85,7 @@ void main() {
     await tester.tap(find.text('Today'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('today-greeting')), findsOneWidget);
-    expect(find.textContaining('The assistant is not on'), findsOneWidget, reason: 'Needs you stays empty until the assistant is on');
+    expect(find.byKey(const ValueKey('today-needs-you')), findsNothing, reason: 'Needs you has nothing until the assistant is on, and an empty card is not drawn');
 
     await tester.tap(find.text('Focus'));
     await tester.pumpAndSettle();
@@ -148,12 +148,11 @@ void main() {
     expect(find.text('Nothing in Noise'), findsOneWidget);
     await tester.tap(find.text('Today').first);
     await tester.pumpAndSettle();
-    expect(find.text('Needs you'), findsOneWidget);
-    expect(find.text('Waiting on'), findsOneWidget);
+    // With no mail, only Schedule shows: a card with nothing in it is not drawn.
     expect(find.text('Schedule'), findsOneWidget);
-    expect(find.text('FYI'), findsOneWidget);
-    expect(find.text('Later'), findsOneWidget);
-    expect(find.text('Done'), findsOneWidget);
+    for (final empty in ['Needs you', 'Good to know', 'Waiting on', 'FYI', 'Later', 'Done']) {
+      expect(find.text(empty), findsNothing, reason: empty);
+    }
     await tester.tap(find.text('Focus').first);
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('focus-empty')), findsOneWidget);

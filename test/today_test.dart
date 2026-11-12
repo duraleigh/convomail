@@ -265,17 +265,33 @@ void main() {
 
     setUp(() => settings = InMemorySettingsStore());
 
-    testWidgets('Today greets, shows its six sections, and says plainly that Needs you waits for the assistant', (tester) async {
+    testWidgets('Today greets; a card with nothing in it is not drawn at all, except Schedule', (tester) async {
       await pumpApp(tester);
       expect(find.byKey(const ValueKey('today-date')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const ValueKey('today-greeting'))).data, startsWith('Good '));
-      for (final id in ['needs-you', 'waiting-on', 'schedule', 'fyi', 'later', 'done']) {
-        expect(find.byKey(ValueKey('today-$id')), findsOneWidget, reason: id);
+      expect(find.byKey(const ValueKey('today-schedule')), findsOneWidget);
+      for (final id in ['needs-you', 'good-to-know', 'waiting-on', 'fyi', 'later', 'done']) {
+        expect(find.byKey(ValueKey('today-$id')), findsNothing, reason: id);
       }
-      expect(find.textContaining('The assistant is not on'), findsOneWidget);
-      expect(find.textContaining('Nobody. Everyone you asked has answered'), findsOneWidget);
+      for (final title in ['Needs you', 'Good to know', 'Waiting on', 'FYI', 'Later', 'Done']) {
+        expect(find.text(title), findsNothing, reason: title);
+      }
       expect(tester.getTopLeft(find.byKey(const ValueKey('today-date'))).dy, lessThan(40), reason: 'a short page starts at the top, not in the middle');
-      expect(find.text('Nothing marked done yet today.'), findsOneWidget);
+      // With nothing on the left, Schedule does not sit alone on the right of an empty page.
+      expect(tester.getTopLeft(find.byKey(const ValueKey('today-schedule'))).dx, closeTo(tester.getTopLeft(find.byKey(const ValueKey('today-date'))).dx, 1));
+      await teardown(tester);
+    });
+
+    testWidgets('a card shows once something is in it and goes again when it empties', (tester) async {
+      got('sarah@x.com', 'Sarah Chen', 'Hello', ago(days: 2));
+      await pumpApp(tester);
+      expect(find.byKey(const ValueKey('today-later')), findsNothing);
+      await db.snoozeRow('c:sarah@x.com', DateTime.now().add(const Duration(days: 2)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-later')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('later-back-c:sarah@x.com')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-later')), findsNothing);
       await teardown(tester);
     });
 
@@ -308,12 +324,11 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('while sent emails are still being read, Waiting on says so and does not claim everyone answered', (tester) async {
+    testWidgets('while sent emails are still being read, Waiting on says so under its lines; with no lines yet there is no card', (tester) async {
       imap.folder('Sent').add(RemoteMessageHeader(uid: 0, from: me, to: const [RemoteAddress('sarah@x.com')], subject: 'The contract', date: ago(days: 5)), body: const RemoteMessageBody(text: 'Can you send the signed copy?'));
       imap.folder('Sent').add(RemoteMessageHeader(uid: 0, from: me, to: const [RemoteAddress('ann@x.com')], subject: 'Notes', date: ago(days: 4)), body: const RemoteMessageBody(text: 'Here are the notes.'));
       await pumpApp(tester);
-      expect(find.textContaining('Still reading 2 of the emails you sent'), findsOneWidget);
-      expect(find.textContaining('Nobody. Everyone you asked has answered'), findsNothing);
+      expect(find.byKey(const ValueKey('today-waiting-on')), findsNothing);
 
       // One is read: a line shows, with the note under it.
       final first = await mine('The contract');

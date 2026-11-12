@@ -101,10 +101,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final accounts = ref.watch(accountsProvider).value ?? const <Account>[];
     final name = accounts.isEmpty ? null : accounts.first.displayName;
     final openThread = ref.watch(openThreadProvider);
+    // A card with nothing in it is not drawn (only Schedule is). With nothing
+    // in the whole left column, the right column is the page.
+    final leftHasSomething =
+        (ref.watch(focusMailProvider).value ?? const <MailItem>[]).isNotEmpty || _goodToKnowItems(ref).isNotEmpty || (ref.watch(waitingOnProvider).value ?? const <WaitingItem>[]).isNotEmpty;
 
     return LayoutBuilder(
       builder: (context, box) {
-        final two = box.maxWidth >= 860;
+        final two = box.maxWidth >= 860 && leftHasSomething;
         final left = [const _NeedsYou(), const _GoodToKnow(), const _WaitingOn()];
         final right = [const _Schedule(), const _Fyi(), const _Later(), const _Done()];
         return Stack(
@@ -178,9 +182,21 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 }
 
-/// One card on Today: an icon, a title, a count, then its lines.
+/// What "Good to know" lists now: nothing while the assistant is off, and
+/// never what FYI already lists.
+List<MailItem> _goodToKnowItems(WidgetRef ref) {
+  if (!(ref.watch(readingsShownProvider).value ?? false)) return const [];
+  final inFyi = {for (final t in timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now())) t.messageId};
+  return [
+    for (final i in ref.watch(goodToKnowProvider).value ?? const <MailItem>[])
+      if (!inFyi.contains(i.id)) i,
+  ];
+}
+
+/// One card on Today: an icon, a title, a count, then its lines. A card with
+/// no lines is not drawn at all, unless it is [alwaysShown] (Schedule).
 class _Section extends StatelessWidget {
-  const _Section({required this.id, required this.icon, required this.color, required this.title, required this.children, this.count, this.empty});
+  const _Section({required this.id, required this.icon, required this.color, required this.title, required this.children, this.count, this.empty, this.alwaysShown = false});
   final String id;
   final IconData icon;
   final Color color;
@@ -188,11 +204,13 @@ class _Section extends StatelessWidget {
   final int? count;
   final List<Widget> children;
 
-  /// What to say when there are no lines.
+  /// What to say when there are no lines, on a card that is [alwaysShown].
   final String? empty;
+  final bool alwaysShown;
 
   @override
   Widget build(BuildContext context) {
+    if (children.isEmpty && !alwaysShown) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     return Padding(
@@ -429,7 +447,6 @@ class _NeedsYou extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final shown = ref.watch(readingsShownProvider).value ?? false;
     final items = ref.watch(focusMailProvider).value ?? const <MailItem>[];
     return _Section(
       id: 'needs-you',
@@ -437,7 +454,6 @@ class _NeedsYou extends ConsumerWidget {
       color: focusColor,
       title: 'Needs you',
       count: items.length,
-      empty: shown ? 'Nothing. The assistant has read your mail and found nothing that needs you.' : 'The assistant is not on. When it is, the emails that need you are listed here.',
       children: [
         for (final i in items.take(8))
           InkWell(
@@ -551,7 +567,8 @@ class _WaitingOn extends ConsumerWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final items = ref.watch(waitingOnProvider).value ?? const <WaitingItem>[];
-    // Sent emails whose words are not here yet cannot be judged.
+    // Sent emails whose words are not here yet cannot be judged. Said under
+    // the lines when there are any; an empty card is not drawn.
     final unread = ref.watch(sentNotReadYetProvider).value ?? 0;
     final reading = 'Still reading $unread of the emails you sent, to see who has not answered.';
     final now = DateTime.now();
@@ -561,7 +578,6 @@ class _WaitingOn extends ConsumerWidget {
       color: scheme.primary,
       title: 'Waiting on',
       count: items.length,
-      empty: unread > 0 ? reading : 'Nobody. Everyone you asked has answered, or it has been less than three days.',
       children: [
         for (final w in items)
           InkWell(
@@ -663,6 +679,7 @@ class _Schedule extends ConsumerWidget {
       color: const Color(0xFFFFB74D),
       title: 'Schedule',
       count: events.length,
+      alwaysShown: true,
       empty: connected ? 'Nothing on your calendar today.' : null,
       children: [
         if (!connected)
@@ -806,21 +823,13 @@ class _GoodToKnow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final shown = ref.watch(readingsShownProvider).value ?? false;
-    // What FYI already lists is not listed twice.
-    final inFyi = {for (final t in timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now())) t.messageId};
-    final items = [
-      for (final i in ref.watch(goodToKnowProvider).value ?? const <MailItem>[])
-        if (!inFyi.contains(i.id)) i,
-    ];
-    if (!shown) return const SizedBox.shrink();
+    final items = _goodToKnowItems(ref);
     return _Section(
       id: 'good-to-know',
       icon: Icons.lightbulb_outline_rounded,
       color: const Color(0xFFFFD54F),
       title: 'Good to know',
       count: items.length,
-      empty: 'Nothing new. Answers you were waiting for, and news about your own orders, accounts and bookings, show here.',
       children: [
         for (final i in items.take(10))
           InkWell(
@@ -887,7 +896,6 @@ class _Fyi extends ConsumerWidget {
       color: const Color(0xFF64B5F6),
       title: 'FYI',
       count: due.length,
-      empty: 'Nothing to note right now. Codes, deliveries, trips and bills show here when they matter.',
       children: [if (due.isNotEmpty) const TimelyStrip(embedded: true)],
     );
   }
@@ -909,7 +917,6 @@ class _Later extends ConsumerWidget {
       color: const Color(0xFFCE93D8),
       title: 'Later',
       count: rows.length + reminders.length + mail.length,
-      empty: 'Nothing put off. Use Later on a Focus email or a chat, or Remind me on a thread.',
       children: [
         for (final i in mail)
           InkWell(
@@ -1004,11 +1011,15 @@ class DoneTodayList extends StatelessWidget {
   const DoneTodayList({super.key});
 
   @override
-  Widget build(BuildContext context) => const _Done();
+  Widget build(BuildContext context) => const _Done(ownPage: true);
 }
 
 class _Done extends ConsumerWidget {
-  const _Done();
+  const _Done({this.ownPage = false});
+
+  /// On the phone's Done page the card is the whole page, so it is drawn
+  /// (and says so) with nothing in it. On Today an empty one is not drawn.
+  final bool ownPage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1021,6 +1032,7 @@ class _Done extends ConsumerWidget {
       color: const Color(0xFF81C784),
       title: 'Done',
       count: items.length,
+      alwaysShown: ownPage,
       empty: 'Nothing marked done yet today.',
       children: [
         for (final d in items)

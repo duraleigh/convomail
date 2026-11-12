@@ -865,7 +865,7 @@ void main() {
       await tester.tap(find.byKey(ValueKey('know-done-${parcel.id}')));
       await tester.pumpAndSettle();
       expect(find.byKey(ValueKey('know-${parcel.id}')), findsNothing);
-      expect(find.textContaining('Nothing new. Answers you were waiting for'), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-good-to-know')), findsNothing, reason: 'with nothing left in it the card goes');
       expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNotNull);
       await teardown(tester);
     });
@@ -939,7 +939,7 @@ void main() {
       expect(find.byKey(ValueKey('know-${older.id}')), findsNothing, reason: 'the older word on the same thing does not come back in its place');
       expect(find.textContaining('It is not marked done'), findsOneWidget);
       expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNull);
-      expect(find.byKey(const ValueKey('today-done')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-done')), findsNothing, reason: 'nothing was marked done, so there is no Done card');
       noted = await tester.runAsync(() => db.customSelect("SELECT k, data FROM helper_outbox WHERE kind = 'msgfix'").get());
       expect([for (final n in noted!) '${n.read<String>('k')} ${n.read<String>('data')}'], ['<daily-1@x> {"off":true}']);
       // Undo puts it back; dismissed again for the rest of this check.
