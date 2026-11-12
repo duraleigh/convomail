@@ -36,4 +36,4 @@ if (is_file(dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARA
 
 mb_internal_encoding('UTF-8');
 
-const VERSION = '0.6.1';
+const VERSION = '0.6.2';

@@ -415,7 +415,7 @@ class _QuickActionsState extends State<QuickActions> {
 /// "Later" on a Focus email: asks until when (the same choices Chats
 /// offers), takes it out of Focus until then, and offers Undo. Picking
 /// "Bring it back now" on one already put off returns it at once.
-Future<void> putOffFocusMail(BuildContext context, WidgetRef ref, MailItem item) async {
+Future<void> putOffFocusMail(BuildContext context, WidgetRef ref, MailItem item, {String place = 'Focus'}) async {
   final messenger = ScaffoldMessenger.of(context);
   final db = ref.read(databaseProvider);
   final was = item.laterUntil;
@@ -428,7 +428,7 @@ Future<void> putOffFocusMail(BuildContext context, WidgetRef ref, MailItem item)
   messenger.showSnackBar(SnackBar(
     persist: false,
     duration: const Duration(seconds: 8),
-    content: Text(back ? 'Back in Focus.' : 'Put off until ${describeSnooze(until)}. It comes back to Focus then.', maxLines: 1, overflow: TextOverflow.ellipsis),
+    content: Text(back ? 'Back in $place.' : 'Put off until ${describeSnooze(until)}. It comes back to $place then.', maxLines: 1, overflow: TextOverflow.ellipsis),
     behavior: SnackBarBehavior.floating,
     width: 460,
     action: SnackBarAction(label: 'Undo', onPressed: () => db.setLaterUntil(item.id, already ? was : null)),

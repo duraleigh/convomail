@@ -23,6 +23,7 @@ import '../../sync/calendar_sync.dart';
 import '../../sync/sync_controller.dart';
 import '../../sync/waiting_sends.dart';
 import '../theme/tokens.dart';
+import '../widgets/item_menu.dart';
 import '../widgets/reading_line.dart';
 import '../widgets/tonal_avatar.dart';
 import 'chats/later_dialogs.dart';
@@ -441,6 +442,9 @@ class _NeedsYou extends ConsumerWidget {
         for (final i in items.take(8))
           InkWell(
             key: ValueKey('needs-${i.id}'),
+            onTapDown: (d) => lastPressAt = d.globalPosition,
+            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _needsMenu(context, ref, i)),
+            onLongPress: () => showItemMenu(context, lastPressAt, _needsMenu(context, ref, i)),
             onTap: () {
               ref.read(openMailProvider('focus').notifier).open(i.id);
               openMail(ref, i);
@@ -562,6 +566,9 @@ class _WaitingOn extends ConsumerWidget {
         for (final w in items)
           InkWell(
             key: ValueKey('waiting-${w.message.id}'),
+            onTapDown: (d) => lastPressAt = d.globalPosition,
+            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _waitingMenu(context, ref, w)),
+            onLongPress: () => showItemMenu(context, lastPressAt, _waitingMenu(context, ref, w)),
             onTap: () {
               ref.read(expandedMessagesProvider.notifier).expand(w.message.id);
               final thread = w.message.threadKey;
@@ -678,8 +685,16 @@ class _Schedule extends ConsumerWidget {
             ),
           ),
         for (final e in events)
-          Padding(
+          ItemMenu(
             key: ValueKey('today-event-${e.id}'),
+            choices: () => [
+              MenuChoice('dismiss', kDismiss, Icons.check_rounded, () {
+                final db = ref.read(databaseProvider);
+                db.setEventDismissed(e.id, true);
+                sayDone(context, 'Taken off Schedule. Your calendar is not changed.', undo: () => db.setEventDismissed(e.id, false));
+              }),
+            ],
+            child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 7),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -718,9 +733,59 @@ class _Schedule extends ConsumerWidget {
               ],
             ),
           ),
+          ),
       ],
     );
   }
+}
+
+/// The menu of a line under Needs you.
+List<MenuChoice> _needsMenu(BuildContext context, WidgetRef ref, MailItem i) {
+  final db = ref.read(databaseProvider);
+  return [
+    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([i.id], true)),
+    MenuChoice('later', kLater, Icons.snooze_rounded, () => putOffFocusMail(context, ref, i)),
+    MenuChoice('reject', kReject, Icons.block_rounded, () {
+      db.setFocusFix(i.id, false);
+      sayDone(context, 'Taken off Needs you. The assistant is told that mail like this does not need you.', undo: () => db.setFocusFix(i.id, null));
+    }),
+  ];
+}
+
+/// The menu of a line under Good to know.
+List<MenuChoice> _knowMenu(BuildContext context, WidgetRef ref, MailItem i) {
+  final db = ref.read(databaseProvider);
+  return [
+    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([i.id], true)),
+    MenuChoice('later', kLater, Icons.snooze_rounded, () => putOffFocusMail(context, ref, i, place: 'Good to know')),
+    MenuChoice('reject', kReject, Icons.block_rounded, () {
+      db.setWorthKnowing(i.id, false);
+      sayDone(context, 'Taken off Good to know. The assistant is told to leave things like this off.', undo: () => db.setWorthKnowing(i.id, true));
+    }),
+  ];
+}
+
+/// The menu of a line under Waiting on.
+List<MenuChoice> _waitingMenu(BuildContext context, WidgetRef ref, WaitingItem w) {
+  final db = ref.read(databaseProvider);
+  return [
+    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([w.message.id], true)),
+    MenuChoice('reject', kReject, Icons.block_rounded, () {
+      db.setWaitingOn(w.message.id, false);
+      sayDone(context, 'Taken off Waiting on. The assistant is told you are not waiting on mail like this.', undo: () => db.setWaitingOn(w.message.id, true));
+    }),
+  ];
+}
+
+/// The menu of an email under Later.
+List<MenuChoice> _laterMailMenu(BuildContext context, WidgetRef ref, MailItem i) {
+  final db = ref.read(databaseProvider);
+  final know = !i.needsYou && (i.reading?.know ?? false);
+  return [
+    MenuChoice('back', 'Bring back now', Icons.undo_rounded, () => db.setLaterUntil(i.id, null)),
+    MenuChoice('later', kLater, Icons.snooze_rounded, () => putOffFocusMail(context, ref, i, place: know ? 'Good to know' : 'Focus')),
+    MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.setMessagesDone([i.id], true)),
+  ];
 }
 
 /// "Good to know": what came that matters though nothing is asked. An
@@ -753,6 +818,9 @@ class _GoodToKnow extends ConsumerWidget {
         for (final i in items.take(10))
           InkWell(
             key: ValueKey('know-${i.id}'),
+            onTapDown: (d) => lastPressAt = d.globalPosition,
+            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _knowMenu(context, ref, i)),
+            onLongPress: () => showItemMenu(context, lastPressAt, _knowMenu(context, ref, i)),
             onTap: () {
               openMail(ref, i);
               if (i.person) {
@@ -839,6 +907,9 @@ class _Later extends ConsumerWidget {
         for (final i in mail)
           InkWell(
             key: ValueKey('later-mail-${i.id}'),
+            onTapDown: (d) => lastPressAt = d.globalPosition,
+            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _laterMailMenu(context, ref, i)),
+            onLongPress: () => showItemMenu(context, lastPressAt, _laterMailMenu(context, ref, i)),
             onTap: () {
               ref.read(openMailProvider('focus').notifier).open(i.id);
               openMail(ref, i);
@@ -865,6 +936,9 @@ class _Later extends ConsumerWidget {
         for (final r in rows)
           InkWell(
             key: ValueKey('later-row-${r.rowKey}'),
+            onTapDown: (d) => lastPressAt = d.globalPosition,
+            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, [MenuChoice('back', 'Bring back now', Icons.undo_rounded, () => ref.read(databaseProvider).snoozeRow(r.rowKey, null))]),
+            onLongPress: () => showItemMenu(context, lastPressAt, [MenuChoice('back', 'Bring back now', Icons.undo_rounded, () => ref.read(databaseProvider).snoozeRow(r.rowKey, null))]),
             onTap: () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),
@@ -887,6 +961,9 @@ class _Later extends ConsumerWidget {
         for (final r in reminders)
           InkWell(
             key: ValueKey('later-reminder-${r.id}'),
+            onTapDown: (d) => lastPressAt = d.globalPosition,
+            onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, [MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => ref.read(databaseProvider).setReminderDone(r.id, true))]),
+            onLongPress: () => showItemMenu(context, lastPressAt, [MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => ref.read(databaseProvider).setReminderDone(r.id, true))]),
             onTap: r.rowKey == null ? null : () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 6),

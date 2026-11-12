@@ -16,6 +16,10 @@ extension PlannerQueries on AppDatabase {
 
   Future<PlannerEvent?> eventById(int id) => (select(plannerEvents)..where((e) => e.id.equals(id))).getSingleOrNull();
 
+  /// Takes a calendar event off Today's Schedule (or puts it back). Only
+  /// here: the calendar itself is never changed.
+  Future<void> setEventDismissed(int id, bool dismissed) => (update(plannerEvents)..where((e) => e.id.equals(id))).write(PlannerEventsCompanion(dismissed: Value(dismissed)));
+
   // ---- reminders -------------------------------------------------------------
 
   Stream<List<Reminder>> watchReminders({bool includeDone = false}) => (select(reminders)

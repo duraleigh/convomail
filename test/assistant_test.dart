@@ -26,7 +26,7 @@ import 'package:convomail/ui/screens/noise_screen.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:convomail/ui/widgets/reading_line.dart';
 import 'package:drift/drift.dart' show Value;
-import 'package:flutter/gestures.dart' show PointerDeviceKind;
+import 'package:flutter/gestures.dart' show PointerDeviceKind, kSecondaryButton;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -867,6 +867,92 @@ void main() {
       expect(find.byKey(ValueKey('know-${parcel.id}')), findsNothing);
       expect(find.textContaining('Nothing new. Answers you were waiting for'), findsOneWidget);
       expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNotNull);
+      await teardown(tester);
+    });
+
+    testWidgets('a right-click on any Today item (a press and hold on a phone) opens its menu: Dismiss, Later, Does not belong here; a plain click still opens it', (tester) async {
+      await tester.runAsync(filled);
+      Future<void> says(String id, String line, String thing) =>
+          helperSays('read', id, {'line': line, 'focus': false, 'ask': '', 'why': <String>[], 'answered': false, 'at': 1, 'know': true, 'thing': thing});
+      await tester.runAsync(() async {
+        await helperSays('sort', '<daily-1@x>', {'cls': 'feeds', 'cat': 'Notification', 'pile': 'feed'});
+        await helperSays('sort', '<daily-2@x>', {'cls': 'feeds', 'cat': 'Notification', 'pile': 'feed'});
+        await says('<daily-1@x>', 'Your statement is ready.', 'Statement');
+        await says('<daily-2@x>', 'Last month\'s statement is ready.', 'statement');
+        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        await db.customStatement('UPDATE messages SET date = ? WHERE message_id = ?', [now - 60, '<daily-1@x>']);
+        await db.customStatement('UPDATE messages SET date = ? WHERE message_id = ?', [now - 120, '<daily-2@x>']);
+        await db.delete(db.helperOutbox).go();
+      });
+      final statement = (await tester.runAsync(() => message('<daily-1@x>')))!;
+      final older = (await tester.runAsync(() => message('<daily-2@x>')))!;
+      final renee = (await tester.runAsync(() => message('<renee@x>')))!;
+      final bank = (await tester.runAsync(() => message('<bank@x>')))!;
+      final c = await pumpApp(tester, Destination.today);
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsOneWidget);
+      expect(find.byKey(ValueKey('know-${older.id}')), findsNothing, reason: 'the newest word on one thing only');
+
+      // Good to know: the three choices.
+      await tester.tap(find.byKey(ValueKey('know-line-${statement.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.today, reason: 'a right-click does not open the email');
+      expect(find.text('Dismiss'), findsOneWidget);
+      expect(find.text('Later…'), findsOneWidget);
+      expect(find.text('Does not belong here'), findsOneWidget);
+      // "Does not belong here": it goes, the older one about the same thing does not take its place, and the helper is told.
+      await tester.tap(find.byKey(const ValueKey('menu-reject')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsNothing);
+      expect(find.byKey(ValueKey('know-${older.id}')), findsNothing);
+      expect(find.textContaining('The assistant is told to leave things like this off'), findsOneWidget);
+      var noted = await tester.runAsync(() => db.customSelect("SELECT k, data FROM helper_outbox WHERE kind = 'msgfix'").get());
+      expect([for (final n in noted!) '${n.read<String>('k')} ${n.read<String>('data')}'], ['<daily-1@x> {"know":false}']);
+      expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNull, reason: 'turned down is not the same as done');
+      // Undo brings that one back.
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsOneWidget);
+
+      // Later: it leaves the card, waits under Later, and can be brought back from there.
+      await tester.tap(find.byKey(ValueKey('know-line-${statement.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu-later')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('snooze-Tomorrow morning')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsNothing);
+      expect(find.textContaining('It comes back to Good to know then'), findsOneWidget);
+      expect(find.byKey(ValueKey('later-mail-${statement.id}')), findsOneWidget);
+      await tester.tap(find.byKey(ValueKey('later-mail-${statement.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu-back')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsOneWidget);
+
+      // Dismiss: done.
+      await tester.tap(find.byKey(ValueKey('know-line-${statement.id}')), buttons: kSecondaryButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('menu-dismiss')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('know-${statement.id}')), findsNothing);
+      expect((await tester.runAsync(() => message('<daily-1@x>')))!.doneAt, isNotNull);
+
+      // Needs you has the same menu; a press and hold opens it too. "Does not belong here" is "this does not need me".
+      await tester.longPress(find.byKey(ValueKey('needs-${renee.id}')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('menu-dismiss')), findsOneWidget);
+      expect(find.byKey(const ValueKey('menu-later')), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('menu-reject')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(ValueKey('needs-${renee.id}')), findsNothing);
+      expect((await tester.runAsync(() => message('<renee@x>')))!.focusFix, 'no');
+      noted = await tester.runAsync(() => db.customSelect("SELECT data FROM helper_outbox WHERE kind = 'msgfix' AND k = '<renee@x>'").get());
+      expect(noted!.single.read<String>('data'), '{"focus":false}');
+
+      // And a plain click still opens the email, as before.
+      await tester.tap(find.byKey(ValueKey('needs-${bank.id}')));
+      await tester.pumpAndSettle();
+      expect(c.read(destinationProvider), Destination.focus);
       await teardown(tester);
     });
 

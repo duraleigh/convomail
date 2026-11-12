@@ -49,6 +49,8 @@ final focusLaterProvider = StreamProvider<List<MailItem>>((ref) {
 /// "Good to know" on Today: what came today, the same day The Lede speaks
 /// of, so whatever The Lede mentions is a line on the page.
 final goodToKnowProvider = StreamProvider<List<MailItem>>((ref) {
+  // One put off until later comes back by the clock.
+  ref.watch(focusClockProvider);
   return ref.watch(databaseProvider).watchGoodToKnow(accountId: ref.watch(accountScopeProvider), since: ref.watch(todayDateProvider));
 });
 

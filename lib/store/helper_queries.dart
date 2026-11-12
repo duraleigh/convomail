@@ -18,6 +18,10 @@ const kQuietHours = 'alerts.quiet';
 /// device: '24' for 15:00, anything else for 3:00 PM.
 const kClockFormat = 'time.format';
 
+/// The setting that lists what the user said does not belong under FYI,
+/// the same on every device: a JSON list of "kind|sender".
+const kFyiOff = 'fyi.off';
+
 /// One change as it goes up to the helper: set ([data]) or gone ([deleted]),
 /// or an action ([op]).
 class HelperEntry {
@@ -294,6 +298,27 @@ extension HelperQueries on AppDatabase {
     );
   }
 
+  /// What the user said does not belong under FYI: "kind|sender" pairs.
+  static Set<String> decodeFyiOff(String? json) {
+    if (json == null || json.isEmpty) return const {};
+    try {
+      return {for (final x in jsonDecode(json) as List) if (x is String) x};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  /// "Does not belong here" on an FYI item ([off] true), or that taken
+  /// back: notices of that kind from that sender stay off FYI, on every device.
+  Future<void> setFyiOff(String kind, String contactKey, bool off) async {
+    final set = {...decodeFyiOff(await getSetting(kFyiOff))};
+    final pair = '$kind|$contactKey';
+    if (off ? !set.add(pair) : !set.remove(pair)) return;
+    final list = set.toList()..sort();
+    await putSetting(kFyiOff, jsonEncode(list));
+    await noteForHelper('pref', 'fyioff', {'list': list});
+  }
+
   /// The helper's decision for one email, by its Message-ID.
   Future<({Bucket bucket, String? category})?> helperVerdict(String? messageId) async {
     if (messageId == null || messageId.isEmpty) return null;
@@ -465,6 +490,8 @@ extension HelperQueries on AppDatabase {
         if (k == 'day') await putSetting(kDayDismissed, deleted ? '' : '${(data['dismissed'] as num?)?.toInt() ?? ''}');
         // 12-hour or 24-hour clock, chosen on another device.
         if (k == 'clock') await putSetting(kClockFormat, deleted ? '' : (data['h24'] == true ? '24' : '12'));
+        // What was said not to belong under FYI, on another device.
+        if (k == 'fyioff') await putSetting(kFyiOff, deleted ? '' : jsonEncode([for (final x in (data['list'] is List ? data['list'] as List : const [])) if (x is String) x]));
         return const {};
       case 'msgfix':
         // What the user set on one email on another device: Focus or not,
@@ -477,6 +504,9 @@ extension HelperQueries on AppDatabase {
           await _keepMark(k, HelperMarksCompanion(laterUntil: later, focusFix: focus, pileFix: pile));
           await (update(messages)..where((m) => m.messageId.equals(k))).write(MessagesCompanion(laterUntil: later, focusFix: focus, pileFix: pile));
         }
+        // "Does not belong here" said on another device (or taken back).
+        if (data['know'] is bool) await (update(helperReadings)..where((r) => r.messageId.equals(k))).write(HelperReadingsCompanion(know: Value(data['know'] == true)));
+        if (data['asks'] is bool) await (update(helperReadings)..where((r) => r.messageId.equals(k) & r.sent.equals(true))).write(HelperReadingsCompanion(asks: Value(data['asks'] == true)));
         return const {};
       case 'read':
         // The assistant's reading of one email.

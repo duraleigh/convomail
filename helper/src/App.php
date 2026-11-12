@@ -535,7 +535,7 @@ final class App
                 // "Not Focus" on one email changes its reading for every device.
                 foreach ($items as $item) {
                     if (is_array($item) && ($item['kind'] ?? '') === 'msgfix' && is_string($item['k'] ?? null)) {
-                        $this->readings()->publishFor($item['k']);
+                        $this->readings()->fixed($item['k']);
                     }
                 }
                 return Response::json(['seq' => $store->seq()] + $out);

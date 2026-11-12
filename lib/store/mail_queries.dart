@@ -253,15 +253,17 @@ extension MailQueries on AppDatabase {
   /// several from one sender about the same thing, only the newest (a
   /// delivery that has arrived replaces "out for delivery").
   Stream<List<MailItem>> watchGoodToKnow({int? accountId, required DateTime since}) => _watchMail(
-        'AND m.done_at IS NULL AND r.know = 1 AND COALESCE(m.date, m.internal_date) >= ?',
+        // One put off until later comes back when its time is up, whatever day it came.
+        'AND m.done_at IS NULL AND r.know = 1 AND (COALESCE(m.date, m.internal_date) >= ? OR m.later_until IS NOT NULL)',
         [Variable.withInt(since.millisecondsSinceEpoch ~/ 1000)],
         accountId: accountId,
         limit: 80,
       ).map((items) {
         final seen = <String>{};
+        final now = DateTime.now();
         return [
           for (final i in items)
-            if (i.reading != null && i.reading!.know && !i.needsYou && (i.person || i.pile != FeedsPile.noise))
+            if (i.reading != null && i.reading!.know && !i.needsYou && !i.putOffAt(now) && (i.person || i.pile != FeedsPile.noise))
               if (seen.add(i.reading!.thing.isEmpty ? 'id:${i.id}' : '${i.senderKey}|${i.reading!.thing.toLowerCase()}')) i,
         ];
       });
@@ -271,7 +273,7 @@ extension MailQueries on AppDatabase {
         final now = DateTime.now();
         return [
           for (final i in items)
-            if (i.needsYou && i.putOffAt(now)) i,
+            if ((i.needsYou || (i.reading?.know ?? false)) && i.putOffAt(now)) i,
         ]..sort((a, b) => a.laterUntil!.compareTo(b.laterUntil!));
       });
 
@@ -309,6 +311,36 @@ extension MailQueries on AppDatabase {
     await (update(messages)..where((t) => t.id.equals(id))).write(MessagesCompanion(focusFix: Value(needsMe == null ? null : (needsMe ? 'yes' : 'no'))));
     final mid = m.messageId;
     if (mid != null && mid.isNotEmpty) await noteForHelper('msgfix', mid, {'focus': needsMe});
+  }
+
+  /// "Does not belong here" on Good to know ([worth] false), or that taken
+  /// back (true). This email, and what the same sender sent under the same
+  /// name, leave the card at once. The helper is told, and the assistant is
+  /// shown it from then on, so the like is not put there again.
+  Future<void> setWorthKnowing(int id, bool worth) async {
+    final m = await (select(messages)..where((t) => t.id.equals(id))).getSingleOrNull();
+    final mid = m?.messageId;
+    if (m == null || mid == null || mid.isEmpty) return;
+    final r = await (select(helperReadings)..where((r) => r.messageId.equals(mid))).getSingleOrNull();
+    await (update(helperReadings)..where((r) => r.messageId.equals(mid))).write(HelperReadingsCompanion(know: Value(worth)));
+    if (!worth && r != null && r.thing.isNotEmpty) {
+      await customUpdate(
+        'UPDATE helper_readings SET know = 0 WHERE know = 1 AND lower(thing) = lower(?) AND message_id IN (SELECT message_id FROM messages WHERE from_contact_key = ? AND is_from_me = 0)',
+        variables: [Variable.withString(r.thing), Variable.withString(m.fromContactKey)],
+        updates: {helperReadings},
+      );
+    }
+    await noteForHelper('msgfix', mid, {'know': worth});
+  }
+
+  /// "Does not belong here" on Waiting on ([waiting] false), or that taken
+  /// back (true), for an email the user sent.
+  Future<void> setWaitingOn(int id, bool waiting) async {
+    final m = await (select(messages)..where((t) => t.id.equals(id))).getSingleOrNull();
+    final mid = m?.messageId;
+    if (m == null || mid == null || mid.isEmpty) return;
+    await (update(helperReadings)..where((r) => r.messageId.equals(mid) & r.sent.equals(true))).write(HelperReadingsCompanion(asks: Value(waiting)));
+    await noteForHelper('msgfix', mid, {'asks': waiting});
   }
 
   /// Moves one email between Feed and Noise by hand ([pile] null takes the

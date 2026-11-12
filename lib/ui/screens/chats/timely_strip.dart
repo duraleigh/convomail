@@ -12,8 +12,10 @@ import '../../../app/search_state.dart';
 import '../../../app/time_format.dart';
 import '../../../app/timely_state.dart';
 import '../../../store/database.dart';
+import '../../../store/helper_queries.dart';
 import '../../../store/timely_queries.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/item_menu.dart';
 
 /// Copies a one-time code. The snackbar never repeats the code.
 Future<void> copyTimelyCode(BuildContext context, String code) async {
@@ -144,6 +146,20 @@ class _TimelyLine extends ConsumerWidget {
     return parts.join(' · ');
   }
 
+  /// Dismiss this one, or say notices of this kind from this sender do not
+  /// belong under FYI.
+  List<MenuChoice> _menu(BuildContext context, WidgetRef ref) {
+    final db = ref.read(databaseProvider);
+    return [
+      MenuChoice('dismiss', kDismiss, Icons.check_rounded, () => db.dismissTimely(item.id)),
+      if (item.contactKey.isNotEmpty)
+        MenuChoice('reject', kReject, Icons.block_rounded, () {
+          db.setFyiOff(item.type, item.contactKey, true);
+          sayDone(context, 'Taken off FYI. Notices of this kind from ${item.title.isEmpty ? 'this sender' : item.title} stay off it.', undo: () => db.setFyiOff(item.type, item.contactKey, false));
+        }),
+    ];
+  }
+
   Future<void> _open(WidgetRef ref) async {
     final id = item.messageId;
     if (id != null) {
@@ -167,6 +183,9 @@ class _TimelyLine extends ConsumerWidget {
     return InkWell(
       key: ValueKey('timely-${item.id}'),
       onTap: () => _open(ref),
+      onTapDown: (d) => lastPressAt = d.globalPosition,
+      onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _menu(context, ref)),
+      onLongPress: () => showItemMenu(context, lastPressAt, _menu(context, ref)),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(12, 6, 2, 6),
         child: Row(

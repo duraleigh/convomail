@@ -367,6 +367,87 @@ return [
         same(2, count($day->lines()['feed']));
     },
 
+    '"does not belong here": the item leaves every device, the assistant is shown what you turned down, and the same thing from the same sender stays off' => function () use ($person, $renee): void {
+        $w = new World();
+        $person($w);
+        $w->assistantOn();
+        $w->claude->answer = static function (string $shown): array {
+            if (str_contains($shown, 'Kind: sent by the owner')) {
+                return ['line' => 'You asked Renee about the room.', 'asks' => true, 'ask' => 'Which room.', 'settles' => false, 'reasons' => ['You asked a question.']];
+            }
+            return str_contains($shown, 'From: First Bank')
+                ? ['line' => 'Your statement is ready.', 'thing' => 'Bank statement', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'feed', 'know' => true, 'reasons' => ['About your account.']]
+                : ['line' => 'Renee asks for a yes or no.', 'thing' => 'Spring dates', 'needs_owner' => true, 'ask' => 'Say yes or no.', 'due' => '', 'place' => 'none', 'know' => false, 'reasons' => ['It asks you a question.']];
+        };
+        $bank = ['From' => 'First Bank <notice@bank.example>', 'To' => 'me@example.com', 'List-Unsubscribe' => '<mailto:u@bank.example>'];
+        $a = $w->arriveWith($bank + ['Subject' => 'Statement', 'Message-ID' => '<s1@bank>'], 'Your statement is ready. WORDS-OF-THE-EMAIL');
+        $b = $w->arriveWith($bank + ['Subject' => 'Statement again', 'Message-ID' => '<s0@bank>'], 'Your statement is ready.');
+        $w->readings->plan();
+        $w->readings->work();
+        same([true, true], [$w->reading($a)['know'], $w->reading($b)['know']]);
+        $day = new \Precis\Day($w->store, $w->readings);
+        same(2, count($day->lines()['feed']));
+
+        // Turned down on a device: gone for every device, and so is the same thing from the same sender.
+        $w->sync->push(1, [['kind' => 'msgfix', 'k' => $a, 'data' => ['know' => false]]]);
+        $w->readings->fixed($a);
+        same([false, false], [$w->reading($a)['know'], $w->reading($b)['know']]);
+        same(0, count($day->lines()['feed']), 'and The Lede no longer has it to speak of');
+
+        // The next one from that sender: the assistant is shown what was turned down, in its own earlier words.
+        $w->later(60);
+        $c = $w->arriveWith($bank + ['Subject' => 'Statement 3', 'Message-ID' => '<s3@bank>'], 'Your statement is ready.');
+        $w->readings->plan();
+        $w->readings->work();
+        $all = $w->claude->readings();
+        $shown = (string) $all[count($all) - 1]['body']['messages'][0]['content'];
+        check(str_contains($shown, 'What the owner has said about earlier reports (go by it):'));
+        check(str_contains($shown, '- NOT worth knowing: from First Bank (Bank statement): Your statement is ready.'));
+        check(strpos($shown, 'NOT worth knowing') < strpos($shown, 'Text (the first part only):'), 'before the email, which stays the last thing read');
+        check(!str_contains($shown, 'WORDS-OF-THE-EMAIL'), 'never the turned-down email\'s own words');
+        check(str_contains((string) json_encode($all[count($all) - 1]['body']['system']), 'They outrank your own view'));
+        // The stand-in assistant still says "good to know": the owner's word holds all the same.
+        same(false, $w->reading($c)['know']);
+
+        // "This does not need me" is a lesson too, and mail from anyone is shown it.
+        $mid = $w->arriveWith($renee + ['Message-ID' => '<yn@x>'], 'Yes or no?');
+        $w->readings->plan();
+        $w->readings->work();
+        same(true, $w->reading($mid)['focus']);
+        $w->sync->push(1, [['kind' => 'msgfix', 'k' => $mid, 'data' => ['focus' => false]]]);
+        $w->readings->fixed($mid);
+        same(false, $w->reading($mid)['focus']);
+        $w->later(60);
+        $w->arriveWith($bank + ['Subject' => 'Statement 4', 'Message-ID' => '<s4@bank>'], 'Your statement is ready.');
+        $w->readings->plan();
+        $w->readings->work();
+        $all = $w->claude->readings();
+        $shown = (string) $all[count($all) - 1]['body']['messages'][0]['content'];
+        check(str_contains($shown, '- did NOT need them: from Renee Calloway (Spring dates): Renee asks for a yes or no.'));
+        check(strpos($shown, 'First Bank (Bank statement)') < strpos($shown, 'Renee Calloway (Spring dates)'), 'what this same sender sent comes first');
+
+        // "I am not waiting on this", said of an email the owner sent.
+        $id = $w->fake->add(['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'Room', 'Message-ID' => '<room@me>'], ['SENT']);
+        $w->fake->setBody($id, 'Which room is it?');
+        $w->reader->poll($w->account);
+        $w->readings->plan();
+        $w->readings->work();
+        same(true, $w->reading('<room@me>')['asks']);
+        $w->sync->push(1, [['kind' => 'msgfix', 'k' => '<room@me>', 'data' => ['asks' => false]]]);
+        $w->readings->fixed('<room@me>');
+        same(false, $w->reading('<room@me>')['asks']);
+        $w->later(60);
+        $id = $w->fake->add(['From' => 'me@example.com', 'To' => 'renee@booking.example', 'Subject' => 'Room 2', 'Message-ID' => '<room2@me>'], ['SENT']);
+        $w->fake->setBody($id, 'Which room is it this time?');
+        $w->reader->poll($w->account);
+        $w->readings->plan();
+        $w->readings->work();
+        $all = $w->claude->readings();
+        $shown = (string) $all[count($all) - 1]['body']['messages'][0]['content'];
+        check(str_contains($shown, '- NOT something they wait on: You asked Renee about the room.'));
+        check(!str_contains($shown, 'NOT worth knowing'), 'an email the owner sent is shown only what was said of sent mail');
+    },
+
     'a deadline set earlier in a thread is found: the earlier emails are shown as background, new words only' => function () use ($person, $renee): void {
         $w = new World();
         $person($w);
