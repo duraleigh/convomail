@@ -34,6 +34,8 @@ class NotificationsDetail extends ConsumerWidget {
     return ListView(
       children: [
         const AlertsSettings(),
+        const SentSoundSetting(),
+        const SizedBox(height: AppSpace.xl),
         if (pc)
         GroupedList(
           children: [

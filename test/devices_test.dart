@@ -22,6 +22,7 @@ import 'package:convomail/store/sync_queries.dart';
 import 'package:convomail/sync/contacts_sync.dart';
 import 'package:convomail/sync/schedule_service.dart';
 import 'package:convomail/sync/send_service.dart';
+import 'package:convomail/sync/sent_sound.dart';
 import 'package:convomail/sync/signature_service.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/sync/waiting_sends.dart';
@@ -74,6 +75,9 @@ class _Device {
       helperHttpProvider.overrideWith((ref) => helper.call),
       transportFactoryProvider.overrideWith((ref) => () => imap),
       mailSenderProvider.overrideWith((ref) => sender),
+      sentSoundProvider.overrideWith((ref) => () async {
+            sounds++;
+          }),
       appFilesDirProvider.overrideWith((ref) => () async => files),
       signatureImagesDirProvider.overrideWith((ref) async => Directory(p.join(files.path, 'signature-images'))..createSync(recursive: true)),
       // As the real app is wired: a joined device wipes when signed out.
@@ -88,6 +92,9 @@ class _Device {
   late final FakeMailTransport imap;
   late final ProviderContainer container;
   final sender = _CatchingSender();
+
+  /// How many times the "sent" sound would have played.
+  int sounds = 0;
 
   HelperSync get link => container.read(helperProvider.notifier);
   HelperLink get state => container.read(helperProvider);
@@ -584,12 +591,15 @@ void main() {
       await waiting.sendNow();
       expect(WaitingSends.decode(await pc.db.getSetting(WaitingSends.key)), hasLength(1));
       expect(pc.sender.sentSubjects, isEmpty);
+      expect(pc.sounds, 0);
       // The signal is back.
       pc.sender.mode = 'ok';
       await waiting.sendNow();
       expect(pc.sender.sentSubjects, ['Lunch Friday?']);
       expect(WaitingSends.decode(await pc.db.getSetting(WaitingSends.key)), isEmpty);
-      expect(pc.container.read(appNoticesProvider).map((n) => n.title), ['Sent']);
+      expect(pc.container.read(lastSentProvider)?.to, 'Sarah Chen', reason: 'the app says "Sent to Sarah Chen"');
+      expect(pc.container.read(appNoticesProvider), isEmpty, reason: 'a message that went is not a Windows alert');
+      expect(pc.sounds, 1, reason: 'the sent sound plays once it has gone, not before');
       // And it is never sent a second time.
       await waiting.sendNow();
       expect(pc.sender.sentSubjects, ['Lunch Friday?']);
@@ -612,6 +622,41 @@ void main() {
       final drafts = await pc.db.select(pc.db.drafts).get();
       expect(drafts.map((d) => d.subject), unorderedEquals(['The contract', 'Second one']));
       expect(AddressJson.decode(drafts.first.recipientsTo).single.address, 'sarah@x.com');
+    });
+
+    test('a message that was being sent when the app was closed is never sent twice: it goes back to drafts and you are told to look in Sent', () async {
+      final pc = await firstPc();
+      final account = (await pc.account())!;
+      final waiting = pc.container.read(waitingSendsProvider);
+      await waiting.keep(mail(account.id, 'The contract'), to: 'Sarah Chen');
+      // As it stood when the app was closed mid-send.
+      final list = WaitingSends.decode(await pc.db.getSetting(WaitingSends.key));
+      await pc.db.putSetting(WaitingSends.key, jsonEncode([{...list.single, 'trying': 1}]));
+      pc.sender.mode = 'ok';
+      waiting.start(every: const Duration(hours: 1));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await waiting.sendNow();
+      waiting.stop();
+      expect(pc.sender.sentSubjects, isEmpty, reason: 'it may already have gone: it is not sent again');
+      expect((await pc.db.select(pc.db.drafts).get()).map((d) => d.subject), ['The contract']);
+      final notice = pc.container.read(appNoticesProvider).single;
+      expect(notice.title, 'Check your Sent mail');
+      expect(notice.body, contains('Sarah Chen'));
+    });
+
+    test('pressing Send hands the message over and sending carries on behind: the copy in Sent is filed afterwards', () async {
+      final pc = await firstPc();
+      final account = (await pc.account())!;
+      pc.sender.mode = 'ok';
+      final waiting = pc.container.read(waitingSendsProvider);
+      await waiting.submit(mail(account.id, 'Quick one'), to: 'Sarah Chen');
+      // Handed over: it is written down before anything is sent.
+      await waiting.sendNow();
+      await pc.container.read(sendServiceProvider).settled();
+      expect(pc.sender.sentSubjects, ['Quick one']);
+      expect(WaitingSends.decode(await pc.db.getSetting(WaitingSends.key)), isEmpty);
+      expect(pc.container.read(lastSentProvider)?.to, 'Sarah Chen');
+      expect(pc.sounds, 1);
     });
 
     test('on a joined device, a helper out of reach counts as no signal too', () async {

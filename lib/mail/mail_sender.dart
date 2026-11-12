@@ -50,21 +50,23 @@ class SmtpSender implements MailSender {
     var reached = false;
     try {
       await client.connectToServer(server.host, server.port, isSecure: server.security == ConnectionSecurity.ssl, timeout: const Duration(seconds: 20));
+      // No step waits forever: a server that goes quiet is given up on.
+      const step = Duration(seconds: 20);
+      await client.ehlo().timeout(step);
       reached = true;
-      await client.ehlo();
       if (server.security == ConnectionSecurity.starttls) {
         if (!client.serverInfo.supportsStartTls) throw MailTransportException('${server.host} does not offer STARTTLS.');
-        await client.startTls();
+        await client.startTls().timeout(step);
       }
       if (credentials.pass) {
-        await client.authenticate(credentials.username, credentials.password, AuthMechanism.xoauth2);
+        await client.authenticate(credentials.username, credentials.password, AuthMechanism.xoauth2).timeout(step);
       } else if (credentials.password.isNotEmpty) {
         final mech = client.serverInfo.supportsAuth(AuthMechanism.plain)
             ? AuthMechanism.plain
             : client.serverInfo.supportsAuth(AuthMechanism.login)
             ? AuthMechanism.login
             : AuthMechanism.plain;
-        await client.authenticate(credentials.username, credentials.password, mech);
+        await client.authenticate(credentials.username, credentials.password, mech).timeout(step);
       }
       await body(client);
     } on SmtpException catch (e) {

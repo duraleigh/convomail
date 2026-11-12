@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../app/app_log.dart';
 import '../domain/html_sanitizer.dart';
 import '../helper/helper_pass.dart';
 import '../mail/mail_sender.dart';
@@ -95,9 +96,20 @@ class SendService {
 
   AppDatabase get _db => _ref.read(databaseProvider);
 
+  Future<void> _after = Future.value();
+
+  /// Completes when everything left over from earlier sends (the copy in
+  /// Sent, the "answered" mark on the server) has been done.
+  Future<void> settled() => _after;
+
   /// Sends [s]. Progress is published under [token]. Throws
   /// [MailTransportException] on failure after recording it.
-  Future<String> send(ComposeSubmission s, {required String token}) async {
+  ///
+  /// With [finishLater] it returns as soon as the mail server has taken the
+  /// message. Filing the copy in Sent and marking the original as answered
+  /// on the server carry on behind it: they are what used to make sending
+  /// feel slow, and the message has already gone by then.
+  Future<String> send(ComposeSubmission s, {required String token, bool finishLater = false}) async {
     final progress = _ref.read(sendProgressProvider.notifier);
     progress.put(token, const SendProgress(SendPhase.building));
     try {
@@ -144,21 +156,33 @@ class SendService {
       }
       await _ref.read(mailSenderProvider).send(server, credentials, built.message, from: from, recipients: [...s.to, ...s.cc, ...s.bcc]);
 
-      // Sent copy: servers that do not keep one get an APPEND; then the Sent
-      // folder is re-synced so the message shows in the recipient's row.
-      progress.put(token, SendProgress(SendPhase.storingCopy, messageId: built.messageId));
-      final profile = ProviderProfiles.byId(account.providerId);
-      final syncer = _ref.read(syncControllerProvider).syncerFor(account.id);
-      if (syncer != null) {
-        // The account's server files its own copy; another server does not.
-        await syncer.storeSentCopy(built.raw, appendCopy: ownServer != null || !(profile?.smtpSavesSentCopy ?? false));
-      }
-
+      // It has gone. What this device shows is settled at once: the original
+      // counts as answered and the draft is gone.
       if (original != null && s.isReply) {
         await (_db.update(_db.messages)..where((m) => m.id.equals(original.id))).write(const MessagesCompanion(isAnswered: Value(true)));
-        if (syncer != null) await syncer.setFlags(original.folderId, [original.uid], answered: true);
       }
       if (s.draftId != null) await _db.deleteDraft(s.draftId!);
+
+      // Sent copy: servers that do not keep one get an APPEND; then the Sent
+      // folder is re-synced so the message shows in the recipient's row.
+      // And the original is marked answered on the server.
+      final profile = ProviderProfiles.byId(account.providerId);
+      final syncer = _ref.read(syncControllerProvider).syncerFor(account.id);
+      Future<void> after() async {
+        if (syncer == null) return;
+        // The account's server files its own copy; another server does not.
+        await syncer.storeSentCopy(built.raw, appendCopy: ownServer != null || !(profile?.smtpSavesSentCopy ?? false));
+        if (original != null && s.isReply) await syncer.setFlags(original.folderId, [original.uid], answered: true);
+      }
+
+      if (finishLater) {
+        _after = _after.then((_) => after()).catchError((Object e, StackTrace st) {
+          AppLog.current?.warn('filing a sent message afterwards failed', AppLog.scrub(e));
+        });
+      } else {
+        progress.put(token, SendProgress(SendPhase.storingCopy, messageId: built.messageId));
+        await after();
+      }
       progress.put(token, SendProgress(SendPhase.done, messageId: built.messageId));
       return built.messageId;
     } on MailTransportException catch (e) {
@@ -197,7 +221,8 @@ class SendService {
       final syncer = _ref.read(syncControllerProvider).syncerFor(m.accountId);
       if (syncer != null) {
         try {
-          await syncer.fetchBody(m.id);
+          // A few seconds at most: a slow fetch must not hold the send up.
+          await syncer.fetchBody(m.id).timeout(const Duration(seconds: 6));
           m = (await _db.messageById(m.id)) ?? m;
         } catch (_) {
           // Quote whatever we have (the snippet at worst).

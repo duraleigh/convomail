@@ -308,11 +308,18 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     );
     final recipientsLabel = _to.isNotEmpty ? (_to.first.name.isEmpty ? _to.first.address : _to.first.name) + (_to.length > 1 ? ' +${_to.length - 1}' : '') : '${_cc.length + _bcc.length} recipients';
     try {
-      await ref.read(sendServiceProvider).send(submission, token: _token);
+      // An address that cannot send yet says so here, before anything is handed over.
+      final identity = _identityId == null ? null : await _db.identityById(_identityId!);
+      final account = await _db.accountById(_accountId!);
+      if (identity != null && account != null && needsSendingSetup(identity, account)) {
+        throw MailTransportException("Mail from ${identity.email} can't be sent until its password is added. Settings → Accounts → ${identity.email} → Set up sending.", isAuthFailure: true);
+      }
+      // The message is handed over and this box closes at once: sending
+      // carries on behind it, and says "Sent" (with its sound) when it has gone.
+      await ref.read(waitingSendsProvider).submit(submission, to: recipientsLabel);
       if (!mounted) return;
       _draftId = null;
       _progress.clear(_token);
-      messenger?.showSnackBar(SnackBar(persist: false, content: Text('Sent to $recipientsLabel'), behavior: SnackBarBehavior.floating, width: 360));
       widget.onClose();
     } on MailTransportException catch (e) {
       if (e.offline) {

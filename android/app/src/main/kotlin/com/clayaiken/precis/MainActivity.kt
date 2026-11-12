@@ -81,6 +81,21 @@ class MainActivity : FlutterActivity() {
                     NotificationManagerCompat.from(app).cancelAll()
                     result.success(null)
                 }
+                "playSent" -> {
+                    // Précis's own short sound for "your message has gone".
+                    val player = android.media.MediaPlayer.create(
+                        app,
+                        R.raw.sent,
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                            .build(),
+                        (app.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager).generateAudioSessionId()
+                    )
+                    player?.setOnCompletionListener { it.release() }
+                    player?.start()
+                    result.success(null)
+                }
                 "takeOpened" -> {
                     result.success(opened)
                     opened = null

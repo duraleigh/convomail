@@ -138,8 +138,8 @@ Future<void> main(List<String> args) async {
   // Local-only diagnostics (plan M12): framework and uncaught errors go to
   // <support>/logs, pruned to a week. Nothing leaves the machine.
   AppLog? log;
-  if (Platform.isWindows) {
-    log = AppLog(Directory(p.join((await getApplicationSupportDirectory()).path, 'logs')));
+  if (Platform.isWindows || Platform.isAndroid) {
+    log = AppLog(Directory(p.join((await getApplicationSupportDirectory()).path, 'logs')), echo: Platform.isAndroid);
     await log.init();
     AppLog.install(log);
     log.info('start v$appVersion+$appBuild args=${args.length}');

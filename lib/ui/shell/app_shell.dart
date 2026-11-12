@@ -18,6 +18,7 @@ import '../../store/database.dart';
 import '../../store/mail_queries.dart';
 import '../../sync/notification_center.dart';
 import '../../sync/schedule_service.dart';
+import '../../sync/waiting_sends.dart';
 import '../screens/chats_screen.dart';
 import '../screens/feed_screen.dart';
 import '../screens/focus_screen.dart';
@@ -90,6 +91,18 @@ class _AppShellState extends ConsumerState<AppShell> {
       integration.closeToTray = next.closeToTray;
       if (prev?.showBadge != next.showBadge) unawaited(_updateBadge());
       if (prev != null && prev.launchAtLogin != next.launchAtLogin) unawaited(integration.setLaunchAtLogin(next.launchAtLogin));
+    });
+    // A message has gone out: say so, briefly.
+    ref.listen(lastSentProvider, (prev, next) {
+      if (next == null || next.n == prev?.n) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(SnackBar(
+        key: const ValueKey('sent-notice'),
+        persist: false,
+        duration: const Duration(seconds: 3),
+        content: Text('Sent to ${next.to}', maxLines: 1, overflow: TextOverflow.ellipsis),
+        behavior: SnackBarBehavior.floating,
+      ));
     });
     // The icon's number follows Focus.
     ref.listen(focusMailProvider, (_, _) => unawaited(_updateBadge()));

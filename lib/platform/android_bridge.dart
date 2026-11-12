@@ -55,6 +55,9 @@ class AndroidBridge {
 
   Future<void> clearWaiting() => _channel.invokeMethod<void>('alertsClearWaiting');
 
+  /// Plays the short "sent" sound.
+  Future<void> playSent() => _channel.invokeMethod<void>('playSent');
+
   /// Takes every alert off the screen (the user is looking at Focus itself).
   Future<void> clearShown() => _channel.invokeMethod<void>('alertsClearShown');
 }

@@ -10,10 +10,15 @@ import 'package:path/path.dart' as p;
 /// text and stack traces, never message bodies, addresses, or credentials;
 /// callers must keep it that way.
 class AppLog {
-  AppLog(this.dir, {this.keepDays = 7, DateTime Function()? clock}) : _clock = clock ?? DateTime.now;
+  AppLog(this.dir, {this.keepDays = 7, DateTime Function()? clock, this.echo = false}) : _clock = clock ?? DateTime.now;
 
   final Directory dir;
   final int keepDays;
+
+  /// Also writes each line to the device's own log (Android), where it can
+  /// be read over a debugging cable. Same lines, same rule: never mail,
+  /// addresses or passwords.
+  final bool echo;
   final DateTime Function() _clock;
 
   static const _prefix = 'convomail-';
@@ -38,6 +43,10 @@ class AppLog {
     if (error != null) buf.write(' | $error');
     buf.writeln();
     if (stack != null) buf.writeln(stack.toString().trimRight());
+    if (echo) {
+      // ignore: avoid_print
+      print('precis $level $message${error == null ? '' : ' | $error'}');
+    }
     try {
       dir.createSync(recursive: true);
       todayFile.writeAsStringSync(buf.toString(), mode: FileMode.append, flush: true);

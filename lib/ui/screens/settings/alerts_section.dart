@@ -7,6 +7,7 @@ import '../../../helper/helper_sync.dart';
 import '../../../platform/phone_alerts.dart';
 import '../../../store/database.dart';
 import '../../../store/helper_queries.dart';
+import '../../../sync/sent_sound.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/grouped_list.dart';
 
@@ -22,6 +23,37 @@ final quietHoursProvider = StreamProvider<({bool on, String from, String to})>((
     }
   });
 });
+
+/// Whether a sound plays when mail has gone out.
+final sentSoundOnProvider = StreamProvider<bool>((ref) {
+  final db = ref.watch(databaseProvider);
+  return (db.select(db.settings)..where((s) => s.key.equals(kSentSound))).watchSingleOrNull().map((row) => row?.value != '0');
+});
+
+/// The switch for the "sent" sound. Shown on every device, with or without a helper.
+class SentSoundSetting extends ConsumerWidget {
+  const SentSoundSetting({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final scheme = Theme.of(context).colorScheme;
+    return GroupedList(
+      children: [
+        SwitchListTile(
+          key: const ValueKey('sound-sent'),
+          secondary: Icon(Icons.volume_up_outlined, color: scheme.primary),
+          title: const Text('Play a sound when mail has gone out'),
+          subtitle: const Text('Two soft notes, once the mail server has taken your message.'),
+          value: ref.watch(sentSoundOnProvider).value ?? true,
+          onChanged: (on) async {
+            await ref.read(databaseProvider).putSetting(kSentSound, on ? '1' : '0');
+            if (on) await ref.read(sentSoundProvider)();
+          },
+        ),
+      ],
+    );
+  }
+}
 
 /// Whether this phone may ring, as kept in its notes.
 final phoneRingProvider = StreamProvider<bool>((ref) {

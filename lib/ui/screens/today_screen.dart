@@ -252,7 +252,7 @@ class _WaitingToSend extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(right: 8),
       child: Tooltip(
-        message: 'Written with no signal. Précis sends ${n == 1 ? 'it' : 'them'} by itself when the signal returns.',
+        message: 'On ${n == 1 ? 'its' : 'their'} way out. With no signal, Précis sends ${n == 1 ? 'it' : 'them'} by itself when the signal returns.',
         child: Container(
           key: const ValueKey('today-waiting-to-send'),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -262,7 +262,7 @@ class _WaitingToSend extends ConsumerWidget {
             children: [
               Icon(Icons.schedule_send_outlined, size: 14, color: scheme.onTertiaryContainer),
               const SizedBox(width: 6),
-              Text('$n waiting to send', style: text.labelMedium!.copyWith(color: scheme.onTertiaryContainer)),
+              Text('Sending $n', style: text.labelMedium!.copyWith(color: scheme.onTertiaryContainer)),
             ],
           ),
         ),

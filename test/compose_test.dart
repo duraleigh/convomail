@@ -246,7 +246,7 @@ void main() {
     await teardown(tester);
   });
 
-  testWidgets('a failed send shows the server error inline and keeps the composer open', (tester) async {
+  testWidgets('pressing Send lets go at once; a message the server refuses is told to you and is back among your drafts', (tester) async {
     await pumpApp(tester);
     smtp.failWith = const MailTransportException('The mail server rejected the username or password.', isAuthFailure: true);
     await tester.tap(find.text('Sarah Chen'));
@@ -255,9 +255,13 @@ void main() {
     await settle(tester);
     await tester.tap(find.byKey(const ValueKey('compose-send')));
     await settle(tester);
+    // The box does not wait on the mail server.
+    expect(find.byType(ComposeForm), findsNothing, reason: 'the writing box closes the moment Send is pressed');
+    // The refusal is said plainly, and nothing typed is lost.
+    expect(find.textContaining('could not be sent'), findsOneWidget);
     expect(find.textContaining('rejected the username or password'), findsOneWidget);
-    expect(find.byType(ComposeForm), findsOneWidget);
-    expect(find.byKey(const ValueKey('compose-send')), findsOneWidget, reason: 'progress bar replaced by the Send button again');
+    expect(find.textContaining('tap to resume'), findsOneWidget, reason: 'it is back as a draft on this chat');
+    expect(smtp.sent, isEmpty);
     await teardown(tester);
   });
 

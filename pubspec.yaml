@@ -101,6 +101,7 @@ flutter:
     - assets/tray.ico
     - assets/badges/
     - assets/logo.png
+    - assets/sounds/
 
   # To add assets to your application, add an assets section, like this:
   # assets:
