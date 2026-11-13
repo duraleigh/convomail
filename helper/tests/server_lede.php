@@ -31,6 +31,10 @@ $midnight = intdiv($now + $zone * 60, 86400) * 86400 - $zone * 60;
 
 echo 'program ' . \Precis\VERSION . ' | now ' . $local($now) . ' | the assistant is ready to read: ' . ($readings->ready() ? 'yes' : 'no') . "\n";
 $item = $store->item('day', 'today');
+// Only whether two phrases are in it; none of its words are printed.
+$said = (string) ($item['text'] ?? '');
+echo 'the sentence says "right now": ' . (stripos($said, 'right now') !== false ? 'yes' : 'no') . ' | says nothing needs you "today": ' . (preg_match('~nothing needs you(r attention)? (today|this (morning|afternoon|evening))~i', $said) === 1 ? 'yes' : 'no') . "
+";
 echo 'the sentence kept now: ' . ($item === null ? 'none' : (mb_strlen((string) ($item['text'] ?? '')) . ' characters, written ' . $local((int) ($item['at'] ?? 0)))) . "\n";
 echo 'last time the helper settled the sentence: ' . $local((int) $store->get('day.at', '0')) . ' | written by the assistant today: ' . $readings->writtenToday('day') . " times\n";
 

@@ -44,7 +44,7 @@ final class Day
     public const INSTRUCTIONS = <<<'TXT'
         You write the one sentence at the top of a person's page in their email app. Below it the page lists the emails that need them; under "Good to know" what came today that matters to them though nothing is asked; and their travel, bookings and deliveries. You are given those lines.
 
-        Write ONE sentence of at most 220 characters that tells them what their day looks like. Lead with what is most pressing: a flight or train that is cancelled or delayed, something overdue, or something needed by a time today. Then what else stands out: a trip that leaves within two days, a booking that starts within a day, something that needs them, a delivery. Mention at most three things; if more need them, say how many more. Name people by first name, and companies by name. Write to them as "you". Plain words, no greeting, no advice, no exclamation mark. When something has waited more than a week you may say so. When nothing needs them, say that plainly and mention what else is worth knowing if there is anything.
+        Write ONE sentence of at most 220 characters that tells them what their day looks like. Lead with what is most pressing: a flight or train that is cancelled or delayed, something overdue, or something needed by a time today. Then what else stands out: a trip that leaves within two days, a booking that starts within a day, something that needs them, a delivery. Mention at most three things; if more need them, say how many more. Name people by first name, and companies by name. Write to them as "you". Plain words, no greeting, no advice, no exclamation mark. When something has waited more than a week you may say so. When nothing needs them, say that nothing needs their attention right now, in those or similar words. Never say that nothing needs them "today", "this morning" or "this afternoon": that can change at any moment, and the sentence must not promise the rest of the day. Then mention what else is worth knowing if there is anything.
 
         Travel, bookings and deliveries. Each line says why it is listed (just booked, changed, delayed, cancelled, leaves within 48 hours, starts within 24 hours, expected, delivered today). Say that, not more. The times on a travel or booking line are the local time at that place: give them as written. A delivery may also appear under "Good to know": it is one delivery, say it once.
 
@@ -263,7 +263,9 @@ final class Day
         }
         $now = $this->store->now();
         $lines = $this->lines();
-        if ($lines['key'] === $this->store->get('day.key')) {
+        // Written again when the page under it has changed, and once after
+        // the assistant is given new instructions for the sentence.
+        if ($lines['key'] === $this->store->get('day.key') && self::rules() === $this->store->get('day.rules')) {
             return false;
         }
         $last = (int) $this->store->get('day.at', '0');
@@ -292,6 +294,12 @@ final class Day
         }
         $this->publish(mb_strlen($text) > 300 ? rtrim(mb_substr($text, 0, 299)) . '…' : $text, $lines['key'], $last);
         return true;
+    }
+
+    /** A short mark of the instructions the sentence is written under. */
+    private static function rules(): string
+    {
+        return substr(sha1(self::INSTRUCTIONS), 0, 12);
     }
 
     /** @param array{needs: list<array<string, mixed>>, feed: list<array{name: string, line: string, thing: string, at: int}>, key: string} $lines */
@@ -346,6 +354,7 @@ final class Day
         $after = $last <= 0 ? 0 : (int) $this->store->db->val('SELECT COUNT(*) FROM {emails} WHERE inbox = 1 AND is_from_me = 0 AND at > ?', [$last]);
         $this->store->put('day', 'today', ['text' => $text, 'at' => $now, 'after' => $after]);
         $this->store->set('day.key', $key);
+        $this->store->set('day.rules', self::rules());
         $this->store->set('day.at', (string) $now);
     }
 }

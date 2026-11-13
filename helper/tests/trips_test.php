@@ -363,6 +363,15 @@ return [
         // Nothing changed: not written again.
         $w->later(1300);
         same(false, $day->refresh());
+        // The assistant is told never to say nothing needs the owner "today": that can change at any moment.
+        $rules = (string) json_encode($w->claude->readings()[0]['body']['system']);
+        check(str_contains($rules, 'nothing needs their attention right now') && str_contains($rules, 'Never say that nothing needs them'), 'right now, never today');
+        // New instructions for the sentence: it is written once more, though the page has not changed.
+        $w->store->set('day.rules', 'older-rules');
+        check($day->refresh());
+        same(2, count($w->claude->readings()));
+        $w->later(1300);
+        same(false, $day->refresh());
     },
 
     'the files attached to an email, and its links, are found; times are worked out in the place\'s own clock' => function (): void {
