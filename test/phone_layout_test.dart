@@ -133,6 +133,14 @@ void main() {
     expect(tester.widget<Badge>(find.byKey(const ValueKey('chats-badge')).first).isLabelVisible, isTrue);
     expect(tester.widget<Badge>(find.byKey(const ValueKey('chats-badge')).first).label, isNull, reason: 'a dot, not a number');
     expect(tester.takeException(), isNull, reason: 'Today fits a phone without running off the edge');
+    // The top of the page: the date, then the greeting on one line of its own, never wrapped.
+    expect(find.byKey(const ValueKey('today-title')), findsNothing, reason: 'the page is named on the bar only');
+    final greeting = find.byKey(const ValueKey('today-greeting'));
+    final style = tester.widget<Text>(greeting).style!;
+    expect(tester.widget<Text>(greeting).maxLines, 1);
+    expect(tester.getSize(greeting).height, lessThan(style.fontSize! * 1.6), reason: 'one line');
+    expect(style.fontSize, greaterThan(Theme.of(tester.element(greeting)).textTheme.headlineMedium!.fontSize!), reason: 'a little larger than before');
+    expect(tester.getTopLeft(greeting).dy, greaterThan(tester.getBottomLeft(find.byKey(const ValueKey('today-date'))).dy - 1), reason: 'under the date');
     await teardown(tester);
   });
 

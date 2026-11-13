@@ -1,5 +1,6 @@
 import 'package:convomail/app/compose_state.dart';
 import 'package:convomail/app/destinations.dart';
+import 'package:convomail/app/layout.dart';
 import 'package:convomail/app/mail_state.dart';
 import 'package:convomail/app/settings_navigation.dart';
 import 'package:convomail/app/time_format.dart';
@@ -679,7 +680,8 @@ void main() {
       await pumpApp(tester, Destination.today);
       expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'Renee needs your yes or no on Charlotte by tomorrow, and the bank payment failed.');
       expect(find.descendant(of: find.byKey(const ValueKey('today-sentence')), matching: find.text('The Lede')), findsOneWidget, reason: 'the sentence is labeled');
-      expect(tester.widget<Text>(find.byKey(const ValueKey('today-title'))).data, 'Précis', reason: 'the page is labeled');
+      expect(find.byKey(const ValueKey('today-title')), findsNothing, reason: 'the page is named on the rail only');
+      expect(find.text('Précis'), findsOneWidget);
       final when = tester.widget<Text>(find.byKey(const ValueKey('today-sentence-when'))).data!;
       expect(when, startsWith('Written '));
       expect(when, endsWith(', after 14 new emails'));
@@ -838,6 +840,33 @@ void main() {
       expect(helper.rounds, greaterThan(before), reason: 'the helper was asked right away');
       expect(find.byKey(const ValueKey('today-checking')), findsNothing, reason: 'it settles back');
       expect(find.descendant(of: pill, matching: find.textContaining('Up to date')), findsOneWidget);
+      await teardown(tester);
+    });
+
+    testWidgets('on a phone the top of the page is the date with a small "Up to date" beside it, then the greeting on one line', (tester) async {
+      await tester.runAsync(filled);
+      final helper = _InStepHelper();
+      tester.view.physicalSize = const Size(412, 900);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(app(Destination.today, more: [helperProvider.overrideWith(() => helper), forceCompactProvider.overrideWith((ref) => true)]));
+      await tester.pumpAndSettle();
+      final pill = find.byKey(const ValueKey('today-up-to-date'));
+      final date = find.byKey(const ValueKey('today-date'));
+      final greeting = find.byKey(const ValueKey('today-greeting'));
+      expect(find.descendant(of: pill, matching: find.textContaining('Up to date · 3:05 PM')), findsOneWidget);
+      // The pill sits on the date's row, to its right, and is small.
+      expect((tester.getCenter(pill).dy - tester.getCenter(date).dy).abs(), lessThan(6));
+      expect(tester.getTopLeft(pill).dx, greaterThan(tester.getTopLeft(date).dx));
+      expect(tester.getSize(pill).height, lessThan(24));
+      // The greeting has the full width under them: one line, a little larger.
+      expect(tester.widget<Text>(greeting).data, startsWith('Good '));
+      expect(tester.widget<Text>(greeting).softWrap, isFalse, reason: 'never wrapped, whatever the name');
+      expect(tester.getTopLeft(greeting).dy, greaterThan(tester.getBottomLeft(pill).dy - 1));
+      expect(tester.getSize(greeting).height, lessThan(tester.widget<Text>(greeting).style!.fontSize! * 1.6), reason: 'one line');
+      expect(tester.getSize(greeting).width, lessThan(372), reason: 'it fits the width of the page');
+      expect(find.byKey(const ValueKey('today-title')), findsNothing);
+      expect(tester.takeException(), isNull);
       await teardown(tester);
     });
 

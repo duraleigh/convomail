@@ -8,6 +8,7 @@ import '../../app/calendar_state.dart';
 import '../../app/compose_state.dart';
 import '../../app/conversation_state.dart';
 import '../../app/destinations.dart';
+import '../../app/layout.dart';
 import '../../app/mail_state.dart';
 import '../../app/people_state.dart';
 import '../../app/settings_navigation.dart';
@@ -102,6 +103,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final accounts = ref.watch(accountsProvider).value ?? const <Account>[];
     final name = accounts.isEmpty ? null : accounts.first.displayName;
     final openThread = ref.watch(openThreadProvider);
+    final phone = isCompactLayout(context, ref);
     // A card with nothing in it is not drawn (only Schedule is). With nothing
     // in the whole left column, the right column is the page.
     final leftHasSomething =
@@ -130,29 +132,46 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Précis', key: const ValueKey('today-title'), style: text.labelLarge!.copyWith(color: scheme.primary, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
-                              const SizedBox(height: 2),
-                              Text(
-                                _date(now),
-                                key: const ValueKey('today-date'),
-                                style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(_greeting(now, name), key: const ValueKey('today-greeting'), style: text.headlineMedium),
-                            ],
+                    if (phone) ...[
+                      // On a phone: the date with the small pills beside it,
+                      // then the greeting on one line of its own, never wrapped.
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(_date(now), key: const ValueKey('today-date'), maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
                           ),
-                        ),
-                        const _WaitingToSend(),
-                        const _UpToDate(),
-                      ],
-                    ),
+                          const _WaitingToSend(small: true),
+                          const _UpToDate(small: true),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(_greeting(now, name), key: const ValueKey('today-greeting'), maxLines: 1, softWrap: false, style: text.headlineMedium!.copyWith(fontSize: (text.headlineMedium!.fontSize ?? 28) + 2)),
+                      ),
+                    ] else
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _date(now),
+                                  key: const ValueKey('today-date'),
+                                  style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(_greeting(now, name), key: const ValueKey('today-greeting'), style: text.headlineMedium),
+                              ],
+                            ),
+                          ),
+                          const _WaitingToSend(),
+                          const _UpToDate(),
+                        ],
+                      ),
                     const _Sentence(),
                     const SizedBox(height: AppSpace.lg),
                     if (two)
@@ -282,7 +301,10 @@ class _Section extends StatelessWidget {
 /// "1 message waiting to send": written with no signal, sent by itself when
 /// the signal returns. Shown only while something is waiting.
 class _WaitingToSend extends ConsumerWidget {
-  const _WaitingToSend();
+  const _WaitingToSend({this.small = false});
+
+  /// On a phone: small enough to sit beside the date.
+  final bool small;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -296,14 +318,14 @@ class _WaitingToSend extends ConsumerWidget {
         message: 'On ${n == 1 ? 'its' : 'their'} way out. With no signal, Précis sends ${n == 1 ? 'it' : 'them'} by itself when the signal returns.',
         child: Container(
           key: const ValueKey('today-waiting-to-send'),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          padding: small ? const EdgeInsets.symmetric(horizontal: 7, vertical: 1) : const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(color: scheme.tertiaryContainer, borderRadius: BorderRadius.circular(AppShapes.full)),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.schedule_send_outlined, size: 14, color: scheme.onTertiaryContainer),
-              const SizedBox(width: 6),
-              Text('Sending $n', style: text.labelMedium!.copyWith(color: scheme.onTertiaryContainer)),
+              Icon(Icons.schedule_send_outlined, size: small ? 11 : 14, color: scheme.onTertiaryContainer),
+              SizedBox(width: small ? 4 : 6),
+              Text('Sending $n', style: (small ? text.labelSmall! : text.labelMedium!).copyWith(color: scheme.onTertiaryContainer)),
             ],
           ),
         ),
@@ -316,7 +338,10 @@ class _WaitingToSend extends ConsumerWidget {
 /// it last checked. Shown only while the device follows a helper. Clicking
 /// it checks everything right now: new mail, the helper, the calendar.
 class _UpToDate extends ConsumerStatefulWidget {
-  const _UpToDate();
+  const _UpToDate({this.small = false});
+
+  /// On a phone: small enough to sit beside the date.
+  final bool small;
 
   @override
   ConsumerState<_UpToDate> createState() => _UpToDateState();
@@ -355,6 +380,7 @@ class _UpToDateState extends ConsumerState<_UpToDate> {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final behind = link.error != null;
+    final small = widget.small;
     return Tooltip(
       message: 'Check for new mail now',
       child: Material(
@@ -365,19 +391,19 @@ class _UpToDateState extends ConsumerState<_UpToDate> {
         child: InkWell(
           onTap: _busy ? null : _check,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: small ? const EdgeInsets.symmetric(horizontal: 7, vertical: 2) : const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_busy)
-                  const SizedBox(key: ValueKey('today-checking'), width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2))
+                  SizedBox(key: const ValueKey('today-checking'), width: small ? 8 : 10, height: small ? 8 : 10, child: const CircularProgressIndicator(strokeWidth: 2))
                 else
-                  Container(width: 8, height: 8, decoration: BoxDecoration(color: behind ? scheme.error : const Color(0xFF81C784), shape: BoxShape.circle)),
-                const SizedBox(width: 8),
-                Text(_busy ? 'Checking…' : '${behind ? 'Last in step' : 'Up to date'} · ${_clock(at)}', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
+                  Container(width: small ? 6 : 8, height: small ? 6 : 8, decoration: BoxDecoration(color: behind ? scheme.error : const Color(0xFF81C784), shape: BoxShape.circle)),
+                SizedBox(width: small ? 5 : 8),
+                Text(_busy ? 'Checking…' : '${behind ? 'Last in step' : 'Up to date'} · ${_clock(at)}', style: (small ? text.labelSmall! : text.labelMedium!).copyWith(color: scheme.onSurfaceVariant)),
                 if (!_busy) ...[
-                  const SizedBox(width: 6),
-                  Icon(Icons.refresh_rounded, size: 14, color: scheme.onSurfaceVariant),
+                  SizedBox(width: small ? 4 : 6),
+                  Icon(Icons.refresh_rounded, size: small ? 11 : 14, color: scheme.onSurfaceVariant),
                 ],
               ],
             ),

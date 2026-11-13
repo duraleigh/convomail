@@ -48,7 +48,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Chats'), findsWidgets);
-    expect(find.text('Précis'), findsWidgets);
+    expect(find.text('Précis'), findsOneWidget, reason: 'named on the rail only, not again on the page');
     expect(find.text('Focus'), findsOneWidget);
     expect(find.text('Feed'), findsOneWidget);
     expect(find.text('Noise'), findsOneWidget);
