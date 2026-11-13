@@ -401,9 +401,11 @@ class HelperSync extends Notifier<HelperLink> {
     while (!_stopped) {
       final page = await client.changes(cursor);
       final refile = <String>{};
-      if (page.items.isNotEmpty) {
+      // A hundred at a time, so the lists on screen are never kept waiting
+      // behind a whole page of five hundred.
+      for (var at = 0; at < page.items.length; at += 100) {
         await _db.applyingFromHelper(() async {
-          for (final i in page.items) {
+          for (final i in page.items.skip(at).take(100)) {
             final data = i['data'];
             refile.addAll(await _db.applyHelperItem('${i['kind']}', '${i['k']}', data is Map ? data.cast<String, Object?>() : const {}, deleted: i['deleted'] == true));
           }

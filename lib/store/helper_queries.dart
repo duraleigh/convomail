@@ -430,6 +430,33 @@ extension HelperQueries on AppDatabase {
         }
         final cls = data['cls'] == 'feeds' ? 'feeds' : 'people';
         final src = (data['src'] as String?) ?? 'auto';
+        // Told again what is already known (the helper's whole list is taken
+        // in again after some upgrades): nothing is written and nothing is
+        // filed again. Filing every sender again took minutes on a phone and
+        // held the lists back while it ran.
+        final known = await (select(helperSenders)..where((s) => s.key.equals(k))).getSingleOrNull();
+        if (known != null &&
+            known.cls == cls &&
+            known.src == src &&
+            known.cat == data['cat'] as String? &&
+            known.reasons == ((data['reasons'] as String?) ?? '') &&
+            (!data.containsKey('pile') || known.pile == data['pile'] as String?) &&
+            (!data.containsKey('counts') || known.counts == (data['counts'] == true)) &&
+            (!data.containsKey('label') || known.label == data['label'] as String?) &&
+            (!data.containsKey('subtitle') || known.subtitle == data['subtitle'] as String?)) {
+          final c = await (select(contacts)..where((c) => c.key.equals(k) & c.isMe.equals(false))).getSingleOrNull();
+          if (c == null ||
+              (c.classification == cls &&
+                  c.classificationSource == src &&
+                  c.feedsCategory == data['cat'] as String? &&
+                  c.classReasons == ((data['reasons'] as String?) ?? '') &&
+                  (!data.containsKey('pile') || c.feedsPile == data['pile'] as String?) &&
+                  (!data.containsKey('counts') || c.countsTowardUnread == (data['counts'] == true)) &&
+                  (!data.containsKey('label') || c.userLabel == data['label'] as String?) &&
+                  (!data.containsKey('subtitle') || c.userSubtitle == data['subtitle'] as String?))) {
+            return const {};
+          }
+        }
         await into(helperSenders).insertOnConflictUpdate(HelperSendersCompanion.insert(
           key: k,
           cls: cls,
@@ -460,6 +487,15 @@ extension HelperQueries on AppDatabase {
         final cls = data['cls'] == 'feeds' ? 'feeds' : 'people';
         final cat = cls == 'feeds' ? data['cat'] as String? : null;
         final pile = cls == 'feeds' && (data['pile'] == 'feed' || data['pile'] == 'noise') ? data['pile'] as String : null;
+        // Already known, and the email here already sits where it says: nothing to write.
+        final placed = await (select(helperVerdicts)..where((v) => v.messageId.equals(k))).getSingleOrNull();
+        if (placed != null && placed.cls == cls && placed.cat == cat && placed.pile == pile) {
+          final differs = await customSelect(
+            'SELECT 1 FROM messages WHERE message_id = ? AND is_from_me = 0 AND (classification <> ? OR feeds_category IS NOT ?) LIMIT 1',
+            variables: [Variable.withString(k), Variable.withString(cls), Variable<String>(cat)],
+          ).getSingleOrNull();
+          if (differs == null) return const {};
+        }
         await into(helperVerdicts).insertOnConflictUpdate(HelperVerdictsCompanion.insert(messageId: k, cls: cls, cat: Value(cat), pile: Value(pile)));
         await (update(messages)..where((m) => m.messageId.equals(k) & m.isFromMe.equals(false))).write(MessagesCompanion(classification: Value(cls), feedsCategory: Value(cat)));
         return const {};
@@ -568,13 +604,31 @@ extension HelperQueries on AppDatabase {
           return const {};
         }
         final why = data['why'];
+        final whyJson = jsonEncode(why is List ? [for (final w in why) if (w is String) w] : const <String>[]);
+        // The same reading as is already kept: nothing to write, so no list is drawn again for it.
+        final read = await (select(helperReadings)..where((r) => r.messageId.equals(k))).getSingleOrNull();
+        if (read != null &&
+            read.line == ((data['line'] as String?) ?? '') &&
+            read.focus == (data['focus'] == true) &&
+            read.ask == ((data['ask'] as String?) ?? '') &&
+            read.due == _time(data['due']) &&
+            read.why == whyJson &&
+            read.answered == (data['answered'] == true) &&
+            read.readAt == _time(data['at']) &&
+            read.sent == (data['sent'] == true) &&
+            read.asks == (data['asks'] == true) &&
+            read.know == (data['know'] == true) &&
+            read.thing == ((data['thing'] as String?) ?? '') &&
+            read.draft == ((data['draft'] as String?) ?? '')) {
+          return const {};
+        }
         await into(helperReadings).insertOnConflictUpdate(HelperReadingsCompanion.insert(
           messageId: k,
           line: Value((data['line'] as String?) ?? ''),
           focus: Value(data['focus'] == true),
           ask: Value((data['ask'] as String?) ?? ''),
           due: Value(_time(data['due'])),
-          why: Value(jsonEncode(why is List ? [for (final w in why) if (w is String) w] : const <String>[])),
+          why: Value(whyJson),
           answered: Value(data['answered'] == true),
           readAt: Value(_time(data['at'])),
           sent: Value(data['sent'] == true),
