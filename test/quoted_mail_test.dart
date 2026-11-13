@@ -42,10 +42,28 @@ void main() {
       expect(text(inside.fresh), 'Ok');
     });
 
-    test('kept whole: forwards, answers typed between quoted lines, and quotes without a "wrote:" line', () {
-      const forwardBody = '<div>FYI</div><div class="gmail_quote gmail_quote_container"><div class="gmail_attr">---------- Forwarded message ---------<br>From: Sam</div><div>The forwarded email</div></div>';
-      expect(splitQuotedHtml(forwardBody).hasQuoted, isFalse);
-      expect(splitQuotedHtml('<div>FYI</div><div class="gmail_quote">On Mon, Sam wrote:<blockquote>x</blockquote></div>', subject: 'Fwd: Plans').hasQuoted, isFalse);
+    test('a forward shows only what the sender wrote; the forwarded email is the part that opens', () {
+      // Gmail.
+      final gmail = splitQuotedHtml('<div>FYI</div><div class="gmail_quote gmail_quote_container"><div class="gmail_attr">---------- Forwarded message ---------<br>From: Sam</div><div>The forwarded email</div></div>');
+      expect([gmail.hasQuoted, gmail.forwarded, text(gmail.fresh)], [true, true, 'FYI']);
+      // Apple Mail, with the later pieces of the email after the first.
+      final apple = splitQuotedHtml('<html><body><div dir="auto">See the three invoices below.<br><div><br><blockquote type="cite"><div>Begin forwarded message:</div><br><div><b>From:</b> Paul</div><div>Invoices attached.</div></blockquote></div></div><div><div>Second piece</div></div></body></html>');
+      expect([apple.hasQuoted, apple.forwarded, text(apple.fresh)], [true, true, 'Seethethreeinvoicesbelow.']);
+      // Outlook, known for a forward by its subject.
+      final outlook = splitQuotedHtml('<div>Please see below.</div><div id="appendonsend"></div><hr style="display:inline-block;width:98%"><div id="divRplyFwdMsg"><b>From:</b> Paul<br><b>Sent:</b> Monday</div><div>Invoices</div>', subject: 'FW: Invoices');
+      expect([outlook.hasQuoted, outlook.forwarded, text(outlook.fresh)], [true, true, 'Pleaseseebelow.']);
+      // The same shape under a reply's subject is earlier mail, not a forward.
+      expect(splitQuotedHtml('<div>Yes.</div><div id="appendonsend"></div><hr><div id="divRplyFwdMsg"><b>From:</b> Paul<br><b>Sent:</b> Monday</div><div>Old</div>', subject: 'RE: Invoices').forwarded, isFalse);
+    });
+
+    test('a forward with nothing written above it is shown as it is', () {
+      const only = '<div class="gmail_quote gmail_quote_container"><div class="gmail_attr">---------- Forwarded message ---------<br>From: Sam</div><div>The forwarded email</div></div>';
+      expect(splitQuotedHtml(only, subject: 'Fwd: Plans').hasQuoted, isFalse);
+      expect(splitQuotedHtml('<html><body><div><br><blockquote type="cite"><div>Begin forwarded message:</div><div>All of it</div></blockquote></div></body></html>').hasQuoted, isFalse);
+      expect(splitQuotedText('---------- Forwarded message ---------\nFrom: Sam\n\nHi').hasQuoted, isFalse);
+    });
+
+    test('kept whole: answers typed between quoted lines, and quotes without a "wrote:" line', () {
       expect(splitQuotedHtml('<div>Re below</div><div class="gmail_quote">On Mon, Sam wrote:<blockquote>Q1</blockquote></div><div>My answer to Q1</div>').hasQuoted, isFalse);
       expect(splitQuotedHtml('<p>As Lincoln said:</p><blockquote>Four score</blockquote>').hasQuoted, isFalse);
       expect(splitQuotedHtml('<div class="gmail_quote">On Mon, Sam wrote:<blockquote>Only the quote</blockquote></div>').hasQuoted, isFalse, reason: 'never hides the whole email');
@@ -67,9 +85,17 @@ void main() {
       expect(splitQuotedText('Yes\n-----Original Message-----\nOld').fresh, 'Yes');
     });
 
-    test('answers between quoted lines and forwards are kept whole', () {
+    test('answers between quoted lines are kept whole', () {
       expect(splitQuotedText('On Mon, Sam wrote:\n> Q1\nAnswer 1\n> Q2\nAnswer 2').hasQuoted, isFalse);
-      expect(splitQuotedText('FYI\n\n---------- Forwarded message ---------\nFrom: Sam\nDate: Monday\n\nHi').hasQuoted, isFalse);
+    });
+
+    test('a forward shows only what the sender wrote', () {
+      final s = splitQuotedText('FYI\n\n---------- Forwarded message ---------\nFrom: Sam\nDate: Monday\n\nHi');
+      expect([s.hasQuoted, s.forwarded, s.fresh], [true, true, 'FYI']);
+      final apple = splitQuotedText('See below.\n\nBegin forwarded message:\n\nFrom: Paul\nSubject: Invoices\n\nAttached.');
+      expect([apple.hasQuoted, apple.forwarded, apple.fresh], [true, true, 'See below.']);
+      // A reply's copy is still "earlier mail".
+      expect(splitQuotedText('Yes\n-----Original Message-----\nOld').forwarded, isFalse);
     });
   });
 }

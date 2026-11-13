@@ -4,12 +4,17 @@ import 'package:html/parser.dart' as html_parser;
 // A reply usually carries a copy of the whole conversation below it. Those
 // earlier emails are already in the thread as their own messages, so each
 // email shows only what was written that time; the copy opens with "Show
-// earlier mail". Forwards keep everything: the forwarded email is the point.
+// earlier mail".
+//
+// A forward is treated the same way: only what the sender wrote of their own
+// shows, and the email they forwarded opens with "Show forwarded email". When
+// the sender wrote nothing of their own, the forwarded email is the whole
+// message and is shown.
 
 /// An email split into the part written this time and the earlier mail
 /// copied below it.
 class QuoteSplit {
-  const QuoteSplit(this.fresh, {required this.hasQuoted});
+  const QuoteSplit(this.fresh, {required this.hasQuoted, this.forwarded = false});
 
   /// The email without the copied earlier mail (the whole email when
   /// [hasQuoted] is false).
@@ -17,10 +22,17 @@ class QuoteSplit {
 
   /// Whether earlier mail was found and left out of [fresh].
   final bool hasQuoted;
+
+  /// What was left out is an email the sender forwarded, not a reply's
+  /// copy of the conversation.
+  final bool forwarded;
 }
 
 final _forwardSubject = RegExp(r'^\s*(?:fwd?|fw)\s*:', caseSensitive: false);
 final _forwardWords = RegExp(r'forwarded message|begin forwarded message|original message.*forward', caseSensitive: false);
+
+/// How a forwarded email opens, at the very start of its first line.
+final _forwardOpens = RegExp(r'^\s*(?:-{2,}\s*Forwarded message\s*-{2,}|Begin forwarded message\s*:|Forwarded message\s*:)', caseSensitive: false);
 final _wroteLine = RegExp(r'\bwrote\s*:?\s*$|\bschrieb\s*:?\s*$|\ba écrit\s*:?\s*$|\bescribió\s*:?\s*$', caseSensitive: false);
 final _space = RegExp(r'[\s ​‌‍﻿]+');
 
@@ -40,20 +52,35 @@ String _norm(String s) => s.replaceAll(_space, ' ').trim();
 
 /// [html] without the earlier mail quoted below the new part.
 QuoteSplit splitQuotedHtml(String html, {String? subject}) {
-  if (_isForward(subject)) return QuoteSplit(html, hasQuoted: false);
   final doc = html_parser.parse(html);
   final body = doc.body;
   if (body == null) return QuoteSplit(html, hasQuoted: false);
-  final start = _quoteStart(body);
+  final quote = _quoteStart(body);
+  final marker = _forwardStart(body);
+  // Whichever begins first: the forwarded email, or a reply's copy.
+  final all = body.querySelectorAll('*');
+  final start = marker != null && (quote == null || all.indexOf(marker) <= all.indexOf(quote)) ? marker : quote;
   if (start == null) return QuoteSplit(html, hasQuoted: false);
+  final forwarded = identical(start, marker) || _isForward(subject) || _startsAsForward(_norm(_textFrom(start, body)));
 
-  // What would be hidden: never a forward, and never the whole email.
-  final hiddenText = _norm(_textFrom(start, body));
-  if (_startsAsForward(hiddenText)) return QuoteSplit(html, hasQuoted: false);
+  // What would be hidden is never the whole email: a forward with nothing
+  // written above it is shown as it is.
   _removeFrom(start, body);
   _dropTrailingEmpty(body);
   if (_norm(body.text).isEmpty && body.querySelector('img') == null) return QuoteSplit(html, hasQuoted: false);
-  return QuoteSplit(doc.outerHtml, hasQuoted: true);
+  return QuoteSplit(doc.outerHtml, hasQuoted: true, forwarded: forwarded);
+}
+
+/// Where a forwarded email begins: the outermost element that opens with
+/// "---------- Forwarded message ---------" or "Begin forwarded message:".
+/// Null when there is none, or when it is inside an earlier quote.
+dom.Element? _forwardStart(dom.Element body) {
+  for (final el in body.querySelectorAll('*')) {
+    if (!_forwardOpens.hasMatch(el.text)) continue;
+    if (_insideQuote(el)) return null;
+    return el;
+  }
+  return null;
 }
 
 /// Where the copied earlier mail begins, or null.
@@ -205,12 +232,15 @@ final _sentLine = RegExp(r'^\s*\*?(Sent|Date):\*?\s', caseSensitive: false);
 
 /// [text] without the earlier mail quoted below the new part.
 QuoteSplit splitQuotedText(String text, {String? subject}) {
-  if (_isForward(subject)) return QuoteSplit(text, hasQuoted: false);
   final lines = text.replaceAll('\r\n', '\n').split('\n');
   int? cut;
+  var forwarded = false;
   for (var i = 0; i < lines.length && cut == null; i++) {
     final line = lines[i];
-    if (_originalMessage.hasMatch(line)) {
+    if (_forwardOpens.hasMatch(line)) {
+      cut = i;
+      forwarded = true;
+    } else if (_originalMessage.hasMatch(line)) {
       cut = i;
     } else if (_fromLine.hasMatch(line) && lines.skip(i + 1).take(4).any(_sentLine.hasMatch)) {
       cut = i;
@@ -222,12 +252,11 @@ QuoteSplit splitQuotedText(String text, {String? subject}) {
     }
   }
   if (cut == null) return QuoteSplit(text, hasQuoted: false);
-  // The forward line can sit just above the headers.
-  final hidden = lines.skip(cut < 2 ? 0 : cut - 2).take(8).join(' ');
-  if (_startsAsForward(hidden)) return QuoteSplit(text, hasQuoted: false);
+  forwarded = forwarded || _isForward(subject) || _startsAsForward(lines.skip(cut).take(8).join(' '));
+  // A forward with nothing written above it is shown as it is.
   final fresh = lines.take(cut).join('\n').trimRight();
   if (fresh.trim().isEmpty) return QuoteSplit(text, hasQuoted: false);
-  return QuoteSplit(fresh, hasQuoted: true);
+  return QuoteSplit(fresh, hasQuoted: true, forwarded: forwarded);
 }
 
 bool _onlyQuotedAfter(List<String> lines, int from) {

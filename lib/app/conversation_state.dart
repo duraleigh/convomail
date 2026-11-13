@@ -90,12 +90,16 @@ final messageAttachmentsProvider = StreamProvider.family<List<Attachment>, int>(
 /// Rendered, sanitized HTML for a message plus what was blocked. Records
 /// tracker events (spec 4.13) as a side effect of rendering.
 class RenderedBody {
-  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = '', this.blocks, this.hasQuoted = false});
+  const RenderedBody({required this.html, required this.sanitized, required this.isPlainText, this.text = '', this.blocks, this.hasQuoted = false, this.forwarded = false});
   final String html;
 
   /// Earlier mail copied below the new part was left out ("Show earlier
   /// mail" brings it back).
   final bool hasQuoted;
+
+  /// The part that can be hidden is an email the sender forwarded: its
+  /// button says "Show forwarded email", not "Show earlier mail".
+  final bool forwarded;
 
   /// A simple email as blocks to draw straight into the conversation; null
   /// for designed mail, which keeps its own look in the browser box.
@@ -123,6 +127,10 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   var text = m.bodyText ?? '';
   var html = m.bodyHtml ?? '';
   var hasQuoted = false;
+  // Whether the part that can be hidden is a forwarded email (worked out
+  // also while it is shown, so its button keeps saying what it hides).
+  final whole = isPlain ? splitQuotedText(text, subject: m.subject) : splitQuotedHtml(html, subject: m.subject);
+  final forwarded = whole.hasQuoted && whole.forwarded;
   if (!showEarlier) {
     final split = isPlain ? splitQuotedText(text, subject: m.subject) : splitQuotedHtml(html, subject: m.subject);
     // A search match only in the earlier mail keeps it in view.
@@ -165,7 +173,7 @@ final renderedBodyProvider = FutureProvider.family<RenderedBody, int>((ref, mess
   await ref.read(databaseProvider).recordTrackerEvents(messageId, out);
   // Feeds (newsletters, receipts) keep their designed look.
   final blocks = isPlain || m.classification == 'feeds' ? null : simpleMailBlocks(out.bodyInner);
-  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: text, blocks: blocks, hasQuoted: hasQuoted);
+  return RenderedBody(html: out.html, sanitized: out, isPlainText: isPlain, text: text, blocks: blocks, hasQuoted: hasQuoted, forwarded: forwarded);
 }, retry: _noAutomaticRetry);
 
 /// Messages whose earlier mail the user chose to see.
