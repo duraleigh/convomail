@@ -36,7 +36,8 @@ echo 'last time the helper settled the sentence: ' . $local((int) $store->get('d
 
 $day = new Day($store, $readings);
 $lines = $day->lines();
-echo 'what it would speak of now: needs you ' . count($lines['needs']) . ' | good to know that came today ' . count($lines['feed']) . ' | same as when it was last settled: ' . ($lines['key'] === $store->get('day.key') ? 'yes' : 'no') . "\n";
+echo 'what it would speak of now: needs you ' . count($lines['needs']) . ' | good to know that came today ' . count($lines['feed']) . ' | travel ' . count($lines['travel']) . ' | bookings ' . count($lines['bookings']) . ' | deliveries ' . count($lines['deliveries'])
+    . ' (kept by the helper: legs ' . count($store->itemsOf('leg')) . ', bookings ' . count($store->itemsOf('booking')) . ', card items from devices ' . count($store->itemsOf('timely')) . ') | same as when it was last settled: ' . ($lines['key'] === $store->get('day.key') ? 'yes' : 'no') . "\n";
 
 // Why "good to know today" is what it is.
 $today = 'e.is_from_me = 0 AND e.inbox = 1 AND e.gone = 0 AND e.at >= ?';

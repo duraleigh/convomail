@@ -301,6 +301,70 @@ return [
         same([null, null], [$w->store->item('timely', 'parcel:1Z9'), $w->store->item('cardfix', 'timely:parcel:1Z9')]);
     },
 
+    'The Lede also speaks of travel, bookings and deliveries, each only in the cases asked for; never payments' => function (): void {
+        $w = new World();
+        $w->readings->setZone(-300);
+        $w->assistantOn();
+        $day = new \Precis\Day($w->store, $w->readings);
+        $now = $w->clock->now;
+        $h = 3600;
+        $leg = static fn (string $number, int $dep, string $state, int $news, array $more = []): array => $more + ['mode' => 'flight', 'carrier' => 'American Airlines', 'number' => $number, 'fc' => 'RDU', 'fcity' => 'Raleigh/Durham', 'tc' => 'LGA', 'tcity' => 'New York LaGuardia', 'dep' => '2026-11-16T19:57', 'arr' => '2026-11-16T22:00', 'dep_at' => $dep, 'arr_at' => $dep + 2 * $h, 'state' => $state, 'state_at' => $news, 'news_at' => $news, 'was_dep' => ''];
+        // Nothing to speak of: no sentence, and the assistant is not asked.
+        $w->store->put('leg', 'far', $leg('AA1', $now + 30 * 86400, 'confirmed', $now - 5 * 86400));
+        $w->store->put('timely', 'bill:1', ['type' => 'bill', 'title' => 'Power Co', 'detail' => '$84.12 due', 'starts' => $now + 86400, 'mat' => $now - 3600, 'mid' => '', 'until' => $now + 2 * 86400]);
+        $w->store->put('timely', 'parcel:far', ['type' => 'delivery', 'title' => 'Slow Shop', 'starts' => $now + 5 * 86400, 'mat' => $now - 3600, 'mid' => '', 'until' => $now + 6 * 86400]);
+        $w->store->put('booking', 'hotel|far', ['type' => 'hotel', 'name' => 'Far Inn', 'place' => 'Reno', 'starts' => '2026-12-20T15:00', 'start_at' => $now + 30 * 86400, 'end_at' => $now + 32 * 86400, 'state' => 'confirmed', 'news_at' => $now - 5 * 86400]);
+        $lines = $day->lines();
+        same([[], [], []], [$lines['travel'], $lines['bookings'], $lines['deliveries']]);
+        check($day->refresh());
+        same('', $w->store->item('day', 'today')['text']);
+        same(0, count($w->claude->readings()));
+        $quiet = $lines['key'];
+
+        // Travel: just booked; a change; within 48 hours. Not one that has landed.
+        $w->store->put('leg', 'booked', $leg('AA2302', $now + 40 * 86400, 'confirmed', $now - 2 * $h, ['dep' => '2026-12-22T07:05', 'arr' => '2026-12-22T09:35']));
+        $w->store->put('leg', 'late', $leg('AA4704', $now + 20 * $h, 'delayed', $now - $h, ['dep' => '2026-11-16T21:10', 'arr' => '2026-11-16T23:15', 'was_dep' => '2026-11-16T19:57']));
+        $w->store->put('leg', 'soon', $leg('AA1187', $now + 30 * $h, 'checked', $now - 9 * 86400, ['dep' => '2026-11-17T08:15', 'arr' => '2026-11-17T10:04']));
+        $w->store->put('leg', 'landed', $leg('AA9', $now - 5 * $h, 'confirmed', $now - $h));
+        // Bookings: just confirmed; within 24 hours. Not one taken off the card.
+        $w->store->put('booking', 'hotel|1', ['type' => 'hotel', 'name' => 'The Joule', 'place' => 'Dallas', 'starts' => '2026-11-20T15:00', 'start_at' => $now + 6 * 86400, 'end_at' => $now + 8 * 86400, 'state' => 'confirmed', 'news_at' => $now - 3 * $h]);
+        $w->store->put('booking', 'restaurant|1', ['type' => 'restaurant', 'name' => 'Town Hearth', 'place' => 'Dallas', 'starts' => '2026-11-14T19:30', 'start_at' => $now + 10 * $h, 'state' => 'confirmed', 'news_at' => $now - 9 * 86400]);
+        $w->store->put('booking', 'car_service|1', ['type' => 'car_service', 'name' => 'Carey', 'place' => 'DFW', 'starts' => '2026-11-14T09:30', 'start_at' => $now + 5 * $h, 'state' => 'confirmed', 'news_at' => $now - $h]);
+        $w->sync->push(1, [['kind' => 'cardfix', 'k' => 'booking:car_service|1', 'data' => ['off' => true]]]);
+        // Deliveries: expected within two days; delivered today. Not one dismissed.
+        $w->store->put('timely', 'parcel:1', ['type' => 'delivery', 'title' => 'Acme', 'starts' => $now + 86400, 'mat' => $now - $h, 'mid' => '', 'until' => $now + 2 * 86400]);
+        $w->store->put('timely', 'parcel:2', ['type' => 'delivery', 'title' => 'Google Store', 'status' => 'delivered', 'mat' => $now - 60, 'mid' => '', 'until' => $now]);
+        $w->store->put('timely', 'parcel:3', ['type' => 'delivery', 'title' => 'Hidden Shop', 'starts' => $now + 86400, 'mat' => $now - $h, 'mid' => '', 'until' => $now + 2 * 86400]);
+        $w->sync->push(1, [['kind' => 'cardfix', 'k' => 'timely:parcel:3', 'data' => ['off' => true]]]);
+
+        $lines = $day->lines();
+        check($lines['key'] !== $quiet, 'the page changed, so the sentence is due again');
+        same([
+            '- Flight American Airlines AA4704, Raleigh/Durham to New York LaGuardia, leaves Mon Nov 16, 21:10, arrives 23:15 (delayed, was to leave Mon Nov 16, 19:57)',
+            '- Flight American Airlines AA1187, Raleigh/Durham to New York LaGuardia, leaves Tue Nov 17, 08:15, arrives 10:04 (leaves within 48 hours, checked in)',
+            '- Flight American Airlines AA2302, Raleigh/Durham to New York LaGuardia, leaves Tue Dec 22, 07:05, arrives 09:35 (just booked)',
+        ], $lines['travel']);
+        same([
+            '- Restaurant Town Hearth, Dallas, Sat Nov 14, 19:30 (starts within 24 hours)',
+            '- Hotel The Joule, Dallas, check-in Fri Nov 20, 15:00 (just confirmed)',
+        ], $lines['bookings']);
+        same(2, count($lines['deliveries']));
+        check(in_array('- From Google Store: delivered today', $lines['deliveries'], true));
+        check(count(array_filter($lines['deliveries'], static fn (string $l): bool => str_starts_with($l, '- From Acme: expected '))) === 1);
+
+        // The assistant is shown those lines, and no payment.
+        $w->claude->answer = static fn (): array => ['sentence' => 'Your flight to New York is delayed to 21:10.'];
+        $w->later(1300);
+        check($day->refresh());
+        $shown = (string) $w->claude->readings()[0]['body']['messages'][0]['content'];
+        check(str_contains($shown, "Travel (3):\n- Flight American Airlines AA4704") && str_contains($shown, 'Bookings (2):') && str_contains($shown, 'Deliveries (2):'));
+        check(!str_contains($shown, 'Power Co') && !str_contains($shown, '84.12') && !str_contains($shown, 'Carey') && !str_contains($shown, 'Hidden Shop') && !str_contains($shown, 'Slow Shop') && !str_contains($shown, 'AA9'));
+        same('Your flight to New York is delayed to 21:10.', $w->store->item('day', 'today')['text']);
+        // Nothing changed: not written again.
+        $w->later(1300);
+        same(false, $day->refresh());
+    },
+
     'the files attached to an email, and its links, are found; times are worked out in the place\'s own clock' => function (): void {
         $enc = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
         $m = ['payload' => ['mimeType' => 'multipart/mixed', 'parts' => [
