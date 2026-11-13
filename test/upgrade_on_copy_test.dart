@@ -26,6 +26,9 @@ void main() {
     final know = await db.watchGoodToKnow(since: DateTime.now().subtract(const Duration(days: 2))).first;
     // ignore: avoid_print
     print('in Focus: ${focus.length} | good to know (before the helper says so): ${know.length}');
-    expect(await n('PRAGMA user_version'), 25);
+    // ignore: avoid_print
+    print('items on the rule cards: ${await n('SELECT COUNT(*) FROM timely_items')} | put off: ${await n('SELECT COUNT(*) FROM timely_items WHERE later_until IS NOT NULL')} | legs and bookings: ${await n('SELECT COUNT(*) FROM helper_cards')} | readings carrying a draft: ${await n("SELECT COUNT(*) FROM helper_readings WHERE draft <> ''")}');
+    expect(await n('PRAGMA user_version'), 26);
+    expect(await db.getSetting('helper.cursor'), '0', reason: 'what the helper found while the older version ran is asked for again');
   }, skip: path == null ? 'no copy given' : false);
 }

@@ -963,6 +963,10 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             await m.createTable(helperCards);
             if (from >= 13) await m.addColumn(timelyItems, timelyItems.laterUntil);
             if (from >= 21) await m.addColumn(helperReadings, helperReadings.draft);
+            // The helper may already have said what travel and bookings it
+            // found; an older version of the app let those go by. Asking
+            // again from the start brings them all in, once.
+            if (from >= 20) await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
           }
         },
         beforeOpen: (details) async {
