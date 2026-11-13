@@ -334,6 +334,18 @@ void main() {
         expect(timelyDue(items, now).map((i) => i.id), [3, 2, 1]);
       });
 
+      test('a delivered package stays until the end of the day it came, also one stored by an older version', () {
+        final came = DateTime(2026, 11, 2, 10, 30);
+        // As an older version stored it: off its card the moment it was delivered.
+        final old = TimelyItem(id: 1, type: 'delivery', dedupeKey: 'p', contactKey: '', title: 'Acme', detail: '', status: 'delivered', showFrom: came, hideAfter: came, mailAt: came, updatedAt: came);
+        expect(timelyDue([old], DateTime(2026, 11, 2, 12)).map((i) => i.id), [1]);
+        expect(timelyDue([old], DateTime(2026, 11, 2, 23, 59)).map((i) => i.id), [1]);
+        expect(timelyDue([old], DateTime(2026, 11, 3)), isEmpty, reason: 'gone at midnight');
+        // Anything else still ends when its window does.
+        final code = TimelyItem(id: 2, type: 'code', dedupeKey: 'c', contactKey: '', title: '', detail: '', showFrom: came, hideAfter: came, updatedAt: came);
+        expect(timelyDue([code], DateTime(2026, 11, 2, 12)), isEmpty);
+      });
+
       test('the waiting loop reads recent mail in the background, marks nothing read, and files automated senders to Feeds', () async {
         imap.capabilities = const [];
         final inbox = imap.folder('INBOX');
@@ -642,17 +654,22 @@ void main() {
       await tester.pumpAndSettle();
       final items = {for (final t in await db.select(db.timelyItems).get()) t.type: t};
 
-      // Deliveries: who it is from on top, what is inside underneath.
+      // Deliveries: the assistant is not on here, so nothing says what is inside: it is headed by who sent it, with the day it comes on the right.
       final deliveries = find.byKey(const ValueKey('today-deliveries'));
-      expect(find.descendant(of: deliveries, matching: find.text('Deliveries')), findsOneWidget);
+      expect(find.descendant(of: deliveries, matching: find.text('DELIVERIES')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(ValueKey('timely-title-${items['delivery']!.id}'))).data, 'Acme Shop');
-      expect(find.byKey(ValueKey('timely-inside-${items['delivery']!.id}')), findsNothing, reason: 'the assistant is not on here, so nothing says what is inside');
-      expect(find.descendant(of: deliveries, matching: find.textContaining('Arriving Tomorrow')), findsOneWidget);
-      // Payments.
-      expect(find.descendant(of: find.byKey(const ValueKey('today-payments')), matching: find.byKey(ValueKey('timely-${items['bill']!.id}'))), findsOneWidget);
+      expect(find.byKey(ValueKey('timely-under-${items['delivery']!.id}')), findsNothing);
+      expect(tester.widget<Text>(find.descendant(of: deliveries, matching: find.byKey(ValueKey('timely-when-${items['delivery']!.id}')))).data, 'Tomorrow');
+      // Payments: who is owed, when it is due, and the amount on the right.
+      final bill = items['bill']!;
+      expect(find.descendant(of: find.byKey(const ValueKey('today-payments')), matching: find.byKey(ValueKey('timely-${bill.id}'))), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-title-${bill.id}'))).data, 'Power Co');
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-under-${bill.id}'))).data, startsWith('Due '));
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-when-${bill.id}'))).data, r'$84.12');
       // OTP: confirm your email address, with the button that goes to the email's own link.
       final otp = find.byKey(const ValueKey('today-otp'));
-      expect(find.descendant(of: otp, matching: find.text('Confirm your email address for Acme Shop')), findsOneWidget);
+      expect(find.descendant(of: otp, matching: find.text('Confirm your email address')), findsOneWidget);
+      expect(find.descendant(of: otp, matching: find.text('for Acme Shop')), findsOneWidget);
       expect(find.descendant(of: otp, matching: find.widgetWithText(FilledButton, 'Confirm')), findsOneWidget);
       for (final none in ['travel', 'bookings', 'fyi']) {
         expect(find.byKey(ValueKey('today-$none')), findsNothing, reason: none);

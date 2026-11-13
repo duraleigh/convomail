@@ -102,8 +102,10 @@ void main() {
       final done = read('Your package was delivered', text: 'Tracking number 1Z999AA10123456784').single;
       expect(done.status, 'delivered');
       expect(done.dedupeKey, out.dedupeKey);
+      // Delivered: it stays on its card, marked so, until the end of that day.
       final w = TimelyWindow.of(done, received);
-      expect(w.until.isAfter(w.from), isFalse, reason: 'delivered is off the strip');
+      expect(w.from, received);
+      expect(w.until, DateTime(received.year, received.month, received.day + 1));
     });
 
     test('an email "track" link is used when there is no number', () {

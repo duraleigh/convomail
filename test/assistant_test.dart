@@ -679,7 +679,12 @@ void main() {
       final renee = (await tester.runAsync(() => message('<renee@x>')))!;
       await pumpApp(tester, Destination.today);
       expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).data, 'Renee needs your yes or no on Charlotte by tomorrow, and the bank payment failed.');
-      expect(find.descendant(of: find.byKey(const ValueKey('today-sentence')), matching: find.text('The Lede')), findsOneWidget, reason: 'the sentence is labeled');
+      expect(find.descendant(of: find.byKey(const ValueKey('today-sentence')), matching: find.text('THE LEDE')), findsOneWidget, reason: 'the sentence is labeled');
+      // Light: plain words beside a thin line, not a filled block.
+      final lede = tester.widget<Container>(find.byKey(const ValueKey('today-sentence'))).decoration! as BoxDecoration;
+      expect(lede.color, isNull);
+      expect((lede.border! as Border).left.width, 3);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-sentence-text'))).style!.fontWeight, FontWeight.w400);
       expect(find.byKey(const ValueKey('today-title')), findsNothing, reason: 'the page is named on the rail only');
       expect(find.text('Précis'), findsOneWidget);
       final when = tester.widget<Text>(find.byKey(const ValueKey('today-sentence-when'))).data!;
@@ -687,10 +692,15 @@ void main() {
       expect(when, endsWith(', after 14 new emails'));
       expect(tester.getTopLeft(find.byKey(const ValueKey('today-sentence'))).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('today-needs-you'))).dy), reason: 'above the cards');
 
-      // The line: what to do, why, who and which email, by when.
+      // The line: what to do in bold; who, by when and why under it. (The subject shows when the email is opened.)
       expect(find.text('Say yes or no to Charlotte, March 14.'), findsOneWidget);
+      expect(tester.widget<Text>(find.text('Say yes or no to Charlotte, March 14.')).style!.fontWeight, FontWeight.w700);
       expect(tester.widget<Text>(find.byKey(ValueKey('needs-why-${renee.id}'))).data, 'Renee needs your yes or no on Charlotte, March 14.');
-      expect(find.text('Renee Calloway · Re: Spring dates'), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(ValueKey('needs-who-${renee.id}'))).data, 'Renee Calloway');
+      // Every group is named by a small label over its card, in capitals, with how many.
+      expect(find.descendant(of: find.byKey(const ValueKey('today-needs-you')), matching: find.text('NEEDS YOU')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-label-needs-you'))).style!.fontSize, 10.5);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-count-needs-you'))).data, '2');
       expect(tester.widget<Text>(find.byKey(ValueKey('needs-by-${renee.id}'))).data, startsWith('by tomorrow'));
       expect(find.textContaining('Draft'), findsNothing, reason: 'nothing is drafted');
 
@@ -865,7 +875,7 @@ void main() {
       expect(tester.getTopLeft(greeting).dy, greaterThan(tester.getBottomLeft(pill).dy - 1));
       expect(tester.getSize(greeting).height, lessThan(tester.widget<Text>(greeting).style!.fontSize! * 1.6), reason: 'one line');
       // Whatever the hour's greeting and the name, it is held to the width of the page (it shrinks before it would wrap or run off).
-      expect(tester.getSize(find.ancestor(of: greeting, matching: find.byType(FittedBox)).first).width, lessThanOrEqualTo(372), reason: 'it fits the width of the page');
+      expect(tester.getSize(find.ancestor(of: greeting, matching: find.byType(FittedBox)).first).width, lessThanOrEqualTo(376), reason: 'it fits the width of the page');
       expect(find.byKey(const ValueKey('today-title')), findsNothing);
       expect(tester.takeException(), isNull);
       await teardown(tester);
@@ -881,7 +891,7 @@ void main() {
       final renee = (await tester.runAsync(() => message('<renee@x>')))!;
       final c = await pumpApp(tester, Destination.today);
       expect(find.byKey(const ValueKey('today-good-to-know')), findsOneWidget);
-      expect(find.descendant(of: find.byKey(const ValueKey('today-good-to-know')), matching: find.text('Good to know')), findsOneWidget);
+      expect(find.descendant(of: find.byKey(const ValueKey('today-good-to-know')), matching: find.text('GOOD TO KNOW')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(ValueKey('know-line-${parcel.id}'))).data, 'Your hard case was delivered at 3:10 PM and left at the front door.');
       expect(tester.widget<Text>(find.byKey(ValueKey('know-from-${parcel.id}'))).data, startsWith('Pollstar Daily · Amazon hard case · '));
       expect(find.byKey(ValueKey('know-${renee.id}')), findsNothing, reason: 'what needs you is under Needs you, not here too');
@@ -1039,6 +1049,7 @@ void main() {
       expect(card, findsOneWidget);
       String text(String key) => tester.widget<Text>(find.byKey(ValueKey(key))).data!;
       // The first leg, large: the route, the day, the two codes, the times under them, how long, the confirmation, the carrier and number.
+      expect(find.byKey(const ValueKey('leg-large-leg:$a')), findsOneWidget, reason: 'it leaves within two days');
       expect(text('leg-heading-leg:$a'), 'UPCOMING');
       expect(text('leg-route-leg:$a'), 'Raleigh/Durham to New York LaGuardia');
       expect(text('leg-day-leg:$a'), 'Mon, Nov 16');
@@ -1049,12 +1060,17 @@ void main() {
       expect(tester.widget<SelectableText>(find.byKey(const ValueKey('leg-number-leg:$a'))).data, 'AA4704');
       expect(find.descendant(of: card, matching: find.text('American Airlines')), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const ValueKey('leg-from-leg:$a'))).style!.fontSize!, greaterThan(30), reason: 'the codes are drawn large');
-      // The leg after it: its own line, every detail, smaller.
-      expect(text('leg-route-leg:$b'), 'LGA → RDU · New York LaGuardia to Raleigh/Durham');
+      // The leg after it: a compact boarding pass, with every detail, smaller.
+      expect(find.byKey(const ValueKey('leg-pass-leg:$b')), findsOneWidget);
+      expect([text('leg-from-leg:$b'), text('leg-to-leg:$b')], ['LGA', 'RDU']);
+      expect(text('leg-route-leg:$b'), 'New York LaGuardia to Raleigh/Durham');
       expect([text('leg-day-leg:$b'), text('leg-dep-leg:$b'), text('leg-arr-leg:$b')], ['Wed, Nov 18', '8:15 AM', '10:04 AM']);
-      expect(text('leg-number-leg:$b'), 'American Airlines AA1187 · Confirmation HEYLVT');
+      expect([text('leg-number-leg:$b'), text('leg-carrier-leg:$b')], ['AA1187', 'American Airlines']);
+      expect(tester.widget<SelectableText>(find.byKey(const ValueKey('leg-conf-leg:$b'))).data, 'HEYLVT');
+      expect(tester.widget<Text>(find.byKey(const ValueKey('leg-from-leg:$b'))).style!.fontSize!, lessThan(tester.widget<Text>(find.byKey(const ValueKey('leg-from-leg:$a'))).style!.fontSize!));
+      expect(tester.getSize(find.byKey(const ValueKey('leg-leg:$b'))).height, lessThan(tester.getSize(find.byKey(const ValueKey('leg-leg:$a'))).height), reason: 'a pass takes less room than the large picture');
       expect(find.byKey(const ValueKey('leg-leg:AA9|x|RDU|CLT')), findsNothing, reason: 'landed');
-      Material section() => tester.widget<Material>(card);
+      Material section() => tester.widget<Material>(find.byKey(const ValueKey('today-card-travel')));
       expect((section().shape! as RoundedRectangleBorder).side, BorderSide.none);
 
       // The invitation to check in came: a button that goes where the email's own button goes.
@@ -1077,10 +1093,11 @@ void main() {
       expect(tester.widget<Text>(find.byKey(const ValueKey('leg-dep-leg:$a-was'))).style!.decoration, TextDecoration.lineThrough);
       expect(tester.widget<Text>(find.byKey(const ValueKey('leg-dep-leg:$a'))).style!.color, const Color(0xFFFFCA28));
 
-      // A cancellation: red.
+      // A cancellation: red, and drawn large at once, however far off it is.
       await tester.runAsync(() => helperSays('leg', b, leg('AA1187', 'LGA', 'New York LaGuardia', 'RDU', 'Raleigh/Durham', back, state: 'cancelled')));
       await tester.pumpAndSettle();
       expect(text('leg-heading-leg:$b'), 'CANCELLED');
+      expect(find.byKey(const ValueKey('leg-large-leg:$b')), findsOneWidget);
       expect((section().shape! as RoundedRectangleBorder).side.color, const Color(0xFFEF5350));
 
       // A click on a leg opens the newest email about it, with the way back.
@@ -1110,16 +1127,20 @@ void main() {
       });
       await pumpApp(tester, Destination.today);
       final card = find.byKey(const ValueKey('today-bookings'));
-      expect(find.descendant(of: card, matching: find.text('Bookings')), findsOneWidget);
+      expect(find.descendant(of: card, matching: find.text('BOOKINGS')), findsOneWidget);
       String text(String key) => tester.widget<Text>(find.byKey(ValueKey(key))).data!;
       const hotel = 'booking:hotel|88412207';
       const car = 'booking:car_service|cr-5521';
-      expect(text('booking-heading-$hotel'), 'HOTEL · UPCOMING');
+      expect(find.byKey(const ValueKey('booking-heading-$hotel')), findsNothing, reason: 'a heading only when it is news: just confirmed, changed, cancelled');
       expect(text('booking-title-$hotel'), 'The Joule · Dallas');
       expect(text('booking-when-$hotel'), 'Check-in Fri, Nov 20 3:00 PM · Check-out Sun, Nov 22 11:00 AM');
       expect(text('booking-rest-$hotel'), '1530 Main St, Dallas, TX · Confirmation 88412207 · 214-555-0100');
+      // A stay says its days on the right.
+      expect(text('booking-day-$hotel'), startsWith('to '));
       expect(text('booking-title-$car'), 'Carey · Driver Luis M.');
-      expect(text('booking-when-$car'), 'Pick-up Fri, Nov 20 9:30 AM');
+      // One start: the time on the right with its day under it, and the full date on the line.
+      expect(text('booking-at-$car'), '9:30 AM');
+      expect(text('booking-when-$car'), 'Pick-up Fri, Nov 20');
       expect(text('booking-rest-$car'), 'DFW Terminal C → The Joule · Confirmation CR-5521 · 800-555-0199');
       expect(tester.getTopLeft(find.byKey(const ValueKey('booking-$car'))).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('booking-$hotel'))).dy), reason: 'soonest first');
 
@@ -1180,19 +1201,43 @@ void main() {
       await teardown(tester);
     });
 
-    testWidgets('a delivery is headed by who it comes from, with what is inside in small print underneath', (tester) async {
+    testWidgets('a delivery is headed by what is inside, with who sent it underneath, how far along it is, and when it comes', (tester) async {
       await tester.runAsync(filled);
       await tester.runAsync(() async {
         await helperSays('read', '<daily-1@x>', {'line': 'Your order is on its way.', 'focus': false, 'ask': '', 'why': <String>[], 'answered': false, 'at': 1, 'know': false, 'thing': 'Hard case and more'});
-        await db.upsertTimely(await message('<daily-1@x>'), [TimelyFact(type: TimelyType.delivery, dedupeKey: 'track:9', title: 'Pollstar Shop', startsAt: DateTime.now().add(const Duration(days: 1)))], DateTime.now());
+        await db.upsertTimely(await message('<daily-1@x>'), [TimelyFact(type: TimelyType.delivery, dedupeKey: 'track:9', title: 'Pollstar Shop', startsAt: DateTime.now().add(const Duration(days: 1)))], DateTime.now().subtract(const Duration(minutes: 1)));
       });
       await pumpApp(tester, Destination.today);
       final item = (await tester.runAsync(() => db.select(db.timelyItems).get()))!.single;
+      // A later email about the same package, as any device learns of it.
+      Future<void> later(String status, int secondsAgo) => helperSays('timely', 'track:9', {
+            'type': 'delivery', 'title': 'Pollstar Shop', 'detail': '', 'starts': null, 'ends': null, 'url': null, 'label': null, 'status': status,
+            'mat': DateTime.now().millisecondsSinceEpoch ~/ 1000 - secondsAgo, 'mid': '<daily-1@x>', 'from': item.contactKey,
+          });
       final card = find.byKey(const ValueKey('today-deliveries'));
-      expect(tester.widget<Text>(find.descendant(of: card, matching: find.byKey(ValueKey('timely-title-${item.id}')))).data, 'Pollstar Shop');
-      expect(tester.widget<Text>(find.descendant(of: card, matching: find.byKey(ValueKey('timely-inside-${item.id}')))).data, 'Hard case and more');
+      expect(tester.widget<Text>(find.descendant(of: card, matching: find.byKey(ValueKey('timely-title-${item.id}')))).data, 'Hard case and more');
+      expect(tester.widget<Text>(find.descendant(of: card, matching: find.byKey(ValueKey('timely-under-${item.id}')))).data, 'Pollstar Shop');
       final title = tester.widget<Text>(find.byKey(ValueKey('timely-title-${item.id}'))).style!.fontSize!;
-      expect(tester.widget<Text>(find.byKey(ValueKey('timely-inside-${item.id}'))).style!.fontSize!, lessThan(title), reason: 'smaller print');
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-under-${item.id}'))).style!.fontSize!, lessThan(title), reason: 'smaller print');
+      // On its way: the first of three steps; the day it comes on the right.
+      expect(tester.widget<Semantics>(find.byKey(ValueKey('timely-steps-${item.id}'))).properties.label, 'On its way');
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-when-${item.id}'))).data, 'Tomorrow');
+
+      // Out for delivery: the second step, and it says so.
+      await tester.runAsync(() => later('out-for-delivery', 30));
+      await tester.pumpAndSettle();
+      expect(tester.widget<Semantics>(find.byKey(ValueKey('timely-steps-${item.id}'))).properties.label, 'Out for delivery');
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-under-${item.id}'))).data, 'Out for delivery · Pollstar Shop');
+      expect(tester.widget<Text>(find.byKey(ValueKey('timely-when-${item.id}'))).data, 'Today');
+
+      // Delivered: it stays on the card, marked "Delivered" in green, with the time.
+      await tester.runAsync(() => later('delivered', 10));
+      await tester.pumpAndSettle();
+      expect(find.descendant(of: card, matching: find.byKey(ValueKey('timely-${item.id}'))), findsOneWidget, reason: 'it stays until midnight');
+      expect(tester.widget<Semantics>(find.byKey(ValueKey('timely-steps-${item.id}'))).properties.label, 'Delivered');
+      final delivered = tester.widget<Text>(find.byKey(ValueKey('timely-when-${item.id}')));
+      expect([delivered.data, delivered.style!.color], ['Delivered', const Color(0xFF5FBF6B)]);
+      expect(find.byKey(ValueKey('timely-at-${item.id}')), findsOneWidget);
       await teardown(tester);
     });
 

@@ -64,7 +64,8 @@ class TimelyWindow {
       case TimelyType.code:
         return TimelyWindow(received, received.add(codeLifetime));
       case TimelyType.delivery:
-        if (f.status == 'delivered') return TimelyWindow(received, received);
+        // Delivered: it stays, marked so, until the end of that day.
+        if (f.status == 'delivered') return TimelyWindow(received, endOfDay(received));
         if (f.status == 'out-for-delivery') return TimelyWindow(received, endOfDay(received));
         if (start == null) return TimelyWindow(received, received.add(undatedDelivery));
         return TimelyWindow(start.subtract(deliveryLead), endOfDay(start));

@@ -17,6 +17,7 @@ import '../../../store/helper_queries.dart';
 import '../../../store/timely_queries.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/item_menu.dart';
+import '../page_type.dart';
 import 'later_dialogs.dart';
 
 /// Copies a one-time code. The snackbar never repeats the code.
@@ -82,7 +83,10 @@ class _TimelyStripState extends ConsumerState<TimelyStrip> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            for (final i in shown) _TimelyLine(key: ValueKey('timely-line-${i.id}'), item: i),
+            for (var n = 0; n < shown.length; n++) ...[
+              if (n > 0 && widget.embedded) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.35)),
+              _TimelyLine(key: ValueKey('timely-line-${shown[n].id}'), item: shown[n], embedded: widget.embedded),
+            ],
             if (hidden > 0 || _expanded && due.length > TimelyStrip.shownByDefault)
               TextButton(
                 key: ValueKey('timely-more$id'),
@@ -97,20 +101,9 @@ class _TimelyStripState extends ConsumerState<TimelyStrip> {
 }
 
 class _TimelyLine extends ConsumerStatefulWidget {
-  const _TimelyLine({super.key, required this.item});
+  const _TimelyLine({super.key, required this.item, this.embedded = false});
   final TimelyItem item;
-
-  /// Today 7:05 AM, Tomorrow, Thu, Nov 12.
-  static String when(DateTime t, DateTime now, {bool withTime = false}) {
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(t.year, t.month, t.day);
-    final diff = day.difference(today).inDays;
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    final label = diff == 0 ? 'Today' : (diff == 1 ? 'Tomorrow' : (diff > 1 && diff < 7 ? days[t.weekday - 1] : '${months[t.month - 1]} ${t.day}'));
-    if (!withTime || (t.hour == 0 && t.minute == 0)) return label;
-    return '$label ${clockTime(t)}';
-  }
+  final bool embedded;
 
   @override
   ConsumerState<_TimelyLine> createState() => _TimelyLineState();
@@ -135,35 +128,23 @@ class _TimelyLineState extends ConsumerState<_TimelyLine> {
         _ => Icons.schedule_rounded,
       };
 
-  String _subtitle(DateTime now) {
-    final start = item.startsAt;
-    final parts = <String>[];
-    switch (item.type) {
-      case 'code':
-        parts.add('One-time code');
-      case 'confirm':
-        parts.add('Press Confirm to do it from here');
-      case 'delivery':
-        if (item.status == 'out-for-delivery') {
-          parts.add('Out for delivery');
-        } else {
-          parts.add(start == null ? 'On its way' : 'Arriving ${_TimelyLine.when(start, now)}');
-        }
-      case 'flight':
-      case 'train':
-        if (start != null) parts.add('Departs ${_TimelyLine.when(start, now, withTime: true)}');
-      case 'hotel':
-        if (start != null) parts.add('Check-in ${_TimelyLine.when(start, now, withTime: true)}');
-      case 'car':
-        if (start != null) parts.add('Pickup ${_TimelyLine.when(start, now, withTime: true)}');
-      case 'bill':
-        if (start != null) parts.add('Due ${_TimelyLine.when(start, now)}');
-      default:
-        if (start != null) parts.add(_TimelyLine.when(start, now, withTime: true));
-    }
-    if (item.detail.isNotEmpty) parts.add(item.detail);
-    return parts.join(' · ');
+  /// "Due today", "Due Monday", "Due Nov 20".
+  static String _due(DateTime day, DateTime now) {
+    final w = dayWord(day, now, long: true);
+    return 'Due ${w == 'Today' || w == 'Tomorrow' || w == 'Yesterday' ? w.toLowerCase() : w}';
   }
+
+  /// "$16.58" out of "$16.58 due"; "" when the email named no amount.
+  static String _amount(String detail) => RegExp(r'^(.*\d.*?)(?:\s+due)?$').firstMatch(detail)?.group(1) ?? '';
+
+  /// The word a time goes by, for the kinds the rules find when the
+  /// assistant is off.
+  static String _verb(String type) => switch (type) {
+        'flight' || 'train' => 'Departs',
+        'hotel' => 'Check-in',
+        'car' => 'Pickup',
+        _ => '',
+      };
 
   void _dismiss(BuildContext context) {
     final db = ref.read(databaseProvider);
@@ -210,9 +191,8 @@ class _TimelyLineState extends ConsumerState<_TimelyLine> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final text = theme.textTheme;
+    final scheme = Theme.of(context).colorScheme;
+    final now = DateTime.now();
     final code = item.code;
     final url = item.actionUrl;
     final uri = url == null ? null : Uri.tryParse(url);
@@ -221,24 +201,58 @@ class _TimelyLineState extends ConsumerState<_TimelyLine> {
     // What the assistant says the email is about ("Amazon hard case"). A
     // sign-in code and a confirm-your-address email are known by who sent them.
     final named = item.type == 'code' || item.type == 'confirm' || item.messageId == null ? '' : (ref.watch(mailItemProvider(item.messageId!)).value?.reading?.thing ?? '');
-    final delivery = item.type == 'delivery';
-    // A delivery is headed by who it comes from, with what is in it in small
-    // print underneath. Anything else is headed by what it is.
-    final String title;
-    final String under;
-    String small = '';
-    if (item.type == 'confirm') {
-      title = 'Confirm your email address for ${item.title.isEmpty ? 'this sender' : item.title}';
-      under = _subtitle(DateTime.now());
-    } else if (delivery) {
-      title = item.title.isEmpty ? (named.isEmpty ? 'A delivery' : named) : item.title;
-      under = _subtitle(DateTime.now());
-      if (item.title.isNotEmpty) small = named;
-    } else {
-      title = named.isEmpty ? item.title : named;
-      under = [_subtitle(DateTime.now()), if (named.isNotEmpty && item.title.isNotEmpty) item.title].where((s) => s.isNotEmpty).join(' · ');
+    final sender = item.title;
+    final start = item.startsAt;
+
+    // The line: what it is, a smaller line under it, and on the right the
+    // day, time or amount, with one thing to press.
+    String title;
+    var under = '';
+    var top = '';
+    var bottom = '';
+    Color? topColor;
+    var steps = 0;
+    var showAction = canLaunch;
+    switch (item.type) {
+      case 'code':
+        title = code ?? sender;
+        final minutes = (item.hideAfter.difference(now).inSeconds / 60).ceil();
+        under = [if (sender.isNotEmpty) sender, if (minutes > 0) '$minutes minute${minutes == 1 ? '' : 's'} left'].join(' · ');
+      case 'confirm':
+        title = 'Confirm your email address';
+        under = 'for ${sender.isEmpty ? 'this sender' : sender}';
+      case 'delivery':
+        // Headed by what is in it, when the assistant could tell; who sent
+        // it and who carries it underneath.
+        final delivered = item.status == 'delivered';
+        final out = item.status == 'out-for-delivery';
+        title = named.isNotEmpty ? named : (sender.isNotEmpty ? sender : 'A delivery');
+        under = [if (out) 'Out for delivery', if (named.isNotEmpty && sender.isNotEmpty) sender, if (item.detail.isNotEmpty) item.detail].join(' · ');
+        steps = delivered ? 3 : (out ? 2 : 1);
+        if (delivered) {
+          top = 'Delivered';
+          topColor = okColor;
+          bottom = clockTime(item.mailAt ?? item.showFrom);
+          showAction = false;
+        } else if (out) {
+          top = 'Today';
+        } else if (start != null) {
+          top = dayWord(start, now);
+        }
+      case 'bill':
+        title = named.isEmpty ? sender : named;
+        top = _amount(item.detail);
+        under = [if (start != null) _due(start, now), if (top.isEmpty && item.detail.isNotEmpty && item.detail != 'Payment due') item.detail, if (named.isNotEmpty && sender.isNotEmpty) sender].join(' · ');
+      default:
+        title = named.isEmpty ? sender : named;
+        final verb = _verb(item.type);
+        under = [if (start != null && verb.isNotEmpty && item.detail != verb) verb, if (item.detail.isNotEmpty) item.detail, if (named.isNotEmpty && sender.isNotEmpty) sender].join(' · ');
+        if (start != null) {
+          top = dayWord(start, now);
+          if (start.hour != 0 || start.minute != 0) bottom = clockTime(start);
+        }
     }
-    final quiet = text.bodySmall!.copyWith(fontSize: 11.5, color: scheme.onSurfaceVariant);
+    final stage = switch (steps) { 3 => 'Delivered', 2 => 'Out for delivery', _ => 'On its way' };
     return MouseRegion(
       onEnter: (_) => setState(() => _over = true),
       onExit: (_) => setState(() => _over = false),
@@ -249,27 +263,56 @@ class _TimelyLineState extends ConsumerState<_TimelyLine> {
         onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _menu(context)),
         onLongPress: () => showItemMenu(context, lastPressAt, _menu(context)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 6, 2, 6),
+          padding: EdgeInsets.fromLTRB(widget.embedded ? 0 : 12, 10, 0, 10),
           child: Row(
             children: [
-              Icon(_icon(item.type), size: 20, color: scheme.primary),
-              const SizedBox(width: 10),
+              RowIcon(item.type == 'delivery' ? Icons.inventory_2_outlined : _icon(item.type)),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, key: ValueKey('timely-title-${item.id}'), maxLines: item.type == 'confirm' ? 2 : 1, overflow: TextOverflow.ellipsis, style: text.labelLarge),
-                    if (small.isNotEmpty) Text(small, key: ValueKey('timely-inside-${item.id}'), maxLines: 1, overflow: TextOverflow.ellipsis, style: quiet.copyWith(fontSize: 11)),
-                    if (under.isNotEmpty) Text(under, maxLines: 1, overflow: TextOverflow.ellipsis, style: quiet),
+                    Text(
+                      title,
+                      key: ValueKey('timely-title-${item.id}'),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      // A code is read off the screen and typed: larger, with even digits.
+                      style: item.type == 'code' && code != null ? rowTitle(context, strong: true).copyWith(fontSize: 16, letterSpacing: 1.4, fontFeatures: tabularFigures) : rowTitle(context),
+                    ),
+                    if (under.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(under, key: ValueKey('timely-under-${item.id}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: rowSmall(context))),
+                    // Where a package is: on its way, out for delivery, delivered.
+                    if (steps > 0)
+                      Semantics(
+                        key: ValueKey('timely-steps-${item.id}'),
+                        label: stage,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 7),
+                          child: Row(
+                            children: [
+                              for (var n = 0; n < 3; n++)
+                                Expanded(
+                                  child: Container(
+                                    height: 3,
+                                    margin: EdgeInsets.only(right: n < 2 ? 4 : 0),
+                                    decoration: BoxDecoration(color: n < steps ? (steps == 3 ? okColor : scheme.primary) : scheme.surfaceContainerHighest, borderRadius: BorderRadius.circular(2)),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
+              const SizedBox(width: 10),
               if (code != null)
-                TextButton.icon(
+                FilledButton.tonalIcon(
                   key: ValueKey('timely-copy-${item.id}'),
+                  style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
                   onPressed: () => copyTimelyCode(context, code),
                   icon: const Icon(Icons.content_copy_rounded, size: 16),
-                  label: Text(code, style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()])),
+                  label: const Text('Copy'),
                 )
               else if (canLaunch && item.type == 'confirm')
                 FilledButton.tonal(
@@ -278,11 +321,31 @@ class _TimelyLineState extends ConsumerState<_TimelyLine> {
                   onPressed: () => launchUrl(uri, mode: LaunchMode.externalApplication),
                   child: Text(item.actionLabel ?? 'Confirm'),
                 )
-              else if (canLaunch)
-                TextButton(
-                  key: ValueKey('timely-action-${item.id}'),
-                  onPressed: () => launchUrl(uri, mode: LaunchMode.externalApplication),
-                  child: Text(item.actionLabel ?? 'Open'),
+              else
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (top.isNotEmpty) Text(top, key: ValueKey('timely-when-${item.id}'), style: rowTitle(context).copyWith(fontFeatures: tabularFigures, color: topColor)),
+                    if (showAction)
+                      InkWell(
+                        key: ValueKey('timely-action-${item.id}'),
+                        borderRadius: BorderRadius.circular(8),
+                        onTap: () => launchUrl(uri!, mode: LaunchMode.externalApplication),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(6, 4, 0, 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(item.actionLabel ?? 'Open', style: rowSmall(context).copyWith(color: scheme.primary, fontWeight: FontWeight.w500)),
+                              Icon(Icons.chevron_right_rounded, size: 16, color: scheme.primary),
+                            ],
+                          ),
+                        ),
+                      )
+                    else if (bottom.isNotEmpty)
+                      Text(bottom, key: ValueKey('timely-at-${item.id}'), style: rowSmall(context).copyWith(fontFeatures: tabularFigures)),
+                  ],
                 ),
               // A small x, on a PC, that shows only while the mouse is over
               // the line. (A phone has the press-and-hold menu.)
@@ -297,9 +360,7 @@ class _TimelyLineState extends ConsumerState<_TimelyLine> {
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => _dismiss(context),
                   ),
-                )
-              else
-                const SizedBox(width: 8),
+                ),
             ],
           ),
         ),

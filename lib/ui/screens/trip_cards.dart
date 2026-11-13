@@ -17,6 +17,7 @@ import '../../store/database.dart';
 import '../../store/helper_queries.dart';
 import '../widgets/item_menu.dart';
 import 'chats/later_dialogs.dart';
+import 'page_type.dart';
 
 /// Travel legs and bookings the helper holds, as stored rows.
 final helperCardsProvider = StreamProvider<List<HelperCard>>((ref) => ref.watch(databaseProvider).watchHelperCards());
@@ -86,15 +87,19 @@ String tripLength(Duration d) => d.inHours > 0 ? '${d.inHours}h ${d.inMinutes % 
 
 /// The color a leg's heading and arc take: red when cancelled, yellow when
 /// delayed, green otherwise.
-Color tripColor(TripLeg l) => l.cancelled ? const Color(0xFFEF5350) : (l.delayed ? const Color(0xFFFFCA28) : const Color(0xFF43A047));
+Color tripColor(TripLeg l) => l.cancelled ? badColor : (l.delayed ? warnColor : okColor);
 
-/// The Travel card's lines: the first leg drawn large, with its airport
-/// codes and an arc between them; the rest as detailed, smaller and plain.
+/// The Travel card's lines. A leg is a compact boarding pass until two days
+/// before it leaves; then the first one is drawn large, with its airport
+/// codes and an arc between them. A delayed or cancelled leg is large at once.
 class TravelLegs extends ConsumerStatefulWidget {
   const TravelLegs({super.key, required this.legs});
   final List<TripLeg> legs;
 
   static const shownByDefault = 4;
+
+  /// Whether the leg at [index] of [legs] is drawn large at [now].
+  static bool large(List<TripLeg> legs, int index, DateTime now) => legs[index].delayed || legs[index].cancelled || (index == 0 && legs[index].closeAt(now));
 
   @override
   ConsumerState<TravelLegs> createState() => _TravelLegsState();
@@ -115,15 +120,21 @@ class _TravelLegsState extends ConsumerState<TravelLegs> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < shown.length; i++) ...[
-          if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.35)),
           InkWell(
             key: ValueKey('leg-${shown[i].key}'),
             onTap: () => unawaited(openEmailByMessageId(ref, shown[i].messageId)),
             child: Padding(
-              padding: EdgeInsets.fromLTRB(2, i == 0 ? 4 : 9, 4, 9),
-              // On a wide page the large leg keeps the width of a phone
-              // card, so its arc stays an arc.
-              child: i == 0 ? Align(alignment: Alignment.centerLeft, child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 540), child: _BigLeg(leg: shown[i], now: now))) : _SmallLeg(leg: shown[i], now: now),
+              padding: const EdgeInsets.fromLTRB(0, 11, 0, 10),
+              // On a wide page a leg keeps the width of a phone card, so its
+              // line stays a line and its arc an arc.
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 540),
+                  child: TravelLegs.large(shown, i, now) ? _BigLeg(key: ValueKey('leg-large-${shown[i].key}'), leg: shown[i], now: now) : _Pass(key: ValueKey('leg-pass-${shown[i].key}'), leg: shown[i], now: now),
+                ),
+              ),
             ),
           ),
         ],
@@ -138,8 +149,8 @@ class _TravelLegsState extends ConsumerState<TravelLegs> {
   }
 }
 
-/// The small heading over a leg: Confirmed, Upcoming, Checked in, Delayed,
-/// Cancelled.
+/// The small heading over a leg and its day: "UPCOMING · Mon, Nov 16". The
+/// state is green, yellow for a delay, red for a cancellation.
 class _Heading extends StatelessWidget {
   const _Heading({required this.leg, required this.now});
   final TripLeg leg;
@@ -147,12 +158,17 @@ class _Heading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final strong = leg.cancelled || leg.delayed;
-    return Text(
-      leg.headingAt(now).toUpperCase(),
-      key: ValueKey('leg-heading-${leg.key}'),
-      style: Theme.of(context).textTheme.labelSmall!.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w800, color: strong ? tripColor(leg) : scheme.onSurfaceVariant),
+    final label = sectionLabel(context);
+    final dep = leg.departs;
+    return Wrap(
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(leg.headingAt(now).toUpperCase(), key: ValueKey('leg-heading-${leg.key}'), style: label.copyWith(color: tripColor(leg))),
+        if (dep != null) ...[
+          Text(' · ', style: label),
+          Text(tripDay(dep), key: ValueKey('leg-day-${leg.key}'), style: label.copyWith(letterSpacing: 0.4)),
+        ],
+      ],
     );
   }
 }
@@ -179,7 +195,38 @@ class _Times extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(old, key: id == null ? null : ValueKey<String>('$id-was'), style: style.copyWith(decoration: TextDecoration.lineThrough, color: style.color?.withValues(alpha: 0.7))),
-        Text(current.isEmpty ? '–' : current, key: id == null ? null : ValueKey<String>(id!), style: style.copyWith(color: color, fontWeight: FontWeight.w800)),
+        Text(current.isEmpty ? '–' : current, key: id == null ? null : ValueKey<String>(id!), style: style.copyWith(color: color, fontWeight: FontWeight.w700)),
+      ],
+    );
+  }
+}
+
+/// When it leaves, on the left, and when it arrives, on the right (with the
+/// day, when that is a different one).
+class _TimesRow extends StatelessWidget {
+  const _TimesRow({required this.leg});
+  final TripLeg leg;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = tripColor(leg);
+    final dep = leg.departs;
+    final arr = leg.arrives;
+    final style = rowTitle(context).copyWith(fontWeight: FontWeight.w400, color: scheme.onSurfaceVariant, fontFeatures: tabularFigures, decoration: leg.cancelled ? TextDecoration.lineThrough : null);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: _Times(now: dep, was: leg.delayed ? leg.wasDeparts : null, style: style, color: color, id: 'leg-dep-${leg.key}')),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _Times(now: arr, was: leg.delayed ? leg.wasArrives : null, style: style, color: color, id: 'leg-arr-${leg.key}', end: true),
+              if (dep != null && arr != null && !dep.sameDay(arr)) Text(tripDay(arr), key: ValueKey('leg-nextday-${leg.key}'), style: rowSmall(context)),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -189,10 +236,15 @@ class _CheckIn extends StatelessWidget {
   const _CheckIn({required this.leg});
   final TripLeg leg;
 
+  static bool offered(TripLeg leg) {
+    final uri = Uri.tryParse(leg.checkInUrl);
+    return leg.state == 'checkin' && uri != null && (uri.scheme == 'https' || uri.scheme == 'http');
+  }
+
   @override
   Widget build(BuildContext context) {
-    final uri = Uri.tryParse(leg.checkInUrl);
-    if (leg.state != 'checkin' || uri == null || !(uri.scheme == 'https' || uri.scheme == 'http')) return const SizedBox.shrink();
+    if (!offered(leg)) return const SizedBox.shrink();
+    final uri = Uri.parse(leg.checkInUrl);
     return FilledButton.tonalIcon(
       key: ValueKey('leg-checkin-${leg.key}'),
       style: FilledButton.styleFrom(visualDensity: VisualDensity.compact),
@@ -203,9 +255,10 @@ class _CheckIn extends StatelessWidget {
   }
 }
 
-/// The first leg, drawn large.
-class _BigLeg extends StatelessWidget {
-  const _BigLeg({required this.leg, required this.now});
+/// A leg more than two days off, or any leg after the first: a compact
+/// boarding pass. Everything the large one says, in a third of the room.
+class _Pass extends StatelessWidget {
+  const _Pass({super.key, required this.leg, required this.now});
   final TripLeg leg;
   final DateTime now;
 
@@ -213,42 +266,20 @@ class _BigLeg extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
-    final quiet = scheme.onSurfaceVariant;
-    final color = tripColor(leg);
-    final dep = leg.departs;
-    final arr = leg.arrives;
-    final nextDay = dep != null && arr != null && !dep.sameDay(arr);
+    final label = sectionLabel(context);
+    final small = rowSmall(context);
     final length = leg.duration;
-    final codes = text.displaySmall!.copyWith(fontWeight: FontWeight.w400, height: 1.05, letterSpacing: 0.5, decoration: leg.cancelled ? TextDecoration.lineThrough : null);
-    final under = text.titleMedium!.copyWith(color: quiet, fontWeight: FontWeight.w400);
+    final codes = text.headlineMedium!.copyWith(fontSize: 30, fontWeight: FontWeight.w400, height: 1, letterSpacing: 0.3, color: leg.cancelled ? scheme.onSurfaceVariant : scheme.onSurface, decoration: leg.cancelled ? TextDecoration.lineThrough : null);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
             Expanded(child: _Heading(leg: leg, now: now)),
-            _CheckIn(leg: leg),
+            if (leg.number.isNotEmpty) Text(leg.number, key: ValueKey('leg-number-${leg.key}'), style: label.copyWith(letterSpacing: 0.4)),
           ],
         ),
-        const SizedBox(height: 4),
-        Text(leg.route, key: ValueKey('leg-route-${leg.key}'), style: text.titleLarge!.copyWith(fontWeight: FontWeight.w700, height: 1.2)),
-        const SizedBox(height: 4),
-        if (dep != null)
-          Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(tripDay(dep), key: ValueKey('leg-day-${leg.key}'), style: under),
-              if (dep.hasClock) ...[
-                Text('•', style: under),
-                _Times(now: dep, was: leg.delayed ? leg.wasDeparts : null, style: under, color: color),
-                Text('–', style: under),
-                _Times(now: arr, was: leg.delayed ? leg.wasArrives : null, style: under, color: color),
-                if (nextDay) Text('(${tripDay(arr)})', style: under),
-              ],
-            ],
-          ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -258,14 +289,8 @@ class _BigLeg extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Column(
                   children: [
-                    SizedBox(
-                      height: 36,
-                      child: CustomPaint(
-                        size: Size.infinite,
-                        painter: _ArcPainter(color: color, badge: scheme.onSurface, glyphColor: scheme.surface, train: leg.mode == 'train'),
-                      ),
-                    ),
-                    if (length != null) Text(tripLength(length), key: ValueKey('leg-length-${leg.key}'), style: text.titleSmall!.copyWith(color: quiet, fontWeight: FontWeight.w400)),
+                    SizedBox(height: 18, child: CustomPaint(size: Size.infinite, painter: _LinePainter(color: tripColor(leg), glyphColor: scheme.onSurface, train: leg.mode == 'train'))),
+                    if (length != null) Text(tripLength(length), key: ValueKey('leg-length-${leg.key}'), style: small.copyWith(fontSize: 10.5, height: 1.1)),
                   ],
                 ),
               ),
@@ -273,30 +298,102 @@ class _BigLeg extends StatelessWidget {
             Text(leg.toCode.isEmpty ? '–' : leg.toCode, key: ValueKey('leg-to-${leg.key}'), style: codes),
           ],
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 4),
+        _TimesRow(leg: leg),
+        const SizedBox(height: 6),
+        Text(leg.route, key: ValueKey('leg-route-${leg.key}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: small),
+        const SizedBox(height: 9),
+        const _DashRule(),
+        const SizedBox(height: 9),
+        _PassFoot(leg: leg),
+        if (_CheckIn.offered(leg)) Padding(padding: const EdgeInsets.only(top: 6), child: Align(alignment: Alignment.centerRight, child: _CheckIn(leg: leg))),
+      ],
+    );
+  }
+}
+
+/// The foot of a pass: who flies it on the left, the confirmation code on
+/// the right (it can be selected and copied).
+class _PassFoot extends StatelessWidget {
+  const _PassFoot({required this.leg});
+  final TripLeg leg;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final small = rowSmall(context);
+    return Row(
+      children: [
+        Expanded(child: Text(leg.carrier.isEmpty ? (leg.mode == 'train' ? 'Train' : 'Flight') : leg.carrier, key: ValueKey('leg-carrier-${leg.key}'), maxLines: 1, overflow: TextOverflow.ellipsis, style: small)),
+        const SizedBox(width: 10),
+        Text('Confirmation ', style: small),
+        SelectableText(leg.locator.isEmpty ? '–' : leg.locator, key: ValueKey('leg-conf-${leg.key}'), maxLines: 1, style: small.copyWith(color: scheme.onSurface, fontWeight: FontWeight.w500, letterSpacing: 0.6)),
+      ],
+    );
+  }
+}
+
+/// The first leg within two days of leaving, or one delayed or cancelled:
+/// drawn large.
+class _BigLeg extends StatelessWidget {
+  const _BigLeg({super.key, required this.leg, required this.now});
+  final TripLeg leg;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final color = tripColor(leg);
+    final length = leg.duration;
+    final codes = text.displaySmall!.copyWith(fontSize: 40, fontWeight: FontWeight.w400, height: 1, letterSpacing: 0.3, color: leg.cancelled ? scheme.onSurfaceVariant : scheme.onSurface, decoration: leg.cancelled ? TextDecoration.lineThrough : null);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _Times(now: dep, was: leg.delayed ? leg.wasDeparts : null, style: under, color: color, id: 'leg-dep-${leg.key}')),
-            Expanded(
-              child: Align(
-                alignment: Alignment.centerRight,
-                child: _Times(now: arr, was: leg.delayed ? leg.wasArrives : null, style: under, color: color, id: 'leg-arr-${leg.key}', end: true),
-              ),
-            ),
+            Expanded(child: _Heading(leg: leg, now: now)),
+            _CheckIn(leg: leg),
           ],
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 7),
+        Text(leg.route, key: ValueKey('leg-route-${leg.key}'), style: text.titleMedium!.copyWith(fontSize: 16, fontWeight: FontWeight.w700, height: 1.2, color: scheme.onSurface)),
+        const SizedBox(height: 12),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Text(leg.fromCode.isEmpty ? '–' : leg.fromCode, key: ValueKey('leg-from-${leg.key}'), style: codes),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  children: [
+                    SizedBox(
+                      height: 36,
+                      child: CustomPaint(
+                        size: Size.infinite,
+                        painter: _ArcPainter(color: color, badge: scheme.onSurface, glyphColor: scheme.surface, train: leg.mode == 'train'),
+                      ),
+                    ),
+                    if (length != null) Text(tripLength(length), key: ValueKey('leg-length-${leg.key}'), style: rowSmall(context)),
+                  ],
+                ),
+              ),
+            ),
+            Text(leg.toCode.isEmpty ? '–' : leg.toCode, key: ValueKey('leg-to-${leg.key}'), style: codes),
+          ],
+        ),
+        const SizedBox(height: 8),
+        _TimesRow(leg: leg),
+        const SizedBox(height: 12),
+        const _DashRule(),
+        const SizedBox(height: 11),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(padding: const EdgeInsets.only(top: 6, right: 12), child: Icon(Icons.tag_rounded, size: 22, color: quiet)),
-            Expanded(
-              child: _Pair(top: 'Confirmation', bottom: leg.locator.isEmpty ? '–' : leg.locator, id: 'leg-conf-${leg.key}'),
-            ),
-            Expanded(
-              child: _Pair(top: leg.carrier.isEmpty ? (leg.mode == 'train' ? 'Train' : 'Flight') : leg.carrier, bottom: leg.number.isEmpty ? '–' : leg.number, id: 'leg-number-${leg.key}'),
-            ),
+            Expanded(child: _Pair(top: 'Confirmation', bottom: leg.locator.isEmpty ? '–' : leg.locator, id: 'leg-conf-${leg.key}')),
+            const SizedBox(width: 10),
+            Expanded(child: _Pair(top: leg.carrier.isEmpty ? (leg.mode == 'train' ? 'Train' : 'Flight') : leg.carrier, bottom: leg.number.isEmpty ? '–' : leg.number, id: 'leg-number-${leg.key}')),
           ],
         ),
       ],
@@ -304,6 +401,7 @@ class _BigLeg extends StatelessWidget {
   }
 }
 
+/// A small label with its value under it, at the foot of the large leg.
 class _Pair extends StatelessWidget {
   const _Pair({required this.top, required this.bottom, required this.id});
   final String top;
@@ -312,87 +410,77 @@ class _Pair extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(top, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.titleSmall!.copyWith(fontWeight: FontWeight.w700)),
-        SelectableText(bottom, key: ValueKey(id), maxLines: 1, style: text.titleSmall!.copyWith(color: scheme.onSurfaceVariant, fontWeight: FontWeight.w400)),
+        Text(top.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: sectionLabel(context).copyWith(letterSpacing: 0.8)),
+        const SizedBox(height: 1),
+        SelectableText(bottom, key: ValueKey(id), maxLines: 1, style: rowTitle(context).copyWith(letterSpacing: 0.4)),
       ],
     );
   }
 }
 
-/// A leg after the first: every detail the first has, smaller and plain.
-class _SmallLeg extends StatelessWidget {
-  const _SmallLeg({required this.leg, required this.now});
-  final TripLeg leg;
-  final DateTime now;
+/// A thin dashed rule, like the tear line on a pass.
+class _DashRule extends StatelessWidget {
+  const _DashRule();
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final quiet = text.bodySmall!.copyWith(color: scheme.onSurfaceVariant);
-    final color = tripColor(leg);
-    final dep = leg.departs;
-    final arr = leg.arrives;
-    final nextDay = dep != null && arr != null && !dep.sameDay(arr);
-    final length = leg.duration;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 2, right: 10),
-          child: Icon(leg.mode == 'train' ? Icons.train_outlined : Icons.flight_rounded, size: 18, color: color),
-        ),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _Heading(leg: leg, now: now),
-              const SizedBox(height: 1),
-              Text(
-                '${leg.fromCode.isEmpty ? '–' : leg.fromCode} → ${leg.toCode.isEmpty ? '–' : leg.toCode} · ${leg.route}',
-                key: ValueKey('leg-route-${leg.key}'),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: text.labelLarge!.copyWith(decoration: leg.cancelled ? TextDecoration.lineThrough : null),
-              ),
-              if (dep != null)
-                Wrap(
-                  spacing: 5,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(tripDay(dep), key: ValueKey('leg-day-${leg.key}'), style: quiet),
-                    if (dep.hasClock) ...[
-                      Text('·', style: quiet),
-                      _Times(now: dep, was: leg.delayed ? leg.wasDeparts : null, style: quiet, color: color, id: 'leg-dep-${leg.key}'),
-                      Text('–', style: quiet),
-                      _Times(now: arr, was: leg.delayed ? leg.wasArrives : null, style: quiet, color: color, id: 'leg-arr-${leg.key}'),
-                      if (nextDay) Text('(${tripDay(arr)})', style: quiet),
-                    ],
-                    if (length != null) Text('· ${tripLength(length)}', key: ValueKey('leg-length-${leg.key}'), style: quiet),
-                  ],
-                ),
-              Text(
-                [
-                  [leg.carrier, leg.number].where((s) => s.isNotEmpty).join(' '),
-                  if (leg.locator.isNotEmpty) 'Confirmation ${leg.locator}',
-                ].where((s) => s.isNotEmpty).join(' · '),
-                key: ValueKey('leg-number-${leg.key}'),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: quiet,
-              ),
-            ],
-          ),
-        ),
-        _CheckIn(leg: leg),
-      ],
-    );
+  Widget build(BuildContext context) => SizedBox(height: 1, child: CustomPaint(size: Size.infinite, painter: _DashPainter(Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.16))));
+}
+
+class _DashPainter extends CustomPainter {
+  const _DashPainter(this.color);
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1;
+    for (var x = 0.0; x < size.width; x += 7) {
+      canvas.drawLine(Offset(x, 0.5), Offset(math.min(x + 4, size.width), 0.5), paint);
+    }
   }
+
+  @override
+  bool shouldRepaint(_DashPainter old) => old.color != color;
+}
+
+/// A straight dashed line from one airport code to the other, ending in a
+/// plane (or a train).
+class _LinePainter extends CustomPainter {
+  const _LinePainter({required this.color, required this.glyphColor, required this.train});
+  final Color color;
+  final Color glyphColor;
+  final bool train;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final y = size.height / 2;
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    final stop = size.width - 20;
+    for (var x = 1.0; x < stop; x += 11) {
+      canvas.drawLine(Offset(x, y), Offset(math.min(x + 5, stop), y), paint);
+    }
+    final icon = train ? Icons.train_rounded : Icons.flight_rounded;
+    final glyph = TextPainter(
+      text: TextSpan(text: String.fromCharCode(icon.codePoint), style: TextStyle(fontFamily: icon.fontFamily, package: icon.fontPackage, fontSize: 18, color: glyphColor)),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    canvas.save();
+    canvas.translate(size.width - 9, y);
+    // A plane pointing the way it is going.
+    if (!train) canvas.rotate(math.pi / 2);
+    glyph.paint(canvas, Offset(-glyph.width / 2, -glyph.height / 2));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(_LinePainter old) => old.color != color || old.glyphColor != glyphColor || old.train != train;
 }
 
 /// A dashed arc from one airport code to the other, ending in a small
@@ -415,11 +503,11 @@ class _ArcPainter extends CustomPainter {
     final paint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4
+      ..strokeWidth = 3.2
       ..strokeCap = StrokeCap.round;
     for (final metric in path.computeMetrics()) {
-      const dash = 12.0;
-      const gap = 9.0;
+      const dash = 11.0;
+      const gap = 8.0;
       var at = 0.0;
       while (at < metric.length) {
         canvas.drawPath(metric.extractPath(at, math.min(at + dash, metric.length)), paint);
@@ -470,7 +558,7 @@ class _BookingLinesState extends ConsumerState<BookingLines> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (var i = 0; i < shown.length; i++) ...[
-          if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)),
+          if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.35)),
           _BookingLine(key: ValueKey('booking-line-${shown[i].$1.k}'), row: shown[i].$1, booking: shown[i].$2),
         ],
         if (hidden > 0 || _all && items.length > BookingLines.shownByDefault)
@@ -518,16 +606,22 @@ class _BookingLineState extends ConsumerState<_BookingLine> {
         _ => b.name.isEmpty ? b.typeName : b.name,
       };
 
-  /// When, in the words that fit what it is.
+  /// A stay or a rental runs over days: its line gives both ends in full,
+  /// and the right of the line gives the days ("Mon", "to Wed").
+  bool get _spans => b.type == 'hotel' || b.type == 'car_rental';
+
+  /// When, in the words that fit what it is. For anything with one start,
+  /// the day and time are on the right of the line, so this holds only what
+  /// that leaves out.
   String get _times {
     final from = _when(b.starts);
     final to = _when(b.ends);
     return switch (b.type) {
       'hotel' => [if (from.isNotEmpty) 'Check-in $from', if (to.isNotEmpty) 'Check-out $to'].join(' · '),
       'car_rental' => [if (from.isNotEmpty) 'Pick-up $from', if (to.isNotEmpty) 'Drop-off $to'].join(' · '),
-      'car_service' => from.isEmpty ? '' : 'Pick-up $from',
-      'restaurant' => [if (from.isNotEmpty) from, if (b.party.isNotEmpty) 'Party of ${b.party}'].join(' · '),
-      _ => [if (from.isNotEmpty) from, if (to.isNotEmpty && b.ends != null && b.starts != null && b.ends!.sameDay(b.starts!)) 'until ${tripClock(b.ends)}'].join(' '),
+      'car_service' => b.starts == null ? '' : 'Pick-up ${tripDay(b.starts!)}',
+      'restaurant' => [if (b.starts != null) tripDay(b.starts!), if (b.party.isNotEmpty) 'Party of ${b.party}'].join(' · '),
+      _ => [if (b.starts != null) tripDay(b.starts!), if (to.isNotEmpty && b.ends != null && b.starts != null && b.ends!.sameDay(b.starts!)) 'until ${tripClock(b.ends)}'].join(' '),
     };
   }
 
@@ -573,13 +667,18 @@ class _BookingLineState extends ConsumerState<_BookingLine> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    final quiet = text.bodySmall!.copyWith(fontSize: 11.5, color: scheme.onSurfaceVariant);
+    final small = rowSmall(context);
     final touch = ref.watch(isTouchDeviceProvider);
-    final heading = b.headingAt(DateTime.now());
+    final now = DateTime.now();
+    final heading = b.headingAt(now);
     final times = _times;
     final rest = _rest;
+    // On the right: the time it starts with its day under it (only the day
+    // when no time is known); for a stay or a rental, its days.
+    final starts = b.starts;
+    final day = starts == null ? '' : dayWord(starts.wall, now);
+    final top = starts == null ? '' : (starts.hasClock && !_spans ? tripClock(starts) : day);
+    final bottom = starts == null ? '' : (_spans ? (b.ends == null ? '' : 'to ${dayWord(b.ends!.wall, now)}') : (starts.hasClock ? day : ''));
     return MouseRegion(
       onEnter: (_) => setState(() => _over = true),
       onExit: (_) => setState(() => _over = false),
@@ -590,26 +689,38 @@ class _BookingLineState extends ConsumerState<_BookingLine> {
         onSecondaryTapUp: (d) => showItemMenu(context, d.globalPosition, _menu(context)),
         onLongPress: () => showItemMenu(context, lastPressAt, _menu(context)),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(2, 8, 0, 8),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(padding: const EdgeInsets.only(top: 2, right: 10), child: Icon(_icon(b.type), size: 20, color: b.cancelled ? const Color(0xFFEF5350) : scheme.primary)),
+              Padding(padding: const EdgeInsets.only(top: 1), child: RowIcon(_icon(b.type), color: b.cancelled ? badColor : null)),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${b.typeName} · $heading'.toUpperCase(),
-                      key: ValueKey('booking-heading-$k'),
-                      style: text.labelSmall!.copyWith(letterSpacing: 0.8, fontWeight: FontWeight.w800, color: b.cancelled ? const Color(0xFFEF5350) : scheme.onSurfaceVariant),
-                    ),
-                    Text(_title, key: ValueKey('booking-title-$k'), maxLines: 2, overflow: TextOverflow.ellipsis, style: text.labelLarge!.copyWith(decoration: b.cancelled ? TextDecoration.lineThrough : null)),
-                    if (times.isNotEmpty) Text(times, key: ValueKey('booking-when-$k'), maxLines: 3, overflow: TextOverflow.ellipsis, style: quiet),
-                    if (rest.isNotEmpty) Text(rest, key: ValueKey('booking-rest-$k'), maxLines: 4, overflow: TextOverflow.ellipsis, style: quiet),
+                    // Said only when it is news: just confirmed, changed, cancelled.
+                    if (heading != 'Upcoming')
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 2),
+                        child: Text(heading.toUpperCase(), key: ValueKey('booking-heading-$k'), style: sectionLabel(context, color: b.cancelled ? badColor : null)),
+                      ),
+                    Text(_title, key: ValueKey('booking-title-$k'), maxLines: 2, overflow: TextOverflow.ellipsis, style: rowTitle(context).copyWith(decoration: b.cancelled ? TextDecoration.lineThrough : null)),
+                    if (times.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 2), child: Text(times, key: ValueKey('booking-when-$k'), maxLines: 3, overflow: TextOverflow.ellipsis, style: small)),
+                    if (rest.isNotEmpty) Text(rest, key: ValueKey('booking-rest-$k'), maxLines: 4, overflow: TextOverflow.ellipsis, style: small),
                   ],
                 ),
               ),
+              if (top.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(top, key: ValueKey('booking-at-$k'), style: rowTitle(context).copyWith(fontFeatures: tabularFigures, decoration: b.cancelled ? TextDecoration.lineThrough : null)),
+                    if (bottom.isNotEmpty) Text(bottom, key: ValueKey('booking-day-$k'), style: small),
+                  ],
+                ),
+              ],
               if (!touch)
                 Opacity(
                   opacity: _over ? 1 : 0,
@@ -621,9 +732,7 @@ class _BookingLineState extends ConsumerState<_BookingLine> {
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => _dismiss(context),
                   ),
-                )
-              else
-                const SizedBox(width: 8),
+                ),
             ],
           ),
         ),

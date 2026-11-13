@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:convomail/app/conversation_state.dart';
 import 'package:convomail/app/destinations.dart';
 import 'package:convomail/domain/classifier.dart';
@@ -12,6 +14,7 @@ import 'package:convomail/store/people_queries.dart';
 import 'package:convomail/store/planner_queries.dart';
 import 'package:convomail/store/settings_store.dart';
 import 'package:convomail/store/sync_queries.dart';
+import 'package:convomail/sync/calendar_sync.dart';
 import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/chats/people_list_pane.dart';
@@ -273,12 +276,35 @@ void main() {
       for (final id in ['needs-you', 'good-to-know', 'waiting-on', 'fyi', 'later', 'done']) {
         expect(find.byKey(ValueKey('today-$id')), findsNothing, reason: id);
       }
-      for (final title in ['Needs you', 'Good to know', 'Waiting on', 'FYI', 'Later', 'Done']) {
+      for (final title in ['NEEDS YOU', 'GOOD TO KNOW', 'WAITING ON', 'FYI', 'LATER', 'DONE']) {
         expect(find.text(title), findsNothing, reason: title);
       }
+      // A page with nothing on it says so, and says what will show.
+      expect(find.descendant(of: find.byKey(const ValueKey('today-quiet')), matching: find.text('A quiet day.')), findsOneWidget);
+      expect(find.textContaining('Trips, deliveries and payments show here'), findsOneWidget);
       expect(tester.getTopLeft(find.byKey(const ValueKey('today-date'))).dy, lessThan(40), reason: 'a short page starts at the top, not in the middle');
       // With nothing on the left, Schedule does not sit alone on the right of an empty page.
       expect(tester.getTopLeft(find.byKey(const ValueKey('today-schedule'))).dx, closeTo(tester.getTopLeft(find.byKey(const ValueKey('today-date'))).dx, 1));
+      await teardown(tester);
+    });
+
+    testWidgets('Schedule with a calendar connected: one quiet line when the day is empty, a card with the times on the right when it is not', (tester) async {
+      await db.putSetting(CalendarSync.calendarsKey, jsonEncode([const GoogleCalendarInfo(id: 'work', name: 'Work', color: 0xFF4285F4, writable: true, primary: true).toJson()]));
+      await pumpApp(tester);
+      expect(find.byKey(const ValueKey('today-schedule')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-schedule-empty'))).data, 'Nothing on your calendar today.');
+      expect(find.byKey(const ValueKey('today-card-schedule')), findsNothing, reason: 'a line, not a card');
+      expect(find.byKey(const ValueKey('today-quiet')), findsOneWidget);
+
+      final now = DateTime.now();
+      final at = DateTime(now.year, now.month, now.day, 23, 30);
+      final id = await db.into(db.plannerEvents).insert(PlannerEventsCompanion.insert(title: 'Call with the label', kind: 'google', startAt: Value(at), endAt: Value(at.add(const Duration(minutes: 20)))));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-card-schedule')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-schedule-empty')), findsNothing);
+      expect(find.byKey(const ValueKey('today-quiet')), findsNothing, reason: 'not a quiet day with something on the calendar');
+      final row = find.byKey(ValueKey('today-event-$id'));
+      expect(tester.getTopLeft(find.descendant(of: row, matching: find.text('11:30 PM'))).dx, greaterThan(tester.getTopRight(find.descendant(of: row, matching: find.text('Call with the label'))).dx), reason: 'the time is on the right');
       await teardown(tester);
     });
 
@@ -286,9 +312,11 @@ void main() {
       got('sarah@x.com', 'Sarah Chen', 'Hello', ago(days: 2));
       await pumpApp(tester);
       expect(find.byKey(const ValueKey('today-later')), findsNothing);
+      expect(find.byKey(const ValueKey('today-quiet')), findsOneWidget);
       await db.snoozeRow('c:sarah@x.com', DateTime.now().add(const Duration(days: 2)));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('today-later')), findsOneWidget);
+      expect(find.byKey(const ValueKey('today-quiet')), findsNothing, reason: 'the page has something on it');
       await tester.tap(find.byKey(const ValueKey('later-back-c:sarah@x.com')));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('today-later')), findsNothing);

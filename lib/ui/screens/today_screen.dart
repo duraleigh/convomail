@@ -32,6 +32,7 @@ import 'chats/people_list_pane.dart' show relativeTime;
 import 'chats/thread_view_panel.dart';
 import 'chats/timely_strip.dart';
 import 'mail/mail_widgets.dart' show openMail, putOffFocusMail;
+import 'page_type.dart';
 import 'trip_cards.dart';
 
 /// Today's calendar events, in the calendars the user shows.
@@ -51,6 +52,20 @@ final doneTodayProvider = StreamProvider<List<DoneItem>>((ref) => ref.watch(data
 /// The front page: the day in cards. Needs you (filled once the assistant
 /// is connected), who the user is waiting on, the day's calendar, a few
 /// things worth a glance, what was put off, and what is done.
+/// Whether the Précis page is being moved under a finger. The phone's write
+/// button steps out of the way while it is, and comes back when it rests.
+final pageMovingProvider = NotifierProvider<PageMoving, bool>(PageMoving.new);
+
+class PageMoving extends Notifier<bool> {
+  @override
+  bool build() => false;
+  void set(bool moving) {
+    // The page can be let go of after the app itself has closed.
+    if (!ref.mounted) return;
+    if (state != moving) state = moving;
+  }
+}
+
 class TodayScreen extends ConsumerStatefulWidget {
   const TodayScreen({super.key});
 
@@ -60,12 +75,30 @@ class TodayScreen extends ConsumerStatefulWidget {
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
   late final OpenThreadNotifier _openThread;
+  late final PageMoving _moving;
   Timer? _tick;
+  Timer? _rest;
+
+  /// How long the page must lie still before the write button comes back.
+  static const _restAfter = Duration(milliseconds: 700);
+
+  bool _onScroll(ScrollNotification n) {
+    if (n.depth != 0) return false;
+    if (n is ScrollUpdateNotification && n.dragDetails != null || n is ScrollStartNotification && n.dragDetails != null) {
+      _rest?.cancel();
+      _moving.set(true);
+    } else if (n is ScrollEndNotification) {
+      _rest?.cancel();
+      _rest = Timer(_restAfter, () => _moving.set(false));
+    }
+    return false;
+  }
 
   @override
   void initState() {
     super.initState();
     _openThread = ref.read(openThreadProvider.notifier);
+    _moving = ref.read(pageMovingProvider.notifier);
     // Opening Today brings the calendar up to date.
     unawaited(ref.read(calendarSyncProvider).syncNow().catchError((Object _) {}));
     // Times on the page ("in 2 hours", what has passed) move with the clock.
@@ -77,9 +110,14 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   @override
   void dispose() {
     _tick?.cancel();
+    _rest?.cancel();
     // An email opened here does not follow the user to Chats.
     final notifier = _openThread;
-    Future.microtask(notifier.close);
+    final moving = _moving;
+    Future.microtask(() {
+      notifier.close();
+      moving.set(false);
+    });
     super.dispose();
   }
 
@@ -108,6 +146,19 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     // in the whole left column, the right column is the page.
     final leftHasSomething =
         (ref.watch(focusMailProvider).value ?? const <MailItem>[]).isNotEmpty || _goodToKnowItems(ref).isNotEmpty || (ref.watch(waitingOnProvider).value ?? const <WaitingItem>[]).isNotEmpty;
+    // Nothing on the whole page, and nothing on the calendar: it says so,
+    // and says what will show here.
+    final cards = ref.watch(helperCardsProvider).value ?? const <HelperCard>[];
+    final assistant = ref.watch(readingsShownProvider).value ?? false;
+    final today = DateTime(now.year, now.month, now.day);
+    final quiet = !leftHasSomething &&
+        timelyDue(ref.watch(timelyItemsProvider).value ?? const [], now).isEmpty &&
+        (!assistant || (travelNow(cards, now).isEmpty && bookingsNow(cards, now).isEmpty)) &&
+        (ref.watch(laterRowsProvider).value ?? const <LaterRow>[]).isEmpty &&
+        (ref.watch(openRemindersProvider).value ?? const <Reminder>[]).isEmpty &&
+        (ref.watch(focusLaterProvider).value ?? const <MailItem>[]).isEmpty &&
+        (ref.watch(doneTodayProvider).value ?? const <DoneItem>[]).isEmpty &&
+        !(ref.watch(todayEventsProvider).value ?? const <PlannerEvent>[]).any((e) => e.startAt != null && (e.allDay ? allDayCovers(e, today) : true));
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -126,9 +177,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           children: [
             // Fills its area, so a short page starts at the top.
             Positioned.fill(
-              child: SingleChildScrollView(
+              child: NotificationListener<ScrollNotification>(
+                onNotification: phone ? _onScroll : null,
+                child: SingleChildScrollView(
                 key: const PageStorageKey('today-scroll'),
-                padding: const EdgeInsets.fromLTRB(24, 14, 16, 24),
+                // On a phone the last card clears the write button.
+                padding: phone ? const EdgeInsets.fromLTRB(18, 12, 18, 88) : const EdgeInsets.fromLTRB(24, 14, 16, 24),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -193,8 +247,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
                       ...left,
                       ...right,
                     ],
+                    if (quiet) const _QuietDay(),
                   ],
                 ),
+              ),
               ),
             ),
             // An email opened from a line slides in over the page from the
@@ -212,6 +268,39 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 }
 
+/// A page with nothing on it says so, and says what will show.
+class _QuietDay extends StatelessWidget {
+  const _QuietDay();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      key: const ValueKey('today-quiet'),
+      padding: const EdgeInsets.fromLTRB(24, 72, 24, 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: Column(
+            children: [
+              Icon(Icons.wb_twilight_rounded, size: 44, color: scheme.surfaceContainerHighest),
+              const SizedBox(height: 10),
+              Text('A quiet day.', style: text.titleMedium!.copyWith(fontSize: 19, fontWeight: FontWeight.w500, color: scheme.onSurface)),
+              const SizedBox(height: 6),
+              Text(
+                'Nothing needs your attention right now. Trips, deliveries and payments show here when there are any.',
+                textAlign: TextAlign.center,
+                style: rowTitle(context).copyWith(fontWeight: FontWeight.w400, height: 1.5, color: scheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// What "Good to know" lists now: nothing while the assistant is off, and
 /// never what FYI already lists.
 List<MailItem> _goodToKnowItems(WidgetRef ref) {
@@ -223,76 +312,71 @@ List<MailItem> _goodToKnowItems(WidgetRef ref) {
   ];
 }
 
-/// One card on Today: an icon, a title, a count, then its lines. A card with
-/// no lines is not drawn at all, unless it is [alwaysShown] (Schedule).
+/// One group on the page: a small label (an icon, its name, how many), then
+/// its lines on a quiet card. A group with no lines is not drawn at all,
+/// unless it is [alwaysShown].
 class _Section extends StatelessWidget {
-  const _Section({required this.id, required this.icon, required this.color, required this.title, required this.children, this.count, this.empty, this.alwaysShown = false, this.alarm});
+  const _Section({required this.id, required this.icon, required this.title, required this.children, this.count, this.empty, this.alwaysShown = false, this.alarm, this.labelColor});
   final String id;
   final IconData icon;
-  final Color color;
   final String title;
   final int? count;
   final List<Widget> children;
 
-  /// What to say when there are no lines, on a card that is [alwaysShown].
+  /// What to say when there are no lines, on a group that is [alwaysShown].
   final String? empty;
   final bool alwaysShown;
 
   /// The whole card takes this color to draw the eye: yellow for a delay,
-  /// red for a cancellation.
+  /// red for a cancellation. Nothing else on the page is colored.
   final Color? alarm;
+
+  /// The label's own color (Needs you keeps its pink); gray otherwise.
+  final Color? labelColor;
 
   @override
   Widget build(BuildContext context) {
     if (children.isEmpty && !alwaysShown) return const SizedBox.shrink();
     final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
+    final tone = alarm ?? labelColor ?? scheme.onSurfaceVariant;
+    final label = sectionLabel(context, color: tone);
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpace.md),
-      child: Material(
-        key: ValueKey('today-$id'),
-        color: alarm == null ? scheme.surfaceContainerLowest : Color.alphaBlend(alarm!.withValues(alpha: 0.22), scheme.surfaceContainerLowest),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppShapes.lgIncreased),
-          side: alarm == null ? BorderSide.none : BorderSide(color: alarm!, width: 2),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
+      key: ValueKey('today-$id'),
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 6, 7),
+            child: Row(
+              children: [
+                Icon(icon, size: 15, color: tone),
+                const SizedBox(width: 7),
+                Expanded(child: Text(title.toUpperCase(), key: ValueKey('today-label-$id'), style: label)),
+                if (count != null && count! > 0) Text('$count', key: ValueKey('today-count-$id'), style: label.copyWith(letterSpacing: 0)),
+              ],
+            ),
+          ),
+          Material(
+            key: ValueKey('today-card-$id'),
+            color: alarm == null ? scheme.surfaceContainerLowest : Color.alphaBlend(alarm!.withValues(alpha: 0.2), scheme.surfaceContainerLowest),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppShapes.lgIncreased),
+              side: alarm == null ? BorderSide.none : BorderSide(color: alarm!, width: 1.5),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(color: color.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(AppShapes.sm)),
-                    child: Icon(icon, size: 17, color: color),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(title, style: text.titleMedium!.copyWith(fontWeight: FontWeight.w700)),
-                  ),
-                  if (count != null && count! > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 1),
-                      decoration: BoxDecoration(color: scheme.surfaceContainerHigh, borderRadius: BorderRadius.circular(AppShapes.full)),
-                      child: Text('$count', style: text.labelMedium!.copyWith(color: scheme.onSurfaceVariant)),
-                    ),
-                  const SizedBox(width: 4),
+                  if (children.isEmpty && empty != null) Padding(padding: const EdgeInsets.symmetric(vertical: 10), child: Text(empty!, style: rowSmall(context))),
+                  for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.35)), children[i]],
                 ],
               ),
-              const SizedBox(height: 6),
-              if (children.isEmpty && empty != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(2, 4, 4, 8),
-                  child: Text(empty!, style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
-                ),
-              for (var i = 0; i < children.length; i++) ...[if (i > 0) Divider(height: 1, color: scheme.outlineVariant.withValues(alpha: 0.4)), children[i]],
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -416,9 +500,9 @@ class _UpToDateState extends ConsumerState<_UpToDate> {
 
 String _clock(DateTime t) => clockTime(t.toLocal());
 
-/// The one sentence at the top of the page, written by the assistant from
-/// the lines below it, with a small star so it is plain who wrote it, and
-/// when it was written.
+/// The one sentence at the top of the page ("The Lede"), written by the
+/// assistant from the lines below it: white words beside a thin line, with
+/// its label, when it was written, and an x to put it away.
 class _Sentence extends ConsumerWidget {
   const _Sentence();
 
@@ -431,28 +515,33 @@ class _Sentence extends ConsumerWidget {
     final now = DateTime.now();
     final sameDay = s.at.year == now.year && s.at.month == now.month && s.at.day == now.day;
     return Padding(
-      padding: const EdgeInsets.only(top: AppSpace.md),
+      padding: const EdgeInsets.only(top: 12),
       child: Container(
         key: const ValueKey('today-sentence'),
-        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
-        decoration: BoxDecoration(color: scheme.primaryContainer.withValues(alpha: 0.38), borderRadius: BorderRadius.circular(AppShapes.lgIncreased)),
+        decoration: BoxDecoration(border: Border(left: BorderSide(color: scheme.primary, width: 3))),
+        padding: const EdgeInsets.fromLTRB(13, 1, 0, 2),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(padding: const EdgeInsets.only(top: 3), child: Icon(Icons.auto_awesome_rounded, size: 18, color: scheme.primary)),
-            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('The Lede', key: const ValueKey('today-sentence-label'), style: text.labelMedium!.copyWith(color: scheme.primary, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
-                  const SizedBox(height: 2),
-                  Text(timesInText(s.text), key: const ValueKey('today-sentence-text'), style: text.titleMedium!.copyWith(height: 1.35, fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, size: 14, color: scheme.primary),
+                      const SizedBox(width: 6),
+                      Text('THE LEDE', key: const ValueKey('today-sentence-label'), style: sectionLabel(context, color: scheme.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  Text(timesInText(s.text), key: const ValueKey('today-sentence-text'), style: text.titleMedium!.copyWith(fontSize: 16, height: 1.36, fontWeight: FontWeight.w400, color: scheme.onSurface)),
+                  const SizedBox(height: 5),
                   Text(
                     'Written ${sameDay ? _clock(s.at) : 'on ${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][s.at.month - 1]} ${s.at.day} at ${_clock(s.at)}'}${s.after > 0 ? ', after ${s.after} new email${s.after == 1 ? '' : 's'}' : ''}',
                     key: const ValueKey('today-sentence-when'),
-                    style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                    style: rowSmall(context),
                   ),
                 ],
               ),
@@ -462,7 +551,7 @@ class _Sentence extends ConsumerWidget {
               key: const ValueKey('today-sentence-dismiss'),
               tooltip: 'Dismiss',
               visualDensity: VisualDensity.compact,
-              icon: Icon(Icons.close_rounded, size: 20, color: scheme.onSurfaceVariant),
+              icon: Icon(Icons.close_rounded, size: 18, color: scheme.onSurfaceVariant),
               onPressed: () {
                 final db = ref.read(databaseProvider);
                 final messenger = ScaffoldMessenger.of(context);
@@ -484,20 +573,20 @@ class _Sentence extends ConsumerWidget {
   }
 }
 
-/// The emails in Focus, in full: what to do in bold, why, who and which
-/// email, a "by" time when there is one, and Done and Later on the line.
+/// The emails in Focus: what to do in bold; who it is from, by when, and
+/// why on the line under it; then Done and Later.
 class _NeedsYou extends ConsumerWidget {
   const _NeedsYou();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
+    final small = rowSmall(context);
     final items = ref.watch(focusMailProvider).value ?? const <MailItem>[];
     return _Section(
       id: 'needs-you',
       icon: Icons.bolt_rounded,
-      color: focusColor,
+      labelColor: focusColor,
       title: 'Needs you',
       count: items.length,
       children: [
@@ -513,31 +602,37 @@ class _NeedsYou extends ConsumerWidget {
               ref.read(destinationProvider.notifier).select(Destination.focus, fromToday: true);
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
+              padding: const EdgeInsets.symmetric(vertical: 10),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Padding(padding: const EdgeInsets.only(top: 2), child: TonalAvatar(identityKey: i.senderKey, name: i.senderName, size: 32)),
-                  const SizedBox(width: 10),
+                  Padding(padding: const EdgeInsets.only(top: 1), child: TonalAvatar(identityKey: i.senderKey, name: i.senderName, size: 34)),
+                  const SizedBox(width: 11),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // What to do, in bold; then why; then who and which email.
-                        Text(i.ask, maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w700)),
-                        if ((i.reading?.line ?? '').isNotEmpty && i.reading!.line != i.ask)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 1),
-                            child: Text(i.reading!.line, key: ValueKey('needs-why-${i.id}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
-                          ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            '${i.senderName} · ${i.subject.isEmpty ? '(no subject)' : i.subject}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
-                          ),
+                        // What to do, in bold.
+                        Text(i.ask, maxLines: 2, overflow: TextOverflow.ellipsis, style: rowTitle(context, strong: true)),
+                        const SizedBox(height: 2),
+                        // Who, by when, and why, sharing a line when they fit.
+                        Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(i.senderName, key: ValueKey('needs-who-${i.id}'), maxLines: 1, overflow: TextOverflow.ellipsis, style: small),
+                            if (i.reading?.due != null) ...[
+                              Text(' · ', style: small),
+                              Text(
+                                'by ${dueLabel(i.reading!.due!)}',
+                                key: ValueKey('needs-by-${i.id}'),
+                                style: small.copyWith(color: i.reading!.due!.isBefore(DateTime.now()) ? scheme.error : const Color(0xFFFFB74D), fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                            if ((i.reading?.line ?? '').isNotEmpty && i.reading!.line != i.ask) ...[
+                              Text(' · ', style: small),
+                              Text(i.reading!.line, key: ValueKey('needs-why-${i.id}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: small),
+                            ],
+                          ],
                         ),
                         Padding(
                           padding: const EdgeInsets.only(top: 4),
@@ -546,22 +641,6 @@ class _NeedsYou extends ConsumerWidget {
                             runSpacing: 2,
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              if (i.reading?.due != null)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 6),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(Icons.schedule_rounded, size: 14, color: i.reading!.due!.isBefore(DateTime.now()) ? scheme.error : const Color(0xFFFFB74D)),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'by ${dueLabel(i.reading!.due!)}',
-                                        key: ValueKey('needs-by-${i.id}'),
-                                        style: text.labelMedium!.copyWith(color: i.reading!.due!.isBefore(DateTime.now()) ? scheme.error : const Color(0xFFFFB74D), fontWeight: FontWeight.w700),
-                                      ),
-                                    ],
-                                  ),
-                                ),
                               // An email written for the user to look over and
                               // send: it opens under the email, ready to change.
                               if ((i.reading?.draft ?? '').isNotEmpty)
@@ -625,8 +704,6 @@ class _WaitingOn extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final items = ref.watch(waitingOnProvider).value ?? const <WaitingItem>[];
     // Sent emails whose words are not here yet cannot be judged. Said under
     // the lines when there are any; an empty card is not drawn.
@@ -636,7 +713,6 @@ class _WaitingOn extends ConsumerWidget {
     return _Section(
       id: 'waiting-on',
       icon: Icons.hourglass_top_rounded,
-      color: scheme.primary,
       title: 'Waiting on',
       count: items.length,
       children: [
@@ -656,11 +732,11 @@ class _WaitingOn extends ConsumerWidget {
               }
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   TonalAvatar(identityKey: w.rowKey.substring(2), name: w.name, size: 34),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 11),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -675,15 +751,16 @@ class _WaitingOn extends ConsumerWidget {
                               const TextSpan(text: ' has not answered'),
                             ],
                           ),
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: text.bodyMedium,
+                          style: rowTitle(context),
                         ),
+                        const SizedBox(height: 2),
                         Text(
                           '${w.asked.isNotEmpty ? 'You asked for: ${w.asked}' : (w.message.subject.isEmpty ? '(no subject)' : w.message.subject)} · you wrote ${_ago(w.sentAt, now)}',
-                          maxLines: 1,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                          style: rowSmall(context),
                         ),
                       ],
                     ),
@@ -711,7 +788,7 @@ class _WaitingOn extends ConsumerWidget {
           Padding(
             key: const ValueKey('waiting-reading'),
             padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Text(reading, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+            child: Text(reading, style: rowSmall(context)),
           ),
       ],
     );
@@ -726,7 +803,6 @@ class _Schedule extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final connected = (ref.watch(googleCalendarsProvider).value ?? const []).isNotEmpty;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -734,14 +810,27 @@ class _Schedule extends ConsumerWidget {
       for (final e in ref.watch(todayEventsProvider).value ?? const <PlannerEvent>[])
         if (e.startAt != null && (e.allDay ? allDayCovers(e, today) : true)) e,
     ]..sort((a, b) => a.allDay == b.allDay ? a.startAt!.compareTo(b.startAt!) : (a.allDay ? -1 : 1));
+    // Schedule always shows, also with nothing on it: then it is one quiet
+    // line, not a card.
+    if (connected && events.isEmpty) {
+      return Padding(
+        key: const ValueKey('today-schedule'),
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
+        child: Row(
+          children: [
+            Icon(Icons.calendar_today_rounded, size: 15, color: scheme.onSurfaceVariant),
+            const SizedBox(width: 9),
+            Expanded(child: Text('Nothing on your calendar today.', key: const ValueKey('today-schedule-empty'), style: rowSmall(context))),
+          ],
+        ),
+      );
+    }
     return _Section(
       id: 'schedule',
       icon: Icons.calendar_today_rounded,
-      color: const Color(0xFFFFB74D),
       title: 'Schedule',
       count: events.length,
       alwaysShown: true,
-      empty: connected ? 'Nothing on your calendar today.' : null,
       children: [
         if (!connected)
           Padding(
@@ -749,7 +838,7 @@ class _Schedule extends ConsumerWidget {
             child: Row(
               children: [
                 Expanded(
-                  child: Text('Connect your Google Calendar to see your day here. It is only read, never changed.', style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant)),
+                  child: Text('Connect your Google Calendar to see your day here. It is only read, never changed.', style: rowSmall(context)),
                 ),
                 TextButton(
                   key: const ValueKey('today-connect-calendar'),
@@ -773,44 +862,33 @@ class _Schedule extends ConsumerWidget {
               }),
             ],
             child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 6),
-                  child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  Container(
                     width: 9,
                     height: 9,
                     decoration: BoxDecoration(color: e.color != null ? Color(e.color!) : scheme.primary, shape: BoxShape.circle),
                   ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 76,
-                  child: Text(
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(e.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: rowTitle(context)),
+                        if ((e.location ?? '').isNotEmpty) Text(e.location!, maxLines: 1, overflow: TextOverflow.ellipsis, style: rowSmall(context)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  // The time on the right, where the eye looks for it.
+                  Text(
                     e.allDay ? 'All day' : _time(e.startAt!),
-                    style: text.bodyMedium!.copyWith(fontWeight: FontWeight.w700, color: !e.allDay && (e.endAt ?? e.startAt!).isBefore(now) ? scheme.onSurfaceVariant : null),
+                    style: rowTitle(context).copyWith(fontFeatures: tabularFigures, color: !e.allDay && (e.endAt ?? e.startAt!).isBefore(now) ? scheme.onSurfaceVariant : null),
                   ),
-                ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(e.title, style: text.bodyMedium),
-                      if ((e.location ?? '').isNotEmpty)
-                        Text(
-                          e.location!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
           ),
       ],
     );
@@ -875,20 +953,16 @@ void _dismiss(BuildContext context, AppDatabase db, int messageId, String card) 
 
 /// "Good to know": what came that matters though nothing is asked. An
 /// answer you were waiting for, a delivery that arrived, a notice about
-/// your own accounts. Everything The Lede speaks of that is not under
-/// "Needs you" is a line here (or under FYI).
+/// your own accounts.
 class _GoodToKnow extends ConsumerWidget {
   const _GoodToKnow();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final items = _goodToKnowItems(ref);
     return _Section(
       id: 'good-to-know',
       icon: Icons.lightbulb_outline_rounded,
-      color: const Color(0xFFFFD54F),
       title: 'Good to know',
       count: items.length,
       children: [
@@ -908,7 +982,7 @@ class _GoodToKnow extends ConsumerWidget {
               }
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 7),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -916,14 +990,14 @@ class _GoodToKnow extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(i.line, key: ValueKey('know-line-${i.id}'), maxLines: 2, overflow: TextOverflow.ellipsis, style: text.bodyLarge!.copyWith(fontWeight: FontWeight.w600)),
+                        Text(i.line, key: ValueKey('know-line-${i.id}'), maxLines: 3, overflow: TextOverflow.ellipsis, style: rowTitle(context)),
                         const SizedBox(height: 2),
                         Text(
                           [i.senderName, if (i.reading!.thing.isNotEmpty) i.reading!.thing, relativeTime(i.at)].join(' · '),
                           key: ValueKey('know-from-${i.id}'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant),
+                          style: rowSmall(context),
                         ),
                       ],
                     ),
@@ -939,7 +1013,7 @@ class _GoodToKnow extends ConsumerWidget {
               ),
             ),
           ),
-        if (items.length > 10) Padding(padding: const EdgeInsets.only(top: 4), child: Text('and ${items.length - 10} more', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant))),
+        if (items.length > 10) Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text('and ${items.length - 10} more', style: rowSmall(context))),
       ],
     );
   }
@@ -961,7 +1035,6 @@ class _Travel extends ConsumerWidget {
     return _Section(
       id: 'travel',
       icon: Icons.flight_takeoff_rounded,
-      color: alarm ?? const Color(0xFF7986CB),
       title: 'Travel',
       count: legs.length,
       alarm: alarm,
@@ -984,7 +1057,6 @@ class _Bookings extends ConsumerWidget {
     return _Section(
       id: 'bookings',
       icon: Icons.event_available_rounded,
-      color: const Color(0xFF4DB6AC),
       title: 'Bookings',
       count: items.length,
       children: [if (items.isNotEmpty) BookingLines(items: items)],
@@ -999,23 +1071,21 @@ class _Fyi extends ConsumerWidget {
   const _Fyi(this.card);
   final FyiCard card;
 
-  static (IconData, Color) _look(FyiCard c) => switch (c) {
-        FyiCard.otp => (Icons.password_rounded, const Color(0xFF4DD0E1)),
-        FyiCard.travel => (Icons.flight_takeoff_rounded, const Color(0xFF7986CB)),
-        FyiCard.bookings => (Icons.event_available_rounded, const Color(0xFF4DB6AC)),
-        FyiCard.deliveries => (Icons.local_shipping_outlined, const Color(0xFFA1887F)),
-        FyiCard.payments => (Icons.receipt_long_outlined, const Color(0xFFE57373)),
-        FyiCard.fyi => (Icons.info_outline_rounded, const Color(0xFF64B5F6)),
+  static IconData _look(FyiCard c) => switch (c) {
+        FyiCard.otp => Icons.password_rounded,
+        FyiCard.travel => Icons.flight_takeoff_rounded,
+        FyiCard.bookings => Icons.event_available_rounded,
+        FyiCard.deliveries => Icons.local_shipping_outlined,
+        FyiCard.payments => Icons.receipt_long_outlined,
+        FyiCard.fyi => Icons.info_outline_rounded,
       };
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final due = timelyDue(ref.watch(timelyItemsProvider).value ?? const [], DateTime.now(), card: card);
-    final (icon, color) = _look(card);
     return _Section(
       id: card.id,
-      icon: icon,
-      color: color,
+      icon: _look(card),
       title: card.title,
       count: due.length,
       children: [if (due.isNotEmpty) TimelyStrip(embedded: true, card: card)],
@@ -1028,15 +1098,12 @@ class _Later extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final rows = ref.watch(laterRowsProvider).value ?? const <LaterRow>[];
     final reminders = ref.watch(openRemindersProvider).value ?? const <Reminder>[];
     final mail = ref.watch(focusLaterProvider).value ?? const <MailItem>[];
     return _Section(
       id: 'later',
       icon: Icons.snooze_rounded,
-      color: const Color(0xFFCE93D8),
       title: 'Later',
       count: rows.length + reminders.length + mail.length,
       children: [
@@ -1052,15 +1119,15 @@ class _Later extends ConsumerWidget {
               ref.read(destinationProvider.notifier).select(Destination.focus, fromToday: true);
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(i.ask, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
-                        Text('${i.senderName} · back ${describeSnooze(i.laterUntil!)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+                        Text(i.ask, maxLines: 2, overflow: TextOverflow.ellipsis, style: rowTitle(context)),
+                        Text('${i.senderName} · back ${describeSnooze(i.laterUntil!)}', maxLines: 1, overflow: TextOverflow.ellipsis, style: rowSmall(context)),
                       ],
                     ),
                   ),
@@ -1077,15 +1144,15 @@ class _Later extends ConsumerWidget {
             onLongPress: () => showItemMenu(context, lastPressAt, [MenuChoice('back', 'Bring back now', Icons.undo_rounded, () => ref.read(databaseProvider).snoozeRow(r.rowKey, null))]),
             onTap: () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
-                        Text('Back ${describeSnooze(r.until)}', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+                        Text(r.name, maxLines: 1, overflow: TextOverflow.ellipsis, style: rowTitle(context)),
+                        Text('Back ${describeSnooze(r.until)}', style: rowSmall(context)),
                       ],
                     ),
                   ),
@@ -1099,15 +1166,15 @@ class _Later extends ConsumerWidget {
             key: ValueKey('later-reminder-${r.id}'),
             onTap: r.rowKey == null ? null : () => openRow(ref.read, r.rowKey, fromToday: true),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(r.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: text.bodyMedium),
-                        Text('Reminder ${describeSnooze(r.dueAt)}', style: text.bodySmall!.copyWith(color: scheme.onSurfaceVariant)),
+                        Text(r.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: rowTitle(context)),
+                        Text('Reminder ${describeSnooze(r.dueAt)}', style: rowSmall(context)),
                       ],
                     ),
                   ),
@@ -1146,12 +1213,10 @@ class _Done extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
     final items = ref.watch(doneTodayProvider).value ?? const <DoneItem>[];
     return _Section(
       id: 'done',
       icon: Icons.check_circle_outline_rounded,
-      color: const Color(0xFF81C784),
       title: 'Done',
       count: items.length,
       alwaysShown: ownPage,
@@ -1162,7 +1227,7 @@ class _Done extends ConsumerWidget {
             key: ValueKey('done-${d.threadKey ?? d.title}'),
             onTap: (d.threadKey ?? '').isEmpty ? null : () => ref.read(openThreadProvider.notifier).open(d.threadKey!),
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.symmetric(vertical: 9),
               child: Row(
                 children: [
                   Icon(Icons.check_rounded, size: 16, color: scheme.onSurfaceVariant),
@@ -1172,7 +1237,7 @@ class _Done extends ConsumerWidget {
                       d.who.isEmpty ? d.title : '${d.title} · ${d.who}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: text.bodyMedium!.copyWith(color: scheme.onSurfaceVariant, decoration: TextDecoration.lineThrough),
+                      style: rowTitle(context).copyWith(fontWeight: FontWeight.w400, color: scheme.onSurfaceVariant, decoration: TextDecoration.lineThrough),
                     ),
                   ),
                 ],

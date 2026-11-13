@@ -144,6 +144,50 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('the write button on the Précis page is smaller, steps out of the way while the page is moved, and comes back when it rests', (tester) async {
+    // Enough on the page for it to scroll.
+    for (var n = 0; n < 8; n++) {
+      got('person$n@x.example', 'Person $n', 'Question $n', id: '<q$n@x>');
+    }
+    final syncer = AccountSyncer(db: db, transport: imap, account: account, credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'));
+    await syncer.syncOnce();
+    for (var n = 0; n < 8; n++) {
+      await says('read', '<q$n@x>', {'line': 'Person $n asks a question.', 'focus': true, 'ask': 'Answer question $n.', 'due': null, 'why': ['It asks.'], 'answered': false, 'at': 1});
+    }
+    await db.refreshDirtyRows();
+    await pump(tester, Destination.today);
+    final button = find.byKey(const ValueKey('compact-compose'));
+    double scale() => tester.widget<AnimatedScale>(find.byKey(const ValueKey('compact-compose-tuck'))).scale;
+    expect(tester.getSize(button), const Size(48, 48), reason: 'smaller than on the other pages');
+    expect(scale(), 1);
+    // The last card clears the button: the page can be moved up past it.
+    final page = find.byKey(const PageStorageKey('today-scroll'));
+    expect((tester.widget<SingleChildScrollView>(page).padding! as EdgeInsets).bottom, greaterThanOrEqualTo(80));
+
+    // A finger moves the page: the button goes.
+    final finger = await tester.startGesture(tester.getCenter(page));
+    await finger.moveBy(const Offset(0, -40));
+    await finger.moveBy(const Offset(0, -120));
+    await tester.pump();
+    expect(scale(), 0);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.widget<IgnorePointer>(find.ancestor(of: button, matching: find.byType(IgnorePointer)).first).ignoring, isTrue);
+    // Let go: it comes back once the page has rested a moment.
+    await finger.up();
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pumpAndSettle();
+    expect(scale(), 1);
+
+    // On the other pages it is as it was.
+    await tester.tap(find.descendant(of: find.byKey(const ValueKey('compact-bar')), matching: find.text('Chats')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compact-compose-tuck')), findsNothing);
+    expect(tester.getSize(find.byKey(const ValueKey('compact-compose'))).width, greaterThan(48));
+    expect(tester.takeException(), isNull);
+    await teardown(tester);
+  });
+
   testWidgets('Focus: the list fills the phone; an email opened fills it instead, and Back returns to the list', (tester) async {
     final renee = await tester.runAsync(() => message('<renee@x>'));
     final c = await pump(tester, Destination.focus);

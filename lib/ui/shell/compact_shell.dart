@@ -10,7 +10,7 @@ import '../../app/people_state.dart';
 import '../../app/settings_navigation.dart';
 import '../../helper/device_join.dart';
 import '../../store/people_queries.dart';
-import '../screens/today_screen.dart' show DoneTodayList;
+import '../screens/today_screen.dart' show DoneTodayList, pageMovingProvider;
 import '../theme/tokens.dart';
 
 /// What the phone layout is showing: one of the main screens, the More
@@ -65,6 +65,15 @@ class CompactShell extends ConsumerWidget {
     final feedNew = ref.watch(feedsHasNewProvider) && destination != Destination.feed;
     final chatsUnread = ref.watch(chatsUnreadProvider) > 0;
     final notice = ref.watch(joinNoticeProvider);
+    // On the Précis page the write button is smaller, and steps out of the
+    // way while the page is moved.
+    final onPrecis = destination == Destination.today;
+    final moving = onPrecis && ref.watch(pageMovingProvider);
+
+    void write() {
+      ref.read(destinationProvider.notifier).select(Destination.chats);
+      ref.read(composeProvider.notifier).open();
+    }
 
     void go(Destination d) {
       ref.read(compactPageProvider.notifier).show(CompactPage.main);
@@ -115,16 +124,35 @@ class CompactShell extends ConsumerWidget {
         ),
         floatingActionButton: detail || page != CompactPage.main || !tabs.contains(destination)
             ? null
-            : FloatingActionButton(
-                key: const ValueKey('compact-compose'),
-                heroTag: 'compose-fab',
-                tooltip: 'New message',
-                onPressed: () {
-                  ref.read(destinationProvider.notifier).select(Destination.chats);
-                  ref.read(composeProvider.notifier).open();
-                },
-                child: const Icon(Icons.edit_outlined),
-              ),
+            : onPrecis
+                ? IgnorePointer(
+                    ignoring: moving,
+                    child: AnimatedScale(
+                      key: const ValueKey('compact-compose-tuck'),
+                      scale: moving ? 0 : 1,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOut,
+                      child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: FloatingActionButton(
+                          key: const ValueKey('compact-compose'),
+                          heroTag: 'compose-fab',
+                          tooltip: 'New message',
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                          onPressed: write,
+                          child: const Icon(Icons.edit_outlined, size: 22),
+                        ),
+                      ),
+                    ),
+                  )
+                : FloatingActionButton(
+                    key: const ValueKey('compact-compose'),
+                    heroTag: 'compose-fab',
+                    tooltip: 'New message',
+                    onPressed: write,
+                    child: const Icon(Icons.edit_outlined),
+                  ),
         bottomNavigationBar: detail
             ? null
             : NavigationBar(

@@ -68,6 +68,11 @@ void main() {
       expect(leg(soon, state: 'checkin').headingAt(now), 'Upcoming', reason: 'invited to check in: still upcoming, with the link');
       final far = now.add(const Duration(days: 40));
       expect(leg(far, state: 'delayed').showsAt(now), isTrue);
+      // Drawn large from two days before it leaves; at once for a delay or a cancellation. A compact pass until then.
+      expect(leg(far).closeAt(now), isFalse);
+      expect(leg(far).closeAt(far.subtract(const Duration(hours: 48, minutes: 1))), isFalse);
+      expect(leg(far).closeAt(far.subtract(const Duration(hours: 48))), isTrue);
+      expect([leg(far, state: 'delayed').closeAt(now), leg(far, state: 'cancelled').closeAt(now)], [true, true]);
       expect(leg(far, state: 'delayed').headingAt(now), 'Delayed');
       expect(leg(far, state: 'cancelled').headingAt(now), 'Cancelled');
       expect(leg(far, state: 'cancelled').showsAt(far.add(const Duration(hours: 3))), isFalse, reason: 'gone once its time has passed');

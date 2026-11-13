@@ -108,6 +108,16 @@ class TripLeg {
     return leaves != null && !leaves.subtract(upcomingFrom).isAfter(now);
   }
 
+  /// It is close enough to be drawn large: it leaves within two days, or it
+  /// is delayed or cancelled. Until then it is a compact pass.
+  static const closeFrom = Duration(hours: 48);
+
+  bool closeAt(DateTime now) {
+    if (delayed || cancelled) return true;
+    final leaves = departsAt;
+    return leaves != null && !leaves.subtract(closeFrom).isAfter(now);
+  }
+
   /// The small heading it sits under.
   String headingAt(DateTime now) {
     if (cancelled) return 'Cancelled';

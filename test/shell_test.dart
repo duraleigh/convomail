@@ -149,8 +149,8 @@ void main() {
     await tester.tap(find.text('Précis').first);
     await tester.pumpAndSettle();
     // With no mail, only Schedule shows: a card with nothing in it is not drawn.
-    expect(find.text('Schedule'), findsOneWidget);
-    for (final empty in ['Needs you', 'Good to know', 'Waiting on', 'FYI', 'Later', 'Done']) {
+    expect(find.text('SCHEDULE'), findsOneWidget);
+    for (final empty in ['NEEDS YOU', 'GOOD TO KNOW', 'WAITING ON', 'FYI', 'LATER', 'DONE']) {
       expect(find.text(empty), findsNothing, reason: empty);
     }
     await tester.tap(find.text('Focus').first);

@@ -51,9 +51,19 @@ enum FyiCard {
 /// Items that should show at [now], most urgent first: codes, then whatever
 /// comes soonest. With [card], only that card's.
 List<TimelyItem> timelyDue(List<TimelyItem> items, DateTime now, {FyiCard? card}) {
+  // A delivered package stays, marked "Delivered", until the end of the day
+  // it came. (Worked out here as well as when it is stored, so one stored by
+  // an older version of the app on another device shows the same.)
+  DateTime until(TimelyItem i) {
+    if (i.type != 'delivery' || i.status != 'delivered') return i.hideAfter;
+    final came = i.mailAt ?? i.showFrom;
+    final midnight = DateTime(came.year, came.month, came.day + 1);
+    return midnight.isAfter(i.hideAfter) ? midnight : i.hideAfter;
+  }
+
   final due = [
     for (final i in items)
-      if (!i.showFrom.isAfter(now) && i.hideAfter.isAfter(now) && !(i.laterUntil?.isAfter(now) ?? false) && (card == null || FyiCard.of(i.type) == card)) i,
+      if (!i.showFrom.isAfter(now) && until(i).isAfter(now) && !(i.laterUntil?.isAfter(now) ?? false) && (card == null || FyiCard.of(i.type) == card)) i,
   ];
   int rank(TimelyItem i) => i.type == 'code' ? 0 : 1;
   due.sort((a, b) {
