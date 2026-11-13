@@ -337,12 +337,74 @@ class ImapTransport implements MailTransport {
     try {
       calendar = m.getPartWithMediaSubtype(MediaSubtype.textCalendar)?.decodeContentText();
     } catch (_) {}
-    return RemoteMessageBody(text: m.decodeTextPlainPart(), html: m.decodeTextHtmlPart(), attachments: attachmentsFromMime(m), calendar: calendar);
+    // Some mail programs (Apple Mail, when it forwards files) write an
+    // email as several pieces of text with the files in between. Every
+    // piece is the email's words, in order, not only the first.
+    final plain = <String>[];
+    final html = <String>[];
+    _collectWords(m, plain, html);
+    final words = html.isEmpty ? m.decodeTextHtmlPart() : joinHtmlPieces(html);
+    return RemoteMessageBody(
+      text: plain.isEmpty ? m.decodeTextPlainPart() : plain.join('\n\n'),
+      html: words,
+      attachments: attachmentsFromMime(m, html: words),
+      calendar: calendar,
+    );
+  }
+
+  /// Gathers the words of an email, in order: every text part that is not
+  /// itself a file. An email attached to this one is a file, so its words
+  /// are not gathered.
+  static void _collectWords(MimePart part, List<String> plain, List<String> html) {
+    try {
+      final type = part.mediaType;
+      if (type.top == MediaToptype.multipart) {
+        for (final child in part.parts ?? const <MimePart>[]) {
+          _collectWords(child, plain, html);
+        }
+        return;
+      }
+      if (type.sub != MediaSubtype.textPlain && type.sub != MediaSubtype.textHtml) return;
+      final how = part.getHeaderContentDisposition();
+      if (how?.disposition == ContentDisposition.attachment || (part.decodeFileName() ?? '').isNotEmpty) return;
+      final words = part.decodeContentText();
+      if (words == null || words.trim().isEmpty) return;
+      (type.sub == MediaSubtype.textHtml ? html : plain).add(words);
+    } catch (_) {
+      // A part that cannot be read is left out; the rest of the email stands.
+    }
+  }
+
+  static final _bodyOpen = RegExp(r'<body[^>]*>', caseSensitive: false);
+  static final _bodyClose = RegExp(r'</body\s*>', caseSensitive: false);
+
+  /// Several pieces of HTML as one document: the later pieces go inside the
+  /// first one's body, each in a block of its own.
+  static String joinHtmlPieces(List<String> pieces) {
+    if (pieces.length == 1) return pieces.single;
+    String inner(String piece) {
+      final open = _bodyOpen.firstMatch(piece);
+      final close = _bodyClose.allMatches(piece).lastOrNull;
+      if (open == null) return piece;
+      return piece.substring(open.end, close != null && close.start >= open.end ? close.start : piece.length);
+    }
+
+    final first = pieces.first;
+    final rest = [for (final p in pieces.skip(1)) '<div>${inner(p)}</div>'].join();
+    final close = _bodyClose.allMatches(first).lastOrNull;
+    return close == null ? first + rest : first.substring(0, close.start) + rest + first.substring(close.start);
   }
 
   /// The files an email carries, from the email itself or from the server's
   /// description of it (which names every part without sending any).
-  static List<RemoteAttachment> attachmentsFromMime(MimeMessage m) {
+  ///
+  /// A file is a file however it was sent. Mail programs mark a file either
+  /// "attachment" or "inline", or do not mark it at all; a PDF marked
+  /// "inline" is still a file to open. Only a picture that the email's own
+  /// words show in place (it has a content id, and the words refer to it) is
+  /// kept out of the list of files. With [html] the words are known and are
+  /// checked; without them, a picture with a content id is taken to be one.
+  static List<RemoteAttachment> attachmentsFromMime(MimeMessage m, {String? html}) {
     final attachments = <RemoteAttachment>[];
     for (final info in m.findContentInfo(disposition: ContentDisposition.attachment)) {
       attachments.add(RemoteAttachment(
@@ -354,15 +416,32 @@ class ImapTransport implements MailTransport {
         isInline: false,
       ));
     }
-    for (final info in m.findContentInfo(disposition: ContentDisposition.inline)) {
-      if (info.mediaType?.isText ?? false) continue;
+    // Everything not marked "attachment": marked "inline", or not marked.
+    final rest = <ContentInfo>[];
+    final body = m.body;
+    if (body != null) {
+      body.collectContentInfo(ContentDisposition.attachment, rest, reverse: true);
+    } else {
+      m.collectContentInfo(ContentDisposition.attachment, rest, null, reverse: true);
+    }
+    for (final info in rest) {
+      final type = info.mediaType;
+      if (type == null || type.top == MediaToptype.multipart) continue;
+      final name = info.fileName ?? '';
+      final markedInline = info.contentDisposition?.disposition == ContentDisposition.inline;
+      // The email's own words, and its calendar invitation, are not files.
+      if (name.isEmpty && (type.isText || type.top == MediaToptype.message)) continue;
+      // A part with no name and no mark that is not a picture: nothing to offer.
+      if (name.isEmpty && !markedInline && !info.isImage) continue;
+      final cid = (info.cid ?? '').replaceAll(RegExp(r'^<|>$'), '');
+      final shownInTheWords = info.isImage && cid.isNotEmpty && (html == null || html.contains('cid:$cid'));
       attachments.add(RemoteAttachment(
         partId: info.fetchId,
-        fileName: info.fileName ?? 'inline',
-        mimeType: info.mediaType?.text ?? 'application/octet-stream',
+        fileName: name.isEmpty ? (shownInTheWords ? 'inline' : 'attachment') : name,
+        mimeType: type.text,
         size: info.size ?? 0,
         contentId: info.cid,
-        isInline: true,
+        isInline: shownInTheWords,
       ));
     }
     return attachments;

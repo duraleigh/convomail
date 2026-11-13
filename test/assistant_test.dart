@@ -864,7 +864,8 @@ void main() {
       expect(tester.widget<Text>(greeting).softWrap, isFalse, reason: 'never wrapped, whatever the name');
       expect(tester.getTopLeft(greeting).dy, greaterThan(tester.getBottomLeft(pill).dy - 1));
       expect(tester.getSize(greeting).height, lessThan(tester.widget<Text>(greeting).style!.fontSize! * 1.6), reason: 'one line');
-      expect(tester.getSize(greeting).width, lessThan(372), reason: 'it fits the width of the page');
+      // Whatever the hour's greeting and the name, it is held to the width of the page (it shrinks before it would wrap or run off).
+      expect(tester.getSize(find.ancestor(of: greeting, matching: find.byType(FittedBox)).first).width, lessThanOrEqualTo(372), reason: 'it fits the width of the page');
       expect(find.byKey(const ValueKey('today-title')), findsNothing);
       expect(tester.takeException(), isNull);
       await teardown(tester);

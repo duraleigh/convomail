@@ -765,8 +765,20 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   /// In-memory database for tests.
   AppDatabase.memory() : super(NativeDatabase.memory());
 
+  /// Puts right mail kept by a version that misread it. A file sent
+  /// "inline" (Apple Mail does this when it forwards a PDF) was kept out of
+  /// the email's list of files. It is a file: only a picture the email's
+  /// words show in place stays out. And an email written in several pieces
+  /// had only its first piece kept, so those emails are read again in full.
+  Future<void> repairInlineFiles() async {
+    const wrong = "is_inline = 1 AND (mime_type NOT LIKE 'image/%' OR content_id IS NULL OR content_id = '')";
+    await customStatement('UPDATE messages SET body_fetched_at = NULL WHERE body_fetched_at IS NOT NULL AND id IN (SELECT message_id FROM attachments WHERE $wrong)');
+    await customStatement('UPDATE attachments SET is_inline = 0 WHERE $wrong');
+    await customStatement('UPDATE messages SET has_attachments = 1 WHERE has_attachments = 0 AND id IN (SELECT message_id FROM attachments WHERE is_inline = 0)');
+  }
+
   @override
-  int get schemaVersion => 27;
+  int get schemaVersion => 28;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -985,6 +997,9 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
                     "INSERT OR IGNORE INTO helper_outbox (kind, k, data) SELECT 'cardfix', 'timely:' || dedupe_key, '{\"off\":true}' FROM timely_items WHERE type NOT IN ('code', 'confirm') AND dismissed_at IS NOT NULL AND hide_after > CAST(strftime('%s', 'now') AS INTEGER) - 86400");
               }
             }
+          }
+          if (from < 28) {
+            await repairInlineFiles();
           }
         },
         beforeOpen: (details) async {
