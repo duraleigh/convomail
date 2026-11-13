@@ -28,7 +28,8 @@ void main() {
     print('in Focus: ${focus.length} | good to know (before the helper says so): ${know.length}');
     // ignore: avoid_print
     print('items on the rule cards: ${await n('SELECT COUNT(*) FROM timely_items')} | put off: ${await n('SELECT COUNT(*) FROM timely_items WHERE later_until IS NOT NULL')} | legs and bookings: ${await n('SELECT COUNT(*) FROM helper_cards')} | readings carrying a draft: ${await n("SELECT COUNT(*) FROM helper_readings WHERE draft <> ''")}');
-    expect(await n('PRAGMA user_version'), 26);
-    expect(await db.getSetting('helper.cursor'), '0', reason: 'what the helper found while the older version ran is asked for again');
+    // ignore: avoid_print
+    print('card items waiting to be told to the helper: ${await n("SELECT COUNT(*) FROM helper_outbox WHERE kind = 'timely'")} | dismissals: ${await n("SELECT COUNT(*) FROM helper_outbox WHERE kind = 'cardfix'")} | card items with no email time: ${await n("SELECT COUNT(*) FROM timely_items WHERE mail_at IS NULL")}');
+    expect(await n('PRAGMA user_version'), 27);
   }, skip: path == null ? 'no copy given' : false);
 }

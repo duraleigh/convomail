@@ -270,6 +270,37 @@ return [
         same([], $w->store->itemsOf('booking'));
     },
 
+    'what one device finds for Deliveries and Payments reaches the others; the newer email wins whoever speaks last; a dismissal is relayed; what is past is forgotten' => function (): void {
+        $w = new World();
+        $d = new \Precis\Devices($w->store);
+        $pc = $d->join($d->newCode(), 'PC', 'windows')['id'];
+        $phone = $d->join($d->newCode(), 'Phone', 'android')['id'];
+        $now = $w->clock->now;
+        $tuesday = ['type' => 'delivery', 'title' => 'Acme', 'detail' => '', 'starts' => $now + 86400, 'mat' => $now - 3600, 'mid' => '<p2@x>', 'from' => 'ship@acme.example', 'until' => $now + 2 * 86400];
+        $monday = ['starts' => $now, 'mat' => $now - 90000, 'mid' => '<p1@x>', 'until' => $now + 86400] + $tuesday;
+        // The PC read the newer email; the phone, later, only the older one.
+        $w->sync->push($pc, [['kind' => 'timely', 'k' => 'parcel:1Z9', 'data' => $tuesday]]);
+        $w->sync->push($phone, [['kind' => 'timely', 'k' => 'parcel:1Z9', 'data' => $monday]]);
+        $kept = $w->store->item('timely', 'parcel:1Z9');
+        same(['<p2@x>', $now + 86400, $now - 3600], [$kept['mid'], $kept['starts'], $kept['mat']], 'the newer email stands');
+        // The phone hears what the PC found; the PC is not told its own word back.
+        $forPhone = array_values(array_filter($w->store->since(0, $phone)['items'], static fn (array $i): bool => $i['kind'] === 'timely'));
+        same([['parcel:1Z9', '<p2@x>']], array_map(static fn (array $i): array => [$i['k'], $i['data']['mid']], $forPhone));
+        same([], array_values(array_filter($w->store->since(0, $pc)['items'], static fn (array $i): bool => $i['kind'] === 'timely')));
+        // A newer email on the phone does replace it.
+        $wednesday = ['status' => 'out-for-delivery', 'mat' => $now, 'mid' => '<p3@x>'] + $tuesday;
+        $w->sync->push($phone, [['kind' => 'timely', 'k' => 'parcel:1Z9', 'data' => $wednesday]]);
+        same('out-for-delivery', $w->store->item('timely', 'parcel:1Z9')['status']);
+        // Dismissed on the phone, then put off on the PC: both are kept, and each device hears the other's.
+        $w->sync->push($phone, [['kind' => 'cardfix', 'k' => 'timely:parcel:1Z9', 'data' => ['off' => true]]]);
+        $w->sync->push($pc, [['kind' => 'cardfix', 'k' => 'timely:parcel:1Z9', 'data' => ['later' => $now + 7200]]]);
+        same(['later' => $now + 7200, 'off' => true], $w->store->item('cardfix', 'timely:parcel:1Z9'));
+        // Days after it is over, the helper forgets it and what was done to it.
+        $w->later(6 * 86400);
+        check((new Trips($w->store, $w->google, $w->readings))->prune() >= 1);
+        same([null, null], [$w->store->item('timely', 'parcel:1Z9'), $w->store->item('cardfix', 'timely:parcel:1Z9')]);
+    },
+
     'the files attached to an email, and its links, are found; times are worked out in the place\'s own clock' => function (): void {
         $enc = static fn (string $s): string => rtrim(strtr(base64_encode($s), '+/', '-_'), '=');
         $m = ['payload' => ['mimeType' => 'multipart/mixed', 'parts' => [

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:convomail/app/destinations.dart';
 import 'package:convomail/app/mail_state.dart';
 import 'package:convomail/app/people_state.dart';
@@ -24,7 +26,7 @@ import 'package:convomail/sync/timely_service.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/chats/people_list_pane.dart';
 import 'package:convomail/ui/shell/app_shell.dart';
-import 'package:drift/drift.dart' show Value;
+import 'package:drift/drift.dart' show Value, Variable;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -377,6 +379,69 @@ void main() {
         final service = TimelyService(db, ClassificationService(db));
         expect(await service.processMessage(sarah.id), 0);
         expect((await contact('sarah@x.com')).classification, 'people');
+      });
+
+      test('the same cards on every device: what is found here is told to the helper; what another device found shows here; the newer email wins in any order', () async {
+        await sync();
+        await db.setHelperConnected(true);
+        final m = (await db.select(db.messages).get()).firstWhere((x) => !x.isFromMe);
+        await db.customStatement("UPDATE messages SET message_id = '<parcel-1@x>' WHERE id = ?", [m.id]);
+        final mail = (await db.select(db.messages).get()).firstWhere((x) => x.id == m.id);
+        Future<List<String>> waiting(String kind) async => [for (final r in await db.customSelect('SELECT k, data FROM helper_outbox WHERE kind = ? ORDER BY id', variables: [Variable.withString(kind)]).get()) '${r.read<String>('k')} ${r.read<String>('data')}'];
+        int secs(DateTime t) => t.millisecondsSinceEpoch ~/ 1000;
+        final monday = DateTime(2026, 11, 9, 9);
+        final tuesday = DateTime(2026, 11, 10, 9);
+        final arrives = DateTime(2026, 11, 12);
+        final arrivesLater = DateTime(2026, 11, 13);
+
+        // Found here, in Tuesday's email: told to the helper as it stands, with how new its email is.
+        await db.upsertTimely(mail, [TimelyFact(type: TimelyType.delivery, dedupeKey: 'parcel:1Z9', title: 'Acme', startsAt: arrivesLater, actionUrl: 'https://track.example/1Z9', actionLabel: 'Track')], tuesday);
+        final told = jsonDecode((await waiting('timely')).single.substring('parcel:1Z9 '.length)) as Map;
+        expect([told['type'], told['title'], told['starts'], told['url'], told['mat'], told['mid'], told['from']], ['delivery', 'Acme', secs(arrivesLater), 'https://track.example/1Z9', secs(tuesday), '<parcel-1@x>', mail.fromContactKey]);
+        // A sign-in code is never told: the helper keeps no copy of one.
+        await db.upsertTimely(mail, [const TimelyFact(type: TimelyType.code, dedupeKey: 'code:1', title: 'Acme', code: '482913')], tuesday);
+        expect((await waiting('timely')).length, 1);
+        await db.delete(db.helperOutbox).go();
+
+        // Monday's email about the same parcel, read afterwards (here, or on another device): the newer email's word stands.
+        await db.upsertTimely(mail, [TimelyFact(type: TimelyType.delivery, dedupeKey: 'parcel:1Z9', title: 'Acme', startsAt: arrives)], monday);
+        await db.applyingFromHelper(() => db.applyHelperItem('timely', 'parcel:1Z9', {'type': 'delivery', 'title': 'Acme', 'detail': '', 'starts': secs(arrives), 'mat': secs(monday), 'mid': '<parcel-0@x>', 'from': mail.fromContactKey}, deleted: false));
+        var item = (await db.select(db.timelyItems).get()).firstWhere((t) => t.dedupeKey == 'parcel:1Z9');
+        expect(item.startsAt, arrivesLater);
+        expect(await waiting('timely'), isEmpty, reason: 'nothing changed, so nothing is told');
+
+        // Another device found a payment in an email this device does not hold: it shows here all the same.
+        final due = DateTime.now().add(const Duration(days: 2));
+        final bill = {'type': 'bill', 'title': 'Power Co', 'detail': r'$84.12 due', 'starts': secs(due), 'mat': secs(DateTime.now().subtract(const Duration(days: 8))), 'mid': '<not-here@x>', 'from': 'billing@power.example', 'until': secs(due) + 86400};
+        await db.applyingFromHelper(() => db.applyHelperItem('timely', 'bill:power:1', bill, deleted: false));
+        final shown = timelyDue(await db.watchTimelyItems().first, DateTime.now(), card: FyiCard.payments);
+        expect([for (final t in shown) '${t.title} ${t.detail}'], [r'Power Co $84.12 due']);
+        expect(shown.single.messageId, isNull);
+        expect(await waiting('timely'), isEmpty, reason: 'what the helper said is not said back to it');
+        // Told the same again (the whole list is taken in again after an upgrade): nothing is written.
+        final before = (await db.select(db.timelyItems).get()).firstWhere((t) => t.dedupeKey == 'bill:power:1').updatedAt;
+        await db.applyingFromHelper(() => db.applyHelperItem('timely', 'bill:power:1', bill, deleted: false));
+        expect((await db.select(db.timelyItems).get()).firstWhere((t) => t.dedupeKey == 'bill:power:1').updatedAt, before);
+
+        // Dismissed here: every device is told. Dismissed elsewhere: gone here too. Put off elsewhere: the same.
+        item = (await db.select(db.timelyItems).get()).firstWhere((t) => t.dedupeKey == 'parcel:1Z9');
+        await db.dismissTimely(item.id);
+        expect(await waiting('cardfix'), ['timely:parcel:1Z9 {"off":true}']);
+        await db.undismissTimely(item.id);
+        expect(await waiting('cardfix'), ['timely:parcel:1Z9 {"off":false}']);
+        await db.applyingFromHelper(() => db.applyHelperItem('cardfix', 'timely:bill:power:1', {'off': true}, deleted: false));
+        expect(timelyDue(await db.watchTimelyItems().first, DateTime.now(), card: FyiCard.payments), isEmpty);
+        final later = DateTime.now().add(const Duration(hours: 5));
+        await db.applyingFromHelper(() => db.applyHelperItem('cardfix', 'timely:bill:power:1', {'off': false, 'later': secs(later)}, deleted: false));
+        final back = (await db.select(db.timelyItems).get()).firstWhere((t) => t.dedupeKey == 'bill:power:1');
+        expect([back.dismissedAt, secs(back.laterUntil!)], [null, secs(later)]);
+        // A code's dismissal stays on the device it was dismissed on.
+        await db.delete(db.helperOutbox).go();
+        await db.dismissTimely((await db.select(db.timelyItems).get()).firstWhere((t) => t.type == 'code').id);
+        expect(await waiting('cardfix'), isEmpty);
+        // Forgotten by the helper once it is long past: forgotten here.
+        await db.applyingFromHelper(() => db.applyHelperItem('timely', 'bill:power:1', const {}, deleted: true));
+        expect((await db.select(db.timelyItems).get()).where((t) => t.dedupeKey == 'bill:power:1'), isEmpty);
       });
 
       test('later mail updates the same item; a new status brings a dismissed one back', () async {

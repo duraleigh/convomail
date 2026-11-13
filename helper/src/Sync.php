@@ -69,6 +69,11 @@ final class Sync
                 } elseif (($kind === 'msgfix' || $kind === 'cardfix') && $old !== null) {
                     // A fix to the tag and a fix to the place are kept side by side.
                     $data += $old;
+                } elseif ($kind === 'timely' && $old !== null && (int) ($old['mat'] ?? 0) > (int) ($data['mat'] ?? 0)) {
+                    // A delivery or a payment read from an older email never
+                    // replaces what a newer email said, whichever device
+                    // speaks last: every device ends on the same thing.
+                    $data = $old;
                 }
                 $changed = $this->store->put($kind, $k, $data, $origin);
             }

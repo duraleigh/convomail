@@ -178,6 +178,11 @@ final class Trips
      */
     public function work(float $seconds = 20.0, int $max = 8): int
     {
+        // Once an hour, what is over is forgotten, whether or not anything waits to be read.
+        if ($this->store->now() - (int) $this->store->get('trips.pruned', '0') >= 3600) {
+            $this->store->set('trips.pruned', (string) $this->store->now());
+            $this->prune();
+        }
         if (!$this->readings->ready()) {
             return 0;
         }
@@ -690,11 +695,17 @@ final class Trips
         return $out;
     }
 
-    /** Forgets legs and bookings that are over. */
+    /** Forgets legs and bookings that are over, and what devices found for the other cards once it is past. */
     public function prune(): int
     {
         $now = $this->store->now();
         $n = 0;
+        foreach ($this->store->itemsOf('timely') as $k => $item) {
+            if ((int) ($item['until'] ?? 0) + self::KEEP < $now) {
+                $n += (int) $this->store->remove('timely', (string) $k);
+                $this->store->remove('cardfix', 'timely:' . $k);
+            }
+        }
         foreach (['leg' => ['arr_at', 'dep_at'], 'booking' => ['end_at', 'start_at']] as $kind => [$end, $start]) {
             foreach ($this->store->itemsOf($kind) as $k => $item) {
                 $over = is_int($item[$end] ?? null) ? $item[$end] : (is_int($item[$start] ?? null) ? $item[$start] : null);

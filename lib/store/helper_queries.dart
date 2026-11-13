@@ -9,6 +9,7 @@ import 'database.dart' hide ClassificationRule;
 import 'group_queries.dart';
 import 'merge_queries.dart';
 import 'people_queries.dart';
+import 'timely_queries.dart';
 
 /// The setting that holds quiet hours for alerts on phones, the same on
 /// every device: `{"on": bool, "from": "22:00", "to": "07:00"}`.
@@ -181,6 +182,10 @@ extension HelperQueries on AppDatabase {
         await all('rowpref', "row_key, '' FROM row_prefs");
         await all('reminder', "uid, '' FROM reminders WHERE uid IS NOT NULL");
         await all('done', "message_id, '' FROM messages WHERE done_at IS NOT NULL AND message_id IS NOT NULL AND message_id <> '' GROUP BY message_id");
+        // What this device found for the Deliveries, Payments and other rule cards, and what was taken off them.
+        await all('timely', "dedupe_key, '' FROM timely_items WHERE type NOT IN ('code', 'confirm') AND hide_after > CAST(strftime('%s', 'now') AS INTEGER) - 86400");
+        await customStatement(
+            "INSERT OR IGNORE INTO helper_outbox (kind, k, data) SELECT 'cardfix', 'timely:' || dedupe_key, '{\"off\":true}' FROM timely_items WHERE type NOT IN ('code', 'confirm') AND dismissed_at IS NOT NULL AND hide_after > CAST(strftime('%s', 'now') AS INTEGER) - 86400");
       });
 
   /// Puts one waiting change into the helper's words, reading the row as it
@@ -212,6 +217,11 @@ extension HelperQueries on AppDatabase {
         final r = await customSelect('SELECT MAX(done_at) AS at FROM messages WHERE message_id = ? AND done_at IS NOT NULL', variables: [Variable.withString(o.k)]).getSingle();
         final at = r.readNullable<int>('at');
         return [at == null ? HelperEntry.gone('done', o.k) : HelperEntry.set('done', o.k, {'at': at})];
+      case 'timely':
+        // Told as it stands now. One that is gone here is simply not told:
+        // it may still be on another device's card.
+        final item = await timelyForHelper(o.k);
+        return item == null ? const [] : [HelperEntry.set('timely', o.k, item)];
       case 'addr':
         final a = await (select(contactAddresses)..where((a) => a.address.equals(o.k))).getSingleOrNull();
         return [a == null || a.contactKey == a.address ? HelperEntry.gone('addr', o.k) : HelperEntry.set('addr', o.k, {'key': a.contactKey})];
@@ -665,9 +675,23 @@ extension HelperQueries on AppDatabase {
           await (update(helperCards)..where((c) => c.k.equals(id))).write(row);
         }
         return const {};
+      case 'timely':
+        // A delivery, a payment coming due and the like, found in the mail
+        // on another device: shown here too, the same.
+        if (deleted) {
+          await (delete(timelyItems)..where((t) => t.dedupeKey.equals(k))).go();
+          return const {};
+        }
+        await applyTimelyFromHelper(k, data);
+        return const {};
       case 'cardfix':
         // A booking dismissed or put off on another device (or brought back).
         if (deleted) return const {};
+        // The same for an item on Deliveries, Payments and the other rule cards.
+        if (k.startsWith('timely:')) {
+          await applyTimelyFix(k.substring(7), data);
+          return const {};
+        }
         await (update(helperCards)..where((c) => c.k.equals(k))).write(HelperCardsCompanion(
           dismissed: data['off'] is bool || data['no'] is bool ? Value(data['off'] == true || data['no'] == true) : const Value.absent(),
           laterUntil: data.containsKey('later') ? Value(_time(data['later'])) : const Value.absent(),

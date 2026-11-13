@@ -390,6 +390,10 @@ class TimelyItems extends Table {
 
   /// Put off from its card until then.
   DateTimeColumn get laterUntil => dateTime().nullable()();
+
+  /// When the email it was last read from was sent. An older email never
+  /// changes what a newer one said, so every device ends on the same thing.
+  DateTimeColumn get mailAt => dateTime().nullable()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 }
 
@@ -762,7 +766,7 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 26;
+  int get schemaVersion => 27;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -967,6 +971,20 @@ class AppDatabase extends _$AppDatabase implements SettingsStore {
             // found; an older version of the app let those go by. Asking
             // again from the start brings them all in, once.
             if (from >= 20) await customStatement("UPDATE settings SET value = '0' WHERE key = 'helper.cursor'");
+          }
+          if (from < 27) {
+            // Deliveries, payments and the like are now the same on every
+            // device: each item remembers how new its email is, and what
+            // this device holds is told to the helper once.
+            if (from >= 13) {
+              await m.addColumn(timelyItems, timelyItems.mailAt);
+              await customStatement('UPDATE timely_items SET mail_at = (SELECT COALESCE(m.date, m.internal_date) FROM messages m WHERE m.id = timely_items.message_id)');
+              if (from >= 20) {
+                await customStatement("INSERT OR IGNORE INTO helper_outbox (kind, k, data) SELECT 'timely', dedupe_key, '' FROM timely_items WHERE type NOT IN ('code', 'confirm') AND hide_after > CAST(strftime('%s', 'now') AS INTEGER) - 86400");
+                await customStatement(
+                    "INSERT OR IGNORE INTO helper_outbox (kind, k, data) SELECT 'cardfix', 'timely:' || dedupe_key, '{\"off\":true}' FROM timely_items WHERE type NOT IN ('code', 'confirm') AND dismissed_at IS NOT NULL AND hide_after > CAST(strftime('%s', 'now') AS INTEGER) - 86400");
+              }
+            }
           }
         },
         beforeOpen: (details) async {

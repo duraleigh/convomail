@@ -37,7 +37,9 @@ class TimelyService {
     }
     final received = m.date ?? m.internalDate ?? DateTime.now();
     final facts = extractor.extract(TimelyInput(
-      messageKey: '${m.accountId}:${m.folderId}:${m.uid}',
+      // The email's own id where it has one, so a thing known only by its
+      // email is the same thing on every device.
+      messageKey: (m.messageId ?? '').isNotEmpty ? m.messageId! : '${m.accountId}:${m.folderId}:${m.uid}',
       received: received,
       subject: m.subject,
       fromName: contact?.shownName ?? m.fromName,

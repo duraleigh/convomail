@@ -15107,6 +15107,15 @@ class $TimelyItemsTable extends TimelyItems
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _mailAtMeta = const VerificationMeta('mailAt');
+  @override
+  late final GeneratedColumn<DateTime> mailAt = GeneratedColumn<DateTime>(
+    'mail_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -15139,6 +15148,7 @@ class $TimelyItemsTable extends TimelyItems
     status,
     dismissedAt,
     laterUntil,
+    mailAt,
     updatedAt,
   ];
   @override
@@ -15272,6 +15282,12 @@ class $TimelyItemsTable extends TimelyItems
         laterUntil.isAcceptableOrUnknown(data['later_until']!, _laterUntilMeta),
       );
     }
+    if (data.containsKey('mail_at')) {
+      context.handle(
+        _mailAtMeta,
+        mailAt.isAcceptableOrUnknown(data['mail_at']!, _mailAtMeta),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -15359,6 +15375,10 @@ class $TimelyItemsTable extends TimelyItems
         DriftSqlType.dateTime,
         data['${effectivePrefix}later_until'],
       ),
+      mailAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}mail_at'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -15395,6 +15415,10 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
 
   /// Put off from its card until then.
   final DateTime? laterUntil;
+
+  /// When the email it was last read from was sent. An older email never
+  /// changes what a newer one said, so every device ends on the same thing.
+  final DateTime? mailAt;
   final DateTime updatedAt;
   const TimelyItem({
     required this.id,
@@ -15415,6 +15439,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     this.status,
     this.dismissedAt,
     this.laterUntil,
+    this.mailAt,
     required this.updatedAt,
   });
   @override
@@ -15458,6 +15483,9 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     if (!nullToAbsent || laterUntil != null) {
       map['later_until'] = Variable<DateTime>(laterUntil);
     }
+    if (!nullToAbsent || mailAt != null) {
+      map['mail_at'] = Variable<DateTime>(mailAt);
+    }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
   }
@@ -15500,6 +15528,9 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       laterUntil: laterUntil == null && nullToAbsent
           ? const Value.absent()
           : Value(laterUntil),
+      mailAt: mailAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(mailAt),
       updatedAt: Value(updatedAt),
     );
   }
@@ -15528,6 +15559,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       status: serializer.fromJson<String?>(json['status']),
       dismissedAt: serializer.fromJson<DateTime?>(json['dismissedAt']),
       laterUntil: serializer.fromJson<DateTime?>(json['laterUntil']),
+      mailAt: serializer.fromJson<DateTime?>(json['mailAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -15553,6 +15585,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       'status': serializer.toJson<String?>(status),
       'dismissedAt': serializer.toJson<DateTime?>(dismissedAt),
       'laterUntil': serializer.toJson<DateTime?>(laterUntil),
+      'mailAt': serializer.toJson<DateTime?>(mailAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -15576,6 +15609,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     Value<String?> status = const Value.absent(),
     Value<DateTime?> dismissedAt = const Value.absent(),
     Value<DateTime?> laterUntil = const Value.absent(),
+    Value<DateTime?> mailAt = const Value.absent(),
     DateTime? updatedAt,
   }) => TimelyItem(
     id: id ?? this.id,
@@ -15596,6 +15630,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     status: status.present ? status.value : this.status,
     dismissedAt: dismissedAt.present ? dismissedAt.value : this.dismissedAt,
     laterUntil: laterUntil.present ? laterUntil.value : this.laterUntil,
+    mailAt: mailAt.present ? mailAt.value : this.mailAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   TimelyItem copyWithCompanion(TimelyItemsCompanion data) {
@@ -15626,6 +15661,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
       laterUntil: data.laterUntil.present
           ? data.laterUntil.value
           : this.laterUntil,
+      mailAt: data.mailAt.present ? data.mailAt.value : this.mailAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -15651,6 +15687,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
           ..write('status: $status, ')
           ..write('dismissedAt: $dismissedAt, ')
           ..write('laterUntil: $laterUntil, ')
+          ..write('mailAt: $mailAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -15676,6 +15713,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
     status,
     dismissedAt,
     laterUntil,
+    mailAt,
     updatedAt,
   );
   @override
@@ -15700,6 +15738,7 @@ class TimelyItem extends DataClass implements Insertable<TimelyItem> {
           other.status == this.status &&
           other.dismissedAt == this.dismissedAt &&
           other.laterUntil == this.laterUntil &&
+          other.mailAt == this.mailAt &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -15722,6 +15761,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
   final Value<String?> status;
   final Value<DateTime?> dismissedAt;
   final Value<DateTime?> laterUntil;
+  final Value<DateTime?> mailAt;
   final Value<DateTime> updatedAt;
   const TimelyItemsCompanion({
     this.id = const Value.absent(),
@@ -15742,6 +15782,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     this.status = const Value.absent(),
     this.dismissedAt = const Value.absent(),
     this.laterUntil = const Value.absent(),
+    this.mailAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   });
   TimelyItemsCompanion.insert({
@@ -15763,6 +15804,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     this.status = const Value.absent(),
     this.dismissedAt = const Value.absent(),
     this.laterUntil = const Value.absent(),
+    this.mailAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
   }) : type = Value(type),
        dedupeKey = Value(dedupeKey),
@@ -15787,6 +15829,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     Expression<String>? status,
     Expression<DateTime>? dismissedAt,
     Expression<DateTime>? laterUntil,
+    Expression<DateTime>? mailAt,
     Expression<DateTime>? updatedAt,
   }) {
     return RawValuesInsertable({
@@ -15808,6 +15851,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
       if (status != null) 'status': status,
       if (dismissedAt != null) 'dismissed_at': dismissedAt,
       if (laterUntil != null) 'later_until': laterUntil,
+      if (mailAt != null) 'mail_at': mailAt,
       if (updatedAt != null) 'updated_at': updatedAt,
     });
   }
@@ -15831,6 +15875,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     Value<String?>? status,
     Value<DateTime?>? dismissedAt,
     Value<DateTime?>? laterUntil,
+    Value<DateTime?>? mailAt,
     Value<DateTime>? updatedAt,
   }) {
     return TimelyItemsCompanion(
@@ -15852,6 +15897,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
       status: status ?? this.status,
       dismissedAt: dismissedAt ?? this.dismissedAt,
       laterUntil: laterUntil ?? this.laterUntil,
+      mailAt: mailAt ?? this.mailAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
   }
@@ -15913,6 +15959,9 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
     if (laterUntil.present) {
       map['later_until'] = Variable<DateTime>(laterUntil.value);
     }
+    if (mailAt.present) {
+      map['mail_at'] = Variable<DateTime>(mailAt.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -15940,6 +15989,7 @@ class TimelyItemsCompanion extends UpdateCompanion<TimelyItem> {
           ..write('status: $status, ')
           ..write('dismissedAt: $dismissedAt, ')
           ..write('laterUntil: $laterUntil, ')
+          ..write('mailAt: $mailAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -30002,6 +30052,7 @@ typedef $$TimelyItemsTableCreateCompanionBuilder =
       Value<String?> status,
       Value<DateTime?> dismissedAt,
       Value<DateTime?> laterUntil,
+      Value<DateTime?> mailAt,
       Value<DateTime> updatedAt,
     });
 typedef $$TimelyItemsTableUpdateCompanionBuilder =
@@ -30024,6 +30075,7 @@ typedef $$TimelyItemsTableUpdateCompanionBuilder =
       Value<String?> status,
       Value<DateTime?> dismissedAt,
       Value<DateTime?> laterUntil,
+      Value<DateTime?> mailAt,
       Value<DateTime> updatedAt,
     });
 
@@ -30140,6 +30192,11 @@ class $$TimelyItemsTableFilterComposer
 
   ColumnFilters<DateTime> get laterUntil => $composableBuilder(
     column: $table.laterUntil,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get mailAt => $composableBuilder(
+    column: $table.mailAt,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -30266,6 +30323,11 @@ class $$TimelyItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get mailAt => $composableBuilder(
+    column: $table.mailAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -30363,6 +30425,9 @@ class $$TimelyItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get mailAt =>
+      $composableBuilder(column: $table.mailAt, builder: (column) => column);
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 
@@ -30436,6 +30501,7 @@ class $$TimelyItemsTableTableManager
                 Value<String?> status = const Value.absent(),
                 Value<DateTime?> dismissedAt = const Value.absent(),
                 Value<DateTime?> laterUntil = const Value.absent(),
+                Value<DateTime?> mailAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => TimelyItemsCompanion(
                 id: id,
@@ -30456,6 +30522,7 @@ class $$TimelyItemsTableTableManager
                 status: status,
                 dismissedAt: dismissedAt,
                 laterUntil: laterUntil,
+                mailAt: mailAt,
                 updatedAt: updatedAt,
               ),
           createCompanionCallback:
@@ -30478,6 +30545,7 @@ class $$TimelyItemsTableTableManager
                 Value<String?> status = const Value.absent(),
                 Value<DateTime?> dismissedAt = const Value.absent(),
                 Value<DateTime?> laterUntil = const Value.absent(),
+                Value<DateTime?> mailAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
               }) => TimelyItemsCompanion.insert(
                 id: id,
@@ -30498,6 +30566,7 @@ class $$TimelyItemsTableTableManager
                 status: status,
                 dismissedAt: dismissedAt,
                 laterUntil: laterUntil,
+                mailAt: mailAt,
                 updatedAt: updatedAt,
               ),
           withReferenceMapper: (p0) => p0
