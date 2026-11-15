@@ -237,7 +237,15 @@ class EdgeDraggingAutoScroller {
     _currentDuration = null;
   }
 
-  Future<void> _scroll() async {
+  // Précis: [lastStep] and [steps] follow one run of scrolling. A run ends
+  // when it would turn back on itself or has gone on too long. Without
+  // this, a writing area shorter than the space kept clear around the
+  // cursor could never be satisfied: with no time between steps (as on a
+  // phone) it stepped down, then up, then down, without ever letting the
+  // app draw again, and the app stopped responding.
+  static const int _maxStepsInOneRun = 400;
+
+  Future<void> _scroll({double lastStep = 0, int steps = 0}) async {
     try {
       final RenderBox scrollRenderBox =
           scrollable.context.findRenderObject()! as RenderBox;
@@ -275,14 +283,23 @@ class EdgeDraggingAutoScroller {
       final double viewportEnd =
           viewportStart + _sizeExtent(globalRect.size, _scrollDirection);
 
-      final double proxyStart = _offsetExtent(
+      double proxyStart = _offsetExtent(
         _dragTargetRelatedToScrollOrigin.topLeft,
         _scrollDirection,
       );
-      final double proxyEnd = _offsetExtent(
+      double proxyEnd = _offsetExtent(
         _dragTargetRelatedToScrollOrigin.bottomRight,
         _scrollDirection,
       );
+      // Précis: a target taller than the room there is can never be brought
+      // wholly into view; keep its middle (where the cursor is) and only as
+      // much around it as fits.
+      final double room = math.max(0.0, viewportEnd - viewportStart);
+      if (proxyEnd - proxyStart > room) {
+        final double middle = (proxyStart + proxyEnd) / 2;
+        proxyStart = middle - room / 2;
+        proxyEnd = middle + room / 2;
+      }
       switch (_axisDirection) {
         case AxisDirection.up:
         case AxisDirection.left:
@@ -359,6 +376,12 @@ class EdgeDraggingAutoScroller {
           return;
         }
       }
+      // Précis: never turn back within one run, and never go on without end.
+      final double step = delta.sign;
+      if ((lastStep != 0 && step != lastStep) || steps >= _maxStepsInOneRun) {
+        _scrolling = false;
+        return;
+      }
       await scrollable.position.moveTo(
         newOffset,
         duration: _currentDuration ?? _animationDuration,
@@ -367,7 +390,7 @@ class EdgeDraggingAutoScroller {
       );
       onScrollViewScrolled?.call();
       if (_scrolling) {
-        await _scroll();
+        await _scroll(lastStep: step, steps: steps + 1);
       }
     } catch (e) {
       debugPrint(e.toString());

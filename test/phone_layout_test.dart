@@ -350,6 +350,83 @@ void main() {
     await teardown(tester);
   });
 
+  testWidgets('reply all on a phone with several people and the keyboard up: the writing area is still there to type in', (tester) async {
+    imap.folder('INBOX').add(RemoteMessageHeader(
+      uid: 0,
+      from: const RemoteAddress('laura@lmc.example', 'Laura McDonald'),
+      to: const [me],
+      cc: const [RemoteAddress('emily@lmc.example', 'Emily Luders (LMc)'), RemoteAddress('nicole@mgmt.example', 'Nicole Gotlin'), RemoteAddress('johnny@wright.example', 'johnny wright')],
+      subject: 'FW: Second to None',
+      messageId: '<laura@x>',
+      date: ago(hours: 1),
+    ));
+    await db.into(db.identities).insert(IdentitiesCompanion.insert(accountId: account.id, email: 'other@example.com', name: const Value('Clay Other')));
+    final syncer = AccountSyncer(db: db, transport: imap, account: account, credentials: () async => const MailCredentials(username: 'me@example.com', password: 'secret'));
+    await syncer.syncOnce();
+    await says('read', '<laura@x>', {'line': 'Laura asks about the show.', 'focus': true, 'ask': 'Answer Laura.', 'due': null, 'why': ['It asks.'], 'answered': false, 'at': 1});
+    await db.refreshDirtyRows();
+    final laura = await tester.runAsync(() => message('<laura@x>'));
+    tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    await pump(tester, Destination.focus);
+    await tester.tap(find.byKey(ValueKey('mail-row-${laura!.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mail-reply-all')));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    // Before the keyboard: every address line shows, as on a PC.
+    expect(find.byKey(const ValueKey('chip-Cc-nicole@mgmt.example')), findsOneWidget);
+    expect(find.byKey(const ValueKey('compose-people-folded')), findsNothing);
+
+    // The keyboard comes up with the cursor in the message: the people fold to one line, and the writing area has the room.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 420);
+    addTearDown(tester.view.resetViewInsets);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nothing runs off the screen with the keyboard up');
+    final folded = find.byKey(const ValueKey('compose-people-folded'));
+    expect(folded, findsOneWidget);
+    expect(find.descendant(of: folded, matching: find.textContaining('Laura McDonald, Emily Luders (LMc), Nicole Gotlin, johnny wright')), findsOneWidget);
+    expect(tester.widget<Text>(find.byKey(const ValueKey('compose-people-count'))).data, '4');
+    expect(find.byKey(const ValueKey('chip-Cc-nicole@mgmt.example')), findsNothing);
+    expect(find.byKey(const ValueKey('compose-from')), findsOneWidget, reason: 'From stays');
+    final send = find.byKey(const ValueKey('compose-send'));
+    expect(tester.getBottomLeft(send).dy, lessThanOrEqualTo(915 - 420));
+    var editorBox = tester.getRect(find.byType(ComposeEditor));
+    expect(editorBox.height, greaterThan(150), reason: 'there is room to see what is typed');
+    expect(editorBox.bottom, lessThanOrEqualTo(915 - 420));
+
+    // A tap on that line opens the address lines again, ready to type a name. They scroll in their own space:
+    // the writing area is never squeezed to nothing.
+    await tester.tap(folded);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull, reason: 'nothing runs off the screen with the address lines open');
+    expect(find.byKey(const ValueKey('compose-people-folded')), findsNothing);
+    expect(find.byKey(const ValueKey('chip-To-laura@lmc.example')), findsOneWidget);
+    final toField = find.descendant(of: find.byKey(const ValueKey('recipient-typing-To')), matching: find.byType(TextField));
+    expect(tester.widget<TextField>(toField).focusNode!.hasFocus, isTrue);
+    editorBox = tester.getRect(find.byType(ComposeEditor));
+    expect(editorBox.height, greaterThan(90), reason: 'the writing area keeps some room');
+    expect(tester.getBottomLeft(send).dy, lessThanOrEqualTo(915 - 420));
+    final lines = tester.getRect(find.byKey(const ValueKey('compose-fields-scroll')));
+    expect(lines.bottom, lessThanOrEqualTo(editorBox.top + 0.5));
+    // Bcc is further down those lines: it is reached by moving them.
+    await tester.drag(find.byKey(const ValueKey('compose-fields-scroll')), const Offset(0, -300));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(find.text('Bcc')).bottom, lessThanOrEqualTo(lines.bottom + 0.5));
+
+    // Back in the message: folded again.
+    await tester.tap(find.byType(ComposeEditor));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compose-people-folded')), findsOneWidget);
+    // The keyboard goes away: everything shows again.
+    tester.view.resetViewInsets();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('compose-people-folded')), findsNothing);
+    expect(find.byKey(const ValueKey('chip-Cc-nicole@mgmt.example')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await teardown(tester);
+  });
+
   testWidgets('Chats: the list of people, then one conversation with a way back', (tester) async {
     final c = await pump(tester, Destination.chats);
     expect(find.text('Renee Calloway'), findsOneWidget);

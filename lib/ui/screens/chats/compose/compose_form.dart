@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:appflowy_editor/appflowy_editor.dart' show Node;
 import 'package:desktop_drop/desktop_drop.dart';
@@ -67,6 +68,11 @@ class ComposeForm extends ConsumerStatefulWidget {
 class _ComposeFormState extends ConsumerState<ComposeForm> {
   final _subject = TextEditingController();
   final _toFocus = FocusNode(debugLabel: 'compose-to');
+
+  /// On a phone with the keyboard up, the people a message goes to fold to
+  /// one line while the message is written, so there is room to see it.
+  /// True while one of the address lines (or the subject) is being typed in.
+  bool _peopleOpen = false;
   final _editorFocus = FocusNode(debugLabel: 'compose-editor');
   ComposeEditorController? _editor;
 
@@ -373,10 +379,9 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
     final showQuoteToggle = _original != null && _kind != 'forward';
     final subjectVisible = !_kind.startsWith('reply') || _showSubject || !widget.compact;
 
-    final fields = Column(
+    final people = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (identities.length > 1 || !widget.compact) _fromRow(identities, scheme, text),
         RecipientField(
           label: 'To',
           recipients: _to,
@@ -468,13 +473,45 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
 
     final editor = ComposeEditor(controller: _editor!, showToolbar: _formatting, focusNode: _editorFocus, onAttachFiles: _addFiles, onSend: _send, onEscape: _close, touch: touch);
 
+    // Laid out to the room there is: on a phone that is the screen above the keyboard.
+    Widget layout(BuildContext context, BoxConstraints? box) {
+    final roomKnown = phone && widget.fill && box != null && box.hasBoundedHeight;
+    final keyboardUp = roomKnown && View.of(context).viewInsets.bottom > 0;
+    final folded = keyboardUp && !_peopleOpen;
+    Widget fields = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (identities.length > 1 || !widget.compact) _fromRow(identities, scheme, text),
+        if (folded) ...[
+          _foldedPeople(scheme, text),
+          _line(scheme),
+        ] else
+          Focus(
+            canRequestFocus: false,
+            skipTraversal: true,
+            onFocusChange: (inside) {
+              if (mounted && _peopleOpen != inside) setState(() => _peopleOpen = inside);
+            },
+            child: people,
+          ),
+      ],
+    );
+    if (phone) fields = Theme(data: theme.copyWith(textTheme: text), child: fields);
+    if (roomKnown) {
+      // The address lines never take the writing area's room: past what can
+      // be spared they scroll in their own space.
+      fields = ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: math.max(96, box.maxHeight - _roomKeptForWriting)),
+        child: SingleChildScrollView(key: const ValueKey('compose-fields-scroll'), child: fields),
+      );
+    }
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (widget.header != null) widget.header!,
         Padding(
           padding: EdgeInsets.fromLTRB(widget.compact ? 8 : 12, 0, widget.compact ? 8 : 12, 0),
-          child: phone ? Theme(data: theme.copyWith(textTheme: text), child: fields) : fields,
+          child: fields,
         ),
         if (widget.compact && !widget.fill)
           ConstrainedBox(
@@ -629,6 +666,49 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
                 ),
             ],
           ),
+        ),
+      ),
+    );
+    }
+
+    return phone ? LayoutBuilder(builder: layout) : layout(context, null);
+  }
+
+  /// The title line, the row with Send, and enough of the writing area to
+  /// see a few lines of what is typed.
+  static const double _roomKeptForWriting = 270;
+
+  /// Everyone the message goes to, on one line. A tap opens the address lines again.
+  Widget _foldedPeople(ColorScheme scheme, TextTheme text) {
+    final all = [..._to, ..._cc, ..._bcc];
+    return InkWell(
+      key: const ValueKey('compose-people-folded'),
+      onTap: () {
+        setState(() => _peopleOpen = true);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _toFocus.requestFocus();
+        });
+      },
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 10, 0, 10),
+        child: Row(
+          children: [
+            SizedBox(width: fieldLabelWidth, child: Text('To', style: fieldLabelStyle(context))),
+            Expanded(
+              child: Text(
+                all.isEmpty ? 'No one yet' : [for (final a in all) a.name.trim().isEmpty ? a.address : a.name.trim()].join(', '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: text.bodyMedium,
+              ),
+            ),
+            if (all.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Text('${all.length}', key: const ValueKey('compose-people-count'), style: text.labelLarge!.copyWith(color: scheme.onSurfaceVariant)),
+              ),
+            SizedBox(width: 36, child: Icon(Icons.expand_more_rounded, color: scheme.onSurfaceVariant)),
+          ],
         ),
       ),
     );
