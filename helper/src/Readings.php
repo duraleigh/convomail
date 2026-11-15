@@ -340,13 +340,13 @@ final class Readings
      * the owner did), and the owner has not answered, marked it done, said
      * "Not Focus", or put it off until later. Newest first.
      *
-     * @return list<array{id: int, message_id: string, name: string, at: int, line: string, ask: string, due: ?int}>
+     * @return list<array{id: int, message_id: string, from: string, addr: string, name: string, at: int, line: string, ask: string, due: ?int}>
      */
     public function focusNow(): array
     {
         $db = $this->store->db;
         $now = $this->store->now();
-        $rows = $db->all("SELECT e.id, e.message_id, e.from_name, e.from_addr, e.subject, e.at, r.line, r.ask, r.due, r.focus, r.answered
+        $rows = $db->all("SELECT e.id, e.message_id, e.from_key, e.from_name, e.from_addr, e.subject, e.at, r.line, r.ask, r.due, r.focus, r.answered
             FROM {emails} e LEFT JOIN {readings} r ON r.email_id = e.id
             WHERE e.inbox = 1 AND e.gone = 0 AND e.is_from_me = 0 AND e.message_id <> '' AND r.focus = 1 AND r.answered = 0
             ORDER BY e.at DESC LIMIT 400");
@@ -360,7 +360,7 @@ final class Readings
         if ($byHand !== []) {
             $have = array_flip(array_map(static fn (array $r): string => (string) $r['message_id'], $rows));
             foreach (array_chunk(array_values(array_filter($byHand, static fn (string $m): bool => !isset($have[$m]))), 100) as $chunk) {
-                foreach ($db->all('SELECT e.id, e.message_id, e.from_name, e.from_addr, e.subject, e.at, r.line, r.ask, r.due, 1 AS focus, 0 AS answered
+                foreach ($db->all('SELECT e.id, e.message_id, e.from_key, e.from_name, e.from_addr, e.subject, e.at, r.line, r.ask, r.due, 1 AS focus, 0 AS answered
                     FROM {emails} e LEFT JOIN {readings} r ON r.email_id = e.id
                     WHERE e.inbox = 1 AND e.gone = 0 AND e.is_from_me = 0 AND e.message_id IN (' . Db::marks(count($chunk)) . ')', $chunk) as $r) {
                     $rows[] = $r;
@@ -382,6 +382,8 @@ final class Readings
             $out[] = [
                 'id' => (int) $r['id'],
                 'message_id' => $mid,
+                'from' => (string) $r['from_key'],
+                'addr' => (string) $r['from_addr'],
                 'name' => trim((string) $r['from_name']) !== '' ? trim((string) $r['from_name']) : (string) $r['from_addr'],
                 'at' => (int) $r['at'],
                 'line' => $line,

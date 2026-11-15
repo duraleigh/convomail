@@ -199,6 +199,47 @@ return [
         same(null, $s->app->store()->get('push.account'));
     },
 
+    'an alert names a chat the way the owner named it; with no name given, the way the email did' => function () use ($ringing, $joined): void {
+        [$w, $alerts, $mid] = $ringing('2031-01-01T10:00:00');
+        $named = static function (string $key, ?string $label) use ($w): void {
+            $w->store->put('sender', $key, ['label' => $label] + ($w->store->item('sender', $key) ?? ['cls' => 'people', 'src' => 'rule']));
+        };
+        // The owner named this chat on one of their devices.
+        $named('renee@booking.example', '  Renee at the agency ');
+        $phone = $joined($w, 'android', 'phone-1');
+        (new Devices($w->store))->setShowsKinds($phone, true);
+        (new Devices($w->store))->setShowsCodes($phone, true);
+        same(1, $alerts->sweep());
+        same(['focus', 'Renee at the agency', $mid], [$w->fake->pushed[0]['data']['t'], $w->fake->pushed[0]['data']['who'], $w->fake->pushed[0]['data']['mid']]);
+
+        // An email that came with no name at all, only an address: the name given still shows.
+        $w->later(30);
+        $w->claude->answer = static fn (): array => ['line' => 'Carrie sent the three invoices.', 'needs_owner' => false, 'ask' => '', 'due' => '', 'place' => 'none', 'know' => false, 'reasons' => ['Nothing is asked of you.']];
+        $w->arrive(['From' => 'me@example.com', 'To' => 'carrie@old.example', 'Subject' => 'Hi'], ['SENT'], '', $w->clock->now - 3600);
+        $w->store->db->run('UPDATE {emails} SET read_state = ? WHERE is_from_me = 1', [Readings::SKIPPED]);
+        $named('carrie@old.example', 'Carrie Moran');
+        $w->arriveWith(['From' => 'carrie@old.example', 'To' => 'me@example.com', 'Subject' => 'Invoices'], 'Here are the three invoices.');
+        // A chat given no name, and one whose name was taken off again: as the email says.
+        $named('dana@x.example', null);
+        $w->arrive(['From' => 'me@example.com', 'To' => 'dana@x.example', 'Subject' => 'Hi'], ['SENT'], '', $w->clock->now - 3600);
+        $w->store->db->run('UPDATE {emails} SET read_state = ? WHERE is_from_me = 1', [Readings::SKIPPED]);
+        $w->arriveWith(['From' => 'Dana Whitfield <dana@x.example>', 'To' => 'me@example.com', 'Subject' => 'Friday'], 'See you Friday.');
+        // A sign-in code from a sender the owner named.
+        $named('no-reply@acme.example', 'My bank');
+        $w->arrive(['From' => 'Acme Bank <no-reply@acme.example>', 'To' => 'me@example.com', 'Subject' => 'Your verification code'], ['INBOX', 'UNREAD'], 'Your verification code is 482913. It expires in 10 minutes.');
+        $w->readings->plan();
+        $w->readings->work();
+        $w->fake->pushed = [];
+        $alerts->sweep();
+        $who = [];
+        foreach ($w->fake->pushed as $p) {
+            $who[$p['data']['t']][] = $p['data']['who'];
+        }
+        sort($who['chat']);
+        same(['Carrie Moran', 'Dana Whitfield'], $who['chat']);
+        same(['My bank'], $who['code']);
+    },
+
     'an email that needs you rings each phone once, saying who and what they ask' => function () use ($ringing, $joined): void {
         [$w, $alerts, $mid] = $ringing();
         $joined($w, 'android', 'phone-1');

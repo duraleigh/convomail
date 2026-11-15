@@ -100,7 +100,9 @@ class NotificationCenter {
     final sink = _ref.read(notificationSinkProvider);
     for (final e in bySender.entries) {
       final first = e.value.first;
-      final sender = first.fromName.isNotEmpty ? first.fromName : first.fromAddress;
+      // The name the user gave this chat, when they gave one.
+      final given = (await (_db.select(_db.contacts)..where((c) => c.key.equals(e.key))).getSingleOrNull())?.userLabel?.trim() ?? '';
+      final sender = given.isNotEmpty ? given : (first.fromName.isNotEmpty ? first.fromName : first.fromAddress);
       final rowKey = (await (_db.select(_db.messageRowAssignments)..where((r) => r.messageId.equals(first.id))..limit(1)).getSingleOrNull())?.rowKey;
       final n = e.value.length == 1
           ? OutgoingNotification(id: 'mail:${first.id}', title: sender, body: first.subject.isEmpty ? '(no subject)' : first.subject, rowKey: rowKey, messageId: first.id)

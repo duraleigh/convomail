@@ -7,7 +7,8 @@ namespace Precis;
  * What rings a phone, and what takes an alert away again.
  *
  *  - An email that newly needs the owner: one alert, saying who wrote and
- *    what they ask (not the subject).
+ *    what they ask (not the subject). "Who" is the name the owner gave
+ *    that chat, when they gave one.
  *  - One notice an hour before a "by" time.
  *  - A reminder the owner set, at its time.
  *  - Nothing else. Feed and Noise never ring.
@@ -58,6 +59,24 @@ final class Alerts
     private static function minutes(string $clock): int
     {
         return preg_match('~^(\d{1,2}):(\d{2})$~', $clock, $m) === 1 ? ((int) $m[1] % 24) * 60 + (int) $m[2] % 60 : 0;
+    }
+
+    /**
+     * Who an alert says an email is from: the name the owner gave that chat,
+     * when they gave one; otherwise the name the email came with, or its address.
+     */
+    private function who(string $fromKey, string $name, string $addr = ''): string
+    {
+        // The chat the email was filed under; and, should the address have
+        // been joined to another chat since, that one.
+        $keys = [$fromKey, $addr === '' ? '' : (string) (($this->store->item('addr', $addr) ?? [])['key'] ?? '')];
+        foreach ($keys as $key) {
+            $given = $key === '' ? '' : trim((string) (($this->store->item('sender', $key) ?? [])['label'] ?? ''));
+            if ($given !== '') {
+                return $given;
+            }
+        }
+        return trim($name) !== '' ? trim($name) : $addr;
     }
 
     private function seen(string $k): bool
@@ -128,14 +147,14 @@ final class Alerts
             if (!$this->seen('focus:' . $mid)) {
                 $this->note('focus:' . $mid);
                 if (max($read, $f['at']) >= $since) {
-                    $ring(['t' => 'focus', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $f['name'], 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count], true);
+                    $ring(['t' => 'focus', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $this->who($f['from'], $f['name'], $f['addr']), 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count], true);
                 }
             }
             if ($f['due'] !== null && $f['due'] > $now && $f['due'] - $now <= self::SOON) {
                 $live[Store::key('due:' . $mid)] = true;
                 if (!$this->seen('due:' . $mid)) {
                     $this->note('due:' . $mid);
-                    $ring(['t' => 'due', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $f['name'], 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count], false);
+                    $ring(['t' => 'due', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $this->who($f['from'], $f['name'], $f['addr']), 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count], false);
                 }
             }
         }
@@ -148,7 +167,7 @@ final class Alerts
         foreach ($focus as $f) {
             $needs[$f['message_id']] = true;
         }
-        foreach ($db->all("SELECT e.id, e.message_id, e.from_name, e.from_addr, e.subject, e.at, e.cls, e.read_state, r.line, r.know, r.thing, r.at AS read_at
+        foreach ($db->all("SELECT e.id, e.message_id, e.from_key, e.from_name, e.from_addr, e.subject, e.at, e.cls, e.read_state, r.line, r.know, r.thing, r.at AS read_at
             FROM {emails} e LEFT JOIN {readings} r ON r.email_id = e.id
             WHERE e.inbox = 1 AND e.gone = 0 AND e.is_from_me = 0 AND e.message_id <> '' AND e.at > ? AND e.at >= ?
             ORDER BY e.at DESC LIMIT 200", [$now - 86400, $since]) as $e) {
@@ -180,7 +199,7 @@ final class Alerts
                 continue;
             }
             $this->note($k);
-            $who = trim((string) $e['from_name']) !== '' ? trim((string) $e['from_name']) : (string) $e['from_addr'];
+            $who = $this->who((string) $e['from_key'], (string) $e['from_name'], (string) $e['from_addr']);
             $line = trim((string) ($e['line'] ?? ''));
             $ring(['t' => $kind, 'id' => self::number(Store::key($k)), 'mid' => $mid, 'who' => $who, 'ask' => $line !== '' ? $line : (string) $e['subject'], 'n' => $count], true, false, true);
         }
@@ -199,7 +218,7 @@ final class Alerts
         // A sign-in code that just came: the code itself goes to the phones,
         // also while Précis is open on a PC, and is taken away again when it
         // is no longer good. The helper keeps no copy of the code.
-        foreach ($db->all("SELECT message_id, from_name, from_addr, subject, snippet, at FROM {emails}
+        foreach ($db->all("SELECT message_id, from_key, from_name, from_addr, subject, snippet, at FROM {emails}
             WHERE is_from_me = 0 AND gone = 0 AND message_id <> '' AND at > ? AND at >= ? ORDER BY at DESC LIMIT 40", [$now - Codes::LIFETIME, $since]) as $e) {
             $mid = (string) $e['message_id'];
             $known = $this->seen('code:' . $mid);
@@ -210,7 +229,7 @@ final class Alerts
             $live[Store::key('code:' . $mid)] = true;
             if (!$known) {
                 $this->note('code:' . $mid);
-                $who = trim((string) $e['from_name']) !== '' ? trim((string) $e['from_name']) : (string) $e['from_addr'];
+                $who = $this->who((string) $e['from_key'], (string) $e['from_name'], (string) $e['from_addr']);
                 $ring(['t' => 'code', 'id' => self::number(Store::key('code:' . $mid)), 'mid' => $mid, 'who' => $who, 'code' => $code, 'until' => (int) $e['at'] + Codes::LIFETIME, 'n' => $count], false, true);
             }
         }

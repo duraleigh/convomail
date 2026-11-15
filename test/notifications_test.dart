@@ -81,6 +81,15 @@ void main() {
     expect(sarah.rowKey, 'c:sarah@chen.me');
     expect(shown.firstWhere((n) => n.title == 'Tom Andersen').body, 'Slides');
     expect(sink.shown, hasLength(2));
+
+    // A chat the user gave a name of their own is called that, for one email and for several.
+    await db.setContactLabel('sarah@chen.me', 'Sarah from the label');
+    await db.setContactLabel('tom@andersen.me', 'Tom A.');
+    final named = await container.read(notificationCenterProvider).onNewMessages(batches.single);
+    expect(named.map((n) => n.title).toSet(), {'Sarah from the label · 2 new', 'Tom A.'});
+    // The name taken off again: as the email says.
+    await db.setContactLabel('tom@andersen.me', null);
+    expect((await container.read(notificationCenterProvider).onNewMessages(batches.single)).map((n) => n.title), contains('Tom Andersen'));
   });
 
   test('seen mail, my own mail, muted accounts, muted rows, snoozed rows, and Feeds senders are skipped', () async {
