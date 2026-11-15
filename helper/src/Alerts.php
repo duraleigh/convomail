@@ -19,6 +19,10 @@ namespace Precis;
  * During quiet hours an alert still arrives, but makes no sound.
  *
  * Each thing is alerted once, however many times the timer looks.
+ *
+ * An alert that is still out is drawn again, without a sound, when the
+ * owner gives its chat a name (or another name), so that it never shows a
+ * name the owner has replaced.
  */
 final class Alerts
 {
@@ -84,6 +88,37 @@ final class Alerts
         return $this->store->db->val('SELECT 1 FROM {alerts} WHERE k = ?', [Store::key($k)]) !== null;
     }
 
+    /** When an alert was noted, or null when it never was. */
+    private function notedAt(string $k): ?int
+    {
+        $at = $this->store->db->val('SELECT at FROM {alerts} WHERE k = ? AND cleared = 0', [Store::key($k)]);
+        return $at === null ? null : (int) $at;
+    }
+
+    /** The name an alert was last shown with on a phone: kept so it can be drawn again when the name changes. */
+    private static function shownKey(string $k): string
+    {
+        return 'push.who.' . self::number(Store::key($k));
+    }
+
+    /**
+     * Whether an alert that is still out shows another name than the chat
+     * has now. [$plain] is the name the email itself came with: an alert
+     * from before names were kept is taken to show that.
+     */
+    private function showsOldName(string $k, string $who, string $plain, int $since, int $namesFrom): bool
+    {
+        $was = $this->store->get(self::shownKey($k));
+        if ($was !== null) {
+            return $was !== $who;
+        }
+        if ($who === $plain) {
+            return false;
+        }
+        $at = $this->notedAt($k);
+        return $at !== null && $at >= $since && $at < $namesFrom;
+    }
+
     private function note(string $k): void
     {
         $this->store->db->upsert('alerts', ['k' => Store::key($k)], ['at' => $this->store->now(), 'cleared' => 0]);
@@ -115,7 +150,15 @@ final class Alerts
         $sent = 0;
         $count = count($focus);
 
-        $ring = function (array $data, bool $silentIfFront, bool $codeOnly = false, bool $kindsOnly = false) use ($phones, $quiet, $front, &$sent): void {
+        // Alerts from before this moment were shown with the name their email came with.
+        $namesFrom = (int) $this->store->get('push.names.from', '0');
+        if ($namesFrom === 0) {
+            $namesFrom = $now;
+            $this->store->set('push.names.from', (string) $now);
+        }
+
+        $ring = function (array $data, bool $silentIfFront, bool $codeOnly = false, bool $kindsOnly = false) use ($phones, $quiet, $front, &$sent): int {
+            $went = 0;
             foreach ($phones as $p) {
                 if ((int) $p['ring'] !== 1) {
                     continue;
@@ -136,7 +179,9 @@ final class Alerts
                     $this->store->db->run('UPDATE {devices} SET push_token = NULL WHERE id = ?', [(int) $p['id']]);
                 }
                 $sent += (int) ($r === 'sent');
+                $went += (int) ($r === 'sent');
             }
+            return $went;
         };
 
         $live = [];
@@ -144,11 +189,17 @@ final class Alerts
             $mid = $f['message_id'];
             $live[Store::key('focus:' . $mid)] = true;
             $read = (int) $db->val('SELECT at FROM {readings} WHERE email_id = ?', [$f['id']]);
+            $who = $this->who($f['from'], $f['name'], $f['addr']);
+            $alert = ['t' => 'focus', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $who, 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count];
             if (!$this->seen('focus:' . $mid)) {
                 $this->note('focus:' . $mid);
-                if (max($read, $f['at']) >= $since) {
-                    $ring(['t' => 'focus', 'id' => self::number(Store::key('focus:' . $mid)), 'mid' => $mid, 'who' => $this->who($f['from'], $f['name'], $f['addr']), 'ask' => $f['ask'], 'by' => $f['due'], 'n' => $count], true);
+                if (max($read, $f['at']) >= $since && $ring($alert, true) > 0) {
+                    $this->store->set(self::shownKey('focus:' . $mid), $who);
                 }
+            } elseif ($this->showsOldName('focus:' . $mid, $who, $f['name'], $since, $namesFrom)) {
+                // The chat has another name now: the same alert again, in place, without a sound.
+                $this->store->set(self::shownKey('focus:' . $mid), $who);
+                $ring(['quiet' => true] + $alert, false);
             }
             if ($f['due'] !== null && $f['due'] > $now && $f['due'] - $now <= self::SOON) {
                 $live[Store::key('due:' . $mid)] = true;
@@ -194,14 +245,25 @@ final class Alerts
                 continue;
             }
             $live[Store::key($k)] = true;
+            $who = $this->who((string) $e['from_key'], (string) $e['from_name'], (string) $e['from_addr']);
+            $line = trim((string) ($e['line'] ?? ''));
+            $alert = ['t' => $kind, 'id' => self::number(Store::key($k)), 'mid' => $mid, 'who' => $who, 'ask' => $line !== '' ? $line : (string) $e['subject'], 'n' => $count];
+            if ($this->seen($k)) {
+                $plain = trim((string) $e['from_name']) !== '' ? trim((string) $e['from_name']) : (string) $e['from_addr'];
+                if ($this->showsOldName($k, $who, $plain, $since, $namesFrom)) {
+                    $this->store->set(self::shownKey($k), $who);
+                    $ring(['quiet' => true] + $alert, false, false, true);
+                }
+                continue;
+            }
             // An email that needed the owner and no longer does was rung as "Needs you": not again.
-            if ($this->seen($k) || $this->seen('focus:' . $mid)) {
+            if ($this->seen('focus:' . $mid)) {
                 continue;
             }
             $this->note($k);
-            $who = $this->who((string) $e['from_key'], (string) $e['from_name'], (string) $e['from_addr']);
-            $line = trim((string) ($e['line'] ?? ''));
-            $ring(['t' => $kind, 'id' => self::number(Store::key($k)), 'mid' => $mid, 'who' => $who, 'ask' => $line !== '' ? $line : (string) $e['subject'], 'n' => $count], true, false, true);
+            if ($ring($alert, true, false, true) > 0) {
+                $this->store->set(self::shownKey($k), $who);
+            }
         }
 
         // Reminders the owner set, as their time comes.
@@ -240,6 +302,7 @@ final class Alerts
             if (isset($live[$k]) || str_starts_with($k, 'due:')) {
                 continue;
             }
+            $this->store->set('push.who.' . self::number($k), null);
             // Put off until later: forgotten, so it rings again when it comes back.
             $later = str_starts_with($k, 'focus:') ? (int) (($this->store->item('msgfix', substr($k, 6)) ?? [])['later'] ?? 0) : 0;
             if ($later > $now) {

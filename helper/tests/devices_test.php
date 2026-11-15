@@ -240,6 +240,53 @@ return [
         same(['My bank'], $who['code']);
     },
 
+    'an alert still out is drawn again, without a sound, when its chat is given a name; also one from before names were kept' => function () use ($ringing, $joined): void {
+        [$w, $alerts, $mid] = $ringing();
+        $named = static function (string $key, ?string $label) use ($w): void {
+            $w->store->put('sender', $key, ['label' => $label] + ($w->store->item('sender', $key) ?? ['cls' => 'people', 'src' => 'rule']));
+        };
+        $phone = $joined($w, 'android', 'phone-1');
+        (new Devices($w->store))->setShowsKinds($phone, true);
+        same(1, $alerts->sweep());
+        $first = $w->fake->pushed[0]['data'];
+        same(['Renee Calloway', '0'], [$first['who'], $first['quiet']]);
+        same(0, $alerts->sweep());
+
+        // The owner names the chat while the alert is still out: the same alert again, in place, silent.
+        $named('renee@booking.example', 'Renee at the agency');
+        $w->later(60);
+        same(1, $alerts->sweep());
+        $again = $w->fake->pushed[1]['data'];
+        same([$first['id'], 'focus', $mid, 'Renee at the agency', $first['ask'], '1'], [$again['id'], $again['t'], $again['mid'], $again['who'], $again['ask'], $again['quiet']]);
+        // Once, not every time the timer looks; and also while Précis is in front on a PC.
+        same(0, $alerts->sweep());
+        (new Devices($w->store))->inFront($joined($w, 'windows'));
+        $named('renee@booking.example', 'Renee C.');
+        same(1, $alerts->sweep());
+        same('Renee C.', $w->fake->pushed[2]['data']['who']);
+        // The name taken off again: back to the name the email came with.
+        $named('renee@booking.example', null);
+        same(1, $alerts->sweep());
+        same('Renee Calloway', $w->fake->pushed[3]['data']['who']);
+        same(0, $alerts->sweep());
+
+        // An alert from before the helper kept the names it showed: it is taken to show the email's own name.
+        $w->store->db->run("DELETE FROM {meta} WHERE k LIKE 'push.who.%'");
+        $w->store->set('push.names.from', (string) ($w->clock->now + 1));
+        same(0, $alerts->sweep(), 'no name was given: nothing to put right');
+        $named('renee@booking.example', 'Renee at the agency');
+        same(1, $alerts->sweep());
+        same(['Renee at the agency', '1'], [$w->fake->pushed[4]['data']['who'], $w->fake->pushed[4]['data']['quiet']]);
+        same(0, $alerts->sweep());
+
+        // Finished: taken off the phone, and never drawn again whatever the chat is called later.
+        $w->store->put('done', $mid, ['at' => $w->clock->now]);
+        same(1, $alerts->sweep());
+        same('clear', $w->fake->pushed[5]['data']['t']);
+        $named('renee@booking.example', 'Someone else');
+        same(0, $alerts->sweep());
+    },
+
     'an email that needs you rings each phone once, saying who and what they ask' => function () use ($ringing, $joined): void {
         [$w, $alerts, $mid] = $ringing();
         $joined($w, 'android', 'phone-1');
