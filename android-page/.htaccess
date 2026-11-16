@@ -1,0 +1,18 @@
+# precis.clayaiken.com/android - the Précis Android app and its download page.
+# The folder above sends every address to the helper; this folder serves its
+# own few files instead.
+RewriteEngine Off
+Options -Indexes
+DirectoryIndex index.html
+AddType application/vnd.android.package-archive .apk
+<IfModule mod_headers.c>
+  Header set X-Robots-Tag "noindex"
+  Header set X-Content-Type-Options "nosniff"
+  <FilesMatch "\.apk$">
+    Header set Content-Disposition "attachment; filename=Precis.apk"
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+  <FilesMatch "\.(html|css|png)$">
+    Header set Cache-Control "no-cache"
+  </FilesMatch>
+</IfModule>
