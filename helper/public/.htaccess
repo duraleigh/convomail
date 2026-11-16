@@ -1,4 +1,5 @@
-# Précis helper: every address goes to index.php. Nothing else is served.
+# Précis helper: every address goes to index.php. Nothing else is served,
+# but for the Android download page, which is a folder of its own (android/).
 Options -Indexes
 <IfModule mod_rewrite.c>
 RewriteEngine On
@@ -6,6 +7,12 @@ RewriteOptions None
 RewriteCond %{HTTPS} !=on
 RewriteCond %{HTTP:X-Forwarded-Proto} !=https
 RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+# /android with no ending slash, or typed with a capital letter, goes to the
+# page. Without these lines the rule at the bottom took it for the helper.
+RewriteRule ^android$ /android/ [NC,R=301,L]
+RewriteCond %{REQUEST_URI} !^/android/
+RewriteRule ^android/(.*)$ /android/$1 [NC,R=301,L]
+RewriteRule ^android/ - [L]
 RewriteRule ^index\.php$ - [L]
 RewriteRule ^ index.php [L]
 </IfModule>

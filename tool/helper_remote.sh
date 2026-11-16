@@ -42,6 +42,7 @@ case "${1:-}" in
     ;;
   webroot)
     DIR="${2:?the web folder, for example domains/clayaiken.com/public_html/precis}"
+    # The Android download page (a folder of its own, android/) is left as it is.
     tar -czf - -C "$HERE/helper/public" index.php .htaccess | remote "set -e; cd ~/'$DIR'; tar -xzf -; printf '%s\n' '<?php' '// The only file of the Précis helper inside the web folder.' \"require '/home/$USER_AT/precis-helper/web.php';\" > index.php; ls -la index.php .htaccess | awk '{print \$1, \$5, \$9}'"
     ;;
   servercheck)

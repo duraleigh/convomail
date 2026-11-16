@@ -50,8 +50,19 @@ case "${1:-}" in
     # Goes up beside the live folder and is checked there; then the two swap, so the address never serves half a page.
     tar -cf - -C "$OUT" . | remote "set -e; cd ~/'$WEB'; rm -rf android.new; mkdir android.new; tar -xf - -C android.new; test \"\$(sha256sum android.new/Precis.apk | cut -c1-64)\" = '$WANT'; rm -rf android.old; if [ -d android ]; then mv android android.old; fi; mv android.new android; rm -rf android.old; ls -la android | awk '{print \$5, \$9}'"
     echo "--- from outside"
-    curl -s -o /dev/null -w "the address without the slash: %{http_code} -> %{redirect_url}\n" "$SITE/android"
-    curl -s -o /dev/null -w "the page: %{http_code} %{content_type}\n" "$SITE/android/"
+    # The address as people type it, with no ending slash, must land on the
+    # page every time. The web folder's own rules (helper/public/.htaccess)
+    # see to it; before they did, the helper took it now and then.
+    for TRY in 1 2 3 4 5 6; do
+      for TYPED in android Android; do
+        TO="$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' "$SITE/$TYPED")"
+        [ "$TO" = "301 $SITE/android/" ] || { echo "$SITE/$TYPED does NOT go to the page (try $TRY: $TO)" >&2; exit 1; }
+      done
+    done
+    echo "the address without the slash goes to the page, 6 tries out of 6"
+    PAGE="$(curl -s -o /dev/null -w '%{http_code} %{content_type}' "$SITE/android/")"
+    echo "the page: $PAGE"
+    case "$PAGE" in "200 text/html"*) ;; *) echo "the page does not answer" >&2; exit 1 ;; esac
     curl -sI "$SITE/android/Precis.apk" | grep -i "^HTTP\|^content-type\|^content-length\|^content-disposition\|^cache-control\|^x-robots-tag" | tr -d '\r'
     GOT="$(curl -s "$SITE/android/Precis.apk" | sha256sum | cut -c1-64)"
     [ "$GOT" = "$WANT" ] || { echo "the file that comes down is NOT the one that went up" >&2; exit 1; }
