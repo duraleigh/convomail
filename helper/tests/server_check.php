@@ -82,8 +82,10 @@ try {
     // Sorting, from header facts as Gmail gives them.
     $sorter = new Sorter($store);
     $store->put('names', 'user', ['first' => ['clay']]);
+    // Dated a minute ago: always from before alerts are set up further down,
+    // so none of this mail counts as new there, whatever second the check runs in.
     $meta = static fn (string $id, array $headers, array $labels, string $snippet = ''): array => [
-        'id' => $id, 'threadId' => 't' . $id, 'labelIds' => $labels, 'snippet' => $snippet, 'internalDate' => (string) (time() * 1000),
+        'id' => $id, 'threadId' => 't' . $id, 'labelIds' => $labels, 'snippet' => $snippet, 'internalDate' => (string) ((time() - 60) * 1000),
         'payload' => ['headers' => array_map(static fn (string $k, string $v): array => ['name' => $k, 'value' => $v], array_keys($headers), $headers)],
     ];
     $account = $db->insert('accounts', ['email' => 'me@example.com', 'tokens' => 'x', 'created' => time()]);
