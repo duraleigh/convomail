@@ -31,6 +31,29 @@
             </intent-filter>
         </activity>
 
+        <!-- "Share" in another app: Précis is on the list, for words, links,
+             pictures and files, one or several. It opens a new email. -->
+        <activity
+            android:name=".ShareActivity"
+            android:exported="true"
+            android:label="Précis"
+            android:theme="@style/ShareTheme"
+            android:taskAffinity=""
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
+        </activity>
+
         <!-- What the helper sends through Google's alert service arrives here. -->
         <service android:name=".PrecisMessagingService" android:exported="false">
             <intent-filter>

@@ -25,6 +25,7 @@ import 'helper/sending_sync.dart';
 import 'platform/android_bridge.dart';
 import 'platform/mailto_registration.dart';
 import 'platform/phone_alerts.dart';
+import 'platform/phone_share.dart';
 import 'platform/single_instance.dart';
 import 'platform/windows_integration.dart';
 import 'sync/notification_center.dart';
@@ -284,6 +285,8 @@ class _PrecisAppState extends ConsumerState<PrecisApp> {
       ref.read(sendingSyncProvider).start();
       // On a phone: alerts for what needs you.
       ref.read(phoneAlertsProvider).start();
+      // On a phone: something shared to Précis from another app.
+      ref.read(phoneShareProvider).start();
       // Messages written with no signal go out when it returns.
       ref.read(waitingSendsProvider).start();
     }

@@ -32,9 +32,11 @@ class ComposePane extends ConsumerWidget {
           error: (e, _) => Center(child: Text('$e')),
           data: (d) => ComposeForm(
             // A new key per request so a fresh Ctrl+N after a send starts clean.
-            key: ValueKey('compose-${request.hashCode}-${d?.id}'),
+            // A message that came with something in it keeps its form while
+            // it is written: its own draft being saved must not start it over.
+            key: ValueKey(request.isPrefilled ? 'compose-${request.hashCode}' : 'compose-${request.hashCode}-${d?.id}'),
             request: request,
-            existingDraft: request.to.isEmpty && request.subject.isEmpty ? d : null,
+            existingDraft: request.isPrefilled ? null : d,
             onClose: () => ref.read(composeProvider.notifier).close(),
             header: Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 12, 8),
@@ -42,7 +44,7 @@ class ComposePane extends ConsumerWidget {
                 children: [
                   Icon(Icons.edit_outlined, color: scheme.primary),
                   const SizedBox(width: 10),
-                  Expanded(child: Text(d != null ? 'Draft' : 'New message', style: text.titleLarge)),
+                  Expanded(child: Text(d != null && !request.isPrefilled ? 'Draft' : 'New message', style: text.titleLarge)),
                   IconButton(tooltip: 'Close (Esc)', onPressed: () => ref.read(composeProvider.notifier).close(), icon: const Icon(Icons.close_rounded)),
                 ],
               ),

@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 /// replies and forwards open the inline composer at the bottom of the
 /// conversation (spec 4.4, 5.3).
 class ComposeRequest {
-  ComposeRequest.newMessage({this.to = const [], this.subject = '', this.body = ''})
+  ComposeRequest.newMessage({this.to = const [], this.subject = '', this.body = '', this.attachments = const []})
       : kind = 'new',
         messageId = null,
         rowKey = null,
@@ -16,6 +16,7 @@ class ComposeRequest {
       : kind = all ? 'replyAll' : 'reply',
         to = const [],
         subject = '',
+        attachments = const [],
         _nonce = _counter++;
 
   ComposeRequest.forward(this.messageId, {required this.rowKey})
@@ -23,6 +24,7 @@ class ComposeRequest {
         to = const [],
         subject = '',
         body = '',
+        attachments = const [],
         _nonce = _counter++;
 
   /// `new`, `reply`, `replyAll`, `forward`.
@@ -39,6 +41,15 @@ class ComposeRequest {
   final List<String> to;
   final String subject;
   final String body;
+
+  /// Files to go with a new message, by where they are on this device
+  /// (something shared to Précis from another app on a phone).
+  final List<String> attachments;
+
+  /// A new message that comes with something already in it (a clicked
+  /// email link, something shared). It starts on its own: an unsent draft
+  /// from earlier is not put in its place.
+  bool get isPrefilled => to.isNotEmpty || subject.isNotEmpty || body.isNotEmpty || attachments.isNotEmpty;
 
   bool get isNew => kind == 'new';
   bool get isForward => kind == 'forward';

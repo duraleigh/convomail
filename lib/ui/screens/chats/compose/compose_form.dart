@@ -193,16 +193,18 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
         }
         _to = [for (final t in req.to) ...?parseRecipients(t)];
         _subject.text = req.subject;
-        if (req.body.isNotEmpty) bodyHtml = '<p>${const HtmlEscape().convert(req.body)}</p>';
+        // Words that came with it (a clicked email link, something shared
+        // from another app): each of their lines kept.
+        if (req.body.trim().isNotEmpty) bodyHtml = _paragraphs(req.body);
+        // Files that came with it. One that is no longer there is left out.
+        for (final path in req.attachments) {
+          if (!File(path).existsSync() || _attachments.any((a) => a.path == path)) continue;
+          _attachments.add(OutgoingAttachment(fileName: p.basename(path), mimeType: MimeFactory.imageMimeType(path) ?? MediaType.guessFromFileName(path).text, path: path));
+        }
       }
       // A reply that comes with words already written (an email the
       // assistant wrote for the user to look over): each of its lines kept.
-      if (_original != null && !req.isForward && req.body.isNotEmpty) {
-        bodyHtml = [
-          for (final para in req.body.split(RegExp(r'\n\s*\n')))
-            if (para.trim().isNotEmpty) '<p>${const HtmlEscape().convert(para.trim()).replaceAll('\n', '<br>')}</p>',
-        ].join();
-      }
+      if (_original != null && !req.isForward && req.body.isNotEmpty) bodyHtml = _paragraphs(req.body);
     }
 
     _editor = ComposeEditorController(bodyJson: bodyJson, html: bodyHtml, signature: identity == null || draft != null ? const <Node>[] : signatureNodes(identity));
@@ -220,6 +222,13 @@ class _ComposeFormState extends ConsumerState<ComposeForm> {
       }
     });
   }
+
+  /// Plain words as the message's paragraphs: a blank line starts a new
+  /// one, and a line break inside one is kept.
+  static String _paragraphs(String words) => [
+        for (final para in words.replaceAll('\r\n', '\n').split(RegExp(r'\n\s*\n')))
+          if (para.trim().isNotEmpty) '<p>${const HtmlEscape().convert(para.trim()).replaceAll('\n', '<br>')}</p>',
+      ].join();
 
   // ---- drafts ----------------------------------------------------------------
 

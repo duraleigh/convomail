@@ -32,14 +32,33 @@ class MainActivity : FlutterActivity() {
     /** The email whose alert was tapped, until the app asks for it. */
     private var opened: String? = null
 
+    /** Something shared from another app, until the app asks for it. */
+    private var shared: String? = null
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         opened = intent?.getStringExtra("mid")?.takeIf { it.isNotEmpty() }
+        if (intent?.getBooleanExtra(Shared.EXTRA, false) == true) shared = Shared.take() ?: shared
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "precis/android").also { it.setMethodCallHandler(::handle) }
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (intent.getBooleanExtra(Shared.EXTRA, false)) {
+            val json = Shared.take() ?: return
+            shared = json
+            // Handed over at once when the app is listening; kept for it to ask for when it is not yet.
+            channel?.invokeMethod("shared", json, object : MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (shared === json) shared = null
+                }
+
+                override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {}
+
+                override fun notImplemented() {}
+            })
+            return
+        }
         val mid = intent.getStringExtra("mid")?.takeIf { it.isNotEmpty() } ?: return
         opened = mid
         channel?.invokeMethod("opened", mid)
@@ -99,6 +118,10 @@ class MainActivity : FlutterActivity() {
                     player?.setOnCompletionListener { it.release() }
                     player?.start()
                     result.success(null)
+                }
+                "takeShared" -> {
+                    result.success(shared)
+                    shared = null
                 }
                 "takeOpened" -> {
                     result.success(opened)
