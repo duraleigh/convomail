@@ -43,6 +43,18 @@ final todayEventsProvider = StreamProvider<List<PlannerEvent>>((ref) {
   return watchShownEvents(ref, start, DateTime(start.year, start.month, start.day + 1));
 });
 
+/// What Schedule shows right now: today's events that are not over. An
+/// event with a time leaves the card once its end time has passed; an
+/// all-day one stays the whole day. (One with no end time stays too: when
+/// it is over is not known.)
+List<PlannerEvent> scheduleNow(List<PlannerEvent> events, DateTime now) {
+  final today = DateTime(now.year, now.month, now.day);
+  return [
+    for (final e in events)
+      if (e.startAt != null && (e.allDay ? allDayCovers(e, today) : (e.endAt == null || e.endAt!.isAfter(now)))) e,
+  ]..sort((a, b) => a.allDay == b.allDay ? a.startAt!.compareTo(b.startAt!) : (a.allDay ? -1 : 1));
+}
+
 final waitingOnProvider = StreamProvider<List<WaitingItem>>((ref) => ref.watch(databaseProvider).watchWaitingOn(accountId: ref.watch(accountScopeProvider)));
 final sentNotReadYetProvider = StreamProvider<int>((ref) => ref.watch(databaseProvider).watchSentWithoutWordsCount(accountId: ref.watch(accountScopeProvider)));
 final laterRowsProvider = StreamProvider<List<LaterRow>>((ref) => ref.watch(databaseProvider).watchLaterRows());
@@ -150,7 +162,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     // and says what will show here.
     final cards = ref.watch(helperCardsProvider).value ?? const <HelperCard>[];
     final assistant = ref.watch(readingsShownProvider).value ?? false;
-    final today = DateTime(now.year, now.month, now.day);
     final quiet = !leftHasSomething &&
         timelyDue(ref.watch(timelyItemsProvider).value ?? const [], now).isEmpty &&
         (!assistant || (travelNow(cards, now).isEmpty && bookingsNow(cards, now).isEmpty)) &&
@@ -158,7 +169,7 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
         (ref.watch(openRemindersProvider).value ?? const <Reminder>[]).isEmpty &&
         (ref.watch(focusLaterProvider).value ?? const <MailItem>[]).isEmpty &&
         (ref.watch(doneTodayProvider).value ?? const <DoneItem>[]).isEmpty &&
-        !(ref.watch(todayEventsProvider).value ?? const <PlannerEvent>[]).any((e) => e.startAt != null && (e.allDay ? allDayCovers(e, today) : true));
+        scheduleNow(ref.watch(todayEventsProvider).value ?? const <PlannerEvent>[], now).isEmpty;
 
     return LayoutBuilder(
       builder: (context, box) {
@@ -804,12 +815,14 @@ class _Schedule extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final scheme = Theme.of(context).colorScheme;
     final connected = (ref.watch(googleCalendarsProvider).value ?? const []).isNotEmpty;
+    // The clock is watched, so an event leaves the card when it ends, with
+    // nothing else on the page having to change.
+    ref.watch(focusClockProvider);
     final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final events = [
-      for (final e in ref.watch(todayEventsProvider).value ?? const <PlannerEvent>[])
-        if (e.startAt != null && (e.allDay ? allDayCovers(e, today) : true)) e,
-    ]..sort((a, b) => a.allDay == b.allDay ? a.startAt!.compareTo(b.startAt!) : (a.allDay ? -1 : 1));
+    final all = ref.watch(todayEventsProvider).value ?? const <PlannerEvent>[];
+    final events = scheduleNow(all, now);
+    // Whether something was on today and is over now.
+    final over = events.isEmpty && all.any((e) => e.startAt != null && !e.allDay);
     // Schedule always shows, also with nothing on it: then it is one quiet
     // line, not a card.
     if (connected && events.isEmpty) {
@@ -820,7 +833,7 @@ class _Schedule extends ConsumerWidget {
           children: [
             Icon(Icons.calendar_today_rounded, size: 15, color: scheme.onSurfaceVariant),
             const SizedBox(width: 9),
-            Expanded(child: Text('Nothing on your calendar today.', key: const ValueKey('today-schedule-empty'), style: rowSmall(context))),
+            Expanded(child: Text(over ? 'Nothing more on your calendar today.' : 'Nothing on your calendar today.', key: const ValueKey('today-schedule-empty'), style: rowSmall(context))),
           ],
         ),
       );
@@ -884,7 +897,7 @@ class _Schedule extends ConsumerWidget {
                   // The time on the right, where the eye looks for it.
                   Text(
                     e.allDay ? 'All day' : _time(e.startAt!),
-                    style: rowTitle(context).copyWith(fontFeatures: tabularFigures, color: !e.allDay && (e.endAt ?? e.startAt!).isBefore(now) ? scheme.onSurfaceVariant : null),
+                    style: rowTitle(context).copyWith(fontFeatures: tabularFigures),
                   ),
                 ],
               ),

@@ -19,6 +19,7 @@ import 'package:convomail/sync/sync_engine.dart';
 import 'package:convomail/ui/screens/chats/html_body_view.dart';
 import 'package:convomail/ui/screens/chats/people_list_pane.dart';
 import 'package:convomail/ui/screens/chats/thread_actions.dart';
+import 'package:convomail/ui/screens/today_screen.dart' show scheduleNow;
 import 'package:convomail/ui/shell/app_shell.dart';
 import 'package:convomail/ui/shell/split_pane.dart';
 import 'package:drift/drift.dart' show Value;
@@ -305,6 +306,36 @@ void main() {
       expect(find.byKey(const ValueKey('today-quiet')), findsNothing, reason: 'not a quiet day with something on the calendar');
       final row = find.byKey(ValueKey('today-event-$id'));
       expect(tester.getTopLeft(find.descendant(of: row, matching: find.text('11:30 PM'))).dx, greaterThan(tester.getTopRight(find.descendant(of: row, matching: find.text('Call with the label'))).dx), reason: 'the time is on the right');
+      await teardown(tester);
+    });
+
+    testWidgets('an event leaves Schedule once its end time has passed; an all-day one stays; with the last one over, the line says nothing more is on', (tester) async {
+      await db.putSetting(CalendarSync.calendarsKey, jsonEncode([const GoogleCalendarInfo(id: 'work', name: 'Work', color: 0xFF4285F4, writable: true, primary: true).toJson()]));
+      final now = DateTime.now();
+      final day = DateTime(now.year, now.month, now.day);
+      final over = await db.into(db.plannerEvents).insert(PlannerEventsCompanion.insert(title: 'Taping in the city', kind: 'google', startAt: Value(day), endAt: Value(now.subtract(const Duration(seconds: 1)))));
+      await pumpApp(tester);
+      expect(find.byKey(ValueKey('today-event-$over')), findsNothing, reason: 'it is over');
+      expect(find.byKey(const ValueKey('today-card-schedule')), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const ValueKey('today-schedule-empty'))).data, 'Nothing more on your calendar today.');
+      expect(find.byKey(const ValueKey('today-quiet')), findsOneWidget, reason: 'an event that is over does not keep the page from being quiet');
+
+      final still = await db.into(db.plannerEvents).insert(PlannerEventsCompanion.insert(title: 'Evening interview', kind: 'google', startAt: Value(day), endAt: Value(now.add(const Duration(hours: 2)))));
+      final allDay = await db.into(db.plannerEvents).insert(PlannerEventsCompanion.insert(title: 'In the city', kind: 'google', allDay: const Value(true), startAt: Value(day), endAt: Value(day.add(const Duration(days: 1)))));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('today-card-schedule')), findsOneWidget);
+      expect(find.byKey(ValueKey('today-event-$still')), findsOneWidget);
+      expect(find.byKey(ValueKey('today-event-$allDay')), findsOneWidget);
+      expect(find.byKey(ValueKey('today-event-$over')), findsNothing);
+
+      // The same rule, at times of our choosing: there until the minute it
+      // ends, gone from that minute on.
+      final rows = await db.select(db.plannerEvents).get();
+      final ends = rows.firstWhere((e) => e.id == still).endAt!;
+      List<int> shown(DateTime at) => [for (final e in scheduleNow(rows, at)) e.id];
+      expect(shown(ends.subtract(const Duration(minutes: 1))), [allDay, still], reason: 'all day first');
+      expect(shown(ends), [allDay]);
+      expect(shown(ends.add(const Duration(minutes: 1))), [allDay]);
       await teardown(tester);
     });
 
